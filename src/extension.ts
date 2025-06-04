@@ -29,11 +29,13 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui;
     margin: 0;
     padding: 0;
+    color: var(--vscode-editor-foreground);
+    background-color: var(--vscode-editor-background);
 }
 #toolbar {
     padding: 6px 10px;
-    background-color: #f3f3f3;
-    border-bottom: 1px solid #ddd;
+    background-color: var(--vscode-editorGroupHeader-tabsBackground);
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
     text-align: right;
 }
 #container {
@@ -48,20 +50,32 @@ textarea, pre {
     outline: none;
     font-family: monospace;
     font-size: 13px;
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
 }
 textarea {
     resize: none;
-    border-right: 1px solid #ddd;
+    border-right: 1px solid var(--vscode-editorGroup-border);
 }
 pre {
     overflow: auto;
-    background-color: #f8f8f8;
 }
-.string { color: #ce9178; }
-.number { color: #b5cea8; }
-.boolean { color: #569cd6; }
-.null { color: #569cd6; }
-.key { color: #9cdcfe; }
+.string { color: var(--vscode-terminal-ansiGreen); }
+.number { color: var(--vscode-terminal-ansiYellow); }
+.boolean { color: var(--vscode-terminal-ansiBlue); }
+.null { color: var(--vscode-terminal-ansiBlue); }
+.key { color: var(--vscode-terminal-ansiCyan); }
+button {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
 </style>
 </head>
 <body>
@@ -102,7 +116,7 @@ document.getElementById('format').addEventListener('click', () => {
         output.style.color = 'inherit';
         output.innerHTML = syntaxHighlight(formatted);
     } catch (err) {
-        output.style.color = '#f14c4c';
+        output.style.color = 'var(--vscode-errorForeground)';
         output.textContent = 'Invalid JSON: ' + err.message;
     }
 });
