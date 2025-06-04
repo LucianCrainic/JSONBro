@@ -90,14 +90,20 @@ function syntaxHighlight(json) {
     });
 }
 document.getElementById('format').addEventListener('click', () => {
-    const input = (document.getElementById('input') as HTMLTextAreaElement).value;
+    const inputEl = document.getElementById('input');
     const output = document.getElementById('output');
+    if (!inputEl || !output) {
+        return;
+    }
+    const input = inputEl.value;
     try {
         const obj = JSON.parse(input);
         const formatted = JSON.stringify(obj, null, 4);
+        output.style.color = 'inherit';
         output.innerHTML = syntaxHighlight(formatted);
-    } catch(err) {
-        output.textContent = 'Invalid JSON';
+    } catch (err) {
+        output.style.color = '#f14c4c';
+        output.textContent = 'Invalid JSON: ' + err.message;
     }
 });
 </script>
