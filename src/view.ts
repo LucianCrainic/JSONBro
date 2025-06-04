@@ -20,6 +20,7 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    overflow: hidden;
 }
 #toolbar {
     padding: 6px 10px;
@@ -32,6 +33,7 @@ body {
 #container {
     display: flex;
     flex: 1;
+    overflow: hidden;
 }
 #history-panel {
     width: 200px;
@@ -65,6 +67,7 @@ textarea, .json-output {
     font-size: 13px;
     background-color: var(--vscode-editor-background);
     color: var(--vscode-editor-foreground);
+    overflow-y: auto;
 }
 textarea {
     resize: none;
