@@ -42,7 +42,7 @@ body {
     display: flex;
     height: calc(100vh - 40px);
 }
-textarea, pre {
+textarea, .json-output {
     flex: 1;
     margin: 0;
     padding: 10px;
@@ -57,8 +57,20 @@ textarea {
     resize: none;
     border-right: 1px solid var(--vscode-editorGroup-border);
 }
-pre {
+.json-output {
     overflow: auto;
+}
+.json-output details {
+    margin-left: 16px;
+}
+.json-output summary {
+    cursor: pointer;
+    list-style: none;
+}
+.json-output ul {
+    list-style-type: none;
+    padding-left: 16px;
+    margin: 0;
 }
 .string { color: var(--vscode-terminal-ansiGreen); }
 .number { color: var(--vscode-terminal-ansiYellow); }
@@ -82,26 +94,45 @@ button:hover {
 <div id="toolbar"><button id="format">Format JSON</button></div>
 <div id="container">
     <textarea id="input" placeholder="Paste JSON here"></textarea>
-    <pre id="output"></pre>
+    <div id="output" class="json-output"></div>
 </div>
 <script nonce="${nonce}">
-function syntaxHighlight(json) {
-    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return json.replace(/(\"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\\"])*\"(?=\s*:)|\"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\\"])*\"|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|\b(true|false|null)\b)/g, function(match) {
-        let cls = 'number';
-        if(/^"/.test(match)) {
-            if(/:$/.test(match)) {
-                cls = 'key';
-            } else {
-                cls = 'string';
-            }
-        } else if(/true|false/.test(match)) {
-            cls = 'boolean';
-        } else if(/null/.test(match)) {
-            cls = 'null';
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;');
+}
+
+function renderJson(value) {
+    if (value === null) {
+        return '<span class="null">null</span>';
+    }
+    if (Array.isArray(value)) {
+        if (value.length === 0) {
+            return '[ ]';
         }
-        return '<span class="' + cls + '">' + match + '</span>';
-    });
+        const items = value.map(v => '<li>' + renderJson(v) + '</li>').join('');
+        return '<details open><summary>[...]</summary><ul>' + items + '</ul></details>';
+    }
+    switch (typeof value) {
+        case 'object':
+            const entries = Object.entries(value)
+                .map(([k, v]) => '<li><span class="key">"' + escapeHtml(k) + '"</span>: ' + renderJson(v) + '</li>')
+                .join('');
+            if (!entries) {
+                return '{ }';
+            }
+            return '<details open><summary>{...}</summary><ul>' + entries + '</ul></details>';
+        case 'string':
+            return '<span class="string">"' + escapeHtml(value) + '"</span>';
+        case 'number':
+            return '<span class="number">' + value + '</span>';
+        case 'boolean':
+            return '<span class="boolean">' + value + '</span>';
+    }
+    return '';
 }
 document.getElementById('format').addEventListener('click', () => {
     const inputEl = document.getElementById('input');
@@ -112,9 +143,8 @@ document.getElementById('format').addEventListener('click', () => {
     const input = inputEl.value;
     try {
         const obj = JSON.parse(input);
-        const formatted = JSON.stringify(obj, null, 4);
         output.style.color = 'inherit';
-        output.innerHTML = syntaxHighlight(formatted);
+        output.innerHTML = renderJson(obj);
     } catch (err) {
         output.style.color = 'var(--vscode-errorForeground)';
         output.textContent = 'Invalid JSON: ' + err.message;
