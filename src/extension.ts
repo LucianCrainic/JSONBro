@@ -29,47 +29,84 @@ function getWebviewContent(): string {
 <title>Format JSON</title>
 <style>
 body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui;
     margin: 0;
     padding: 0;
     color: var(--vscode-editor-foreground);
     background-color: var(--vscode-editor-background);
     display: flex;
+    flex-direction: column;
     height: 100vh;
-    font-family: var(--vscode-font-family);
 }
-.container {
-    flex: 1;
+#toolbar {
+    padding: 6px 10px;
+    background-color: var(--vscode-editorGroupHeader-tabsBackground);
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
     display: flex;
-    position: relative;
+    justify-content: center;
+    gap: 8px;
 }
-#input, #output {
+#container {
+    display: flex;
     flex: 1;
-    border: none;
-    padding: 1em;
-    font-family: monospace;
-    font-size: 13px;
-    outline: none;
-    resize: none;
+}
+#history {
+    height: 100px;
+    overflow-y: auto;
+    border-top: 1px solid var(--vscode-editorGroup-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     background-color: var(--vscode-editor-background);
     color: var(--vscode-editor-foreground);
 }
-#output {
-    border-left: 1px solid var(--vscode-editorGroup-border);
+#history pre {
+    margin: 2px 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    text-align: center;
+}
+textarea, .json-output {
+    flex: 1;
+    margin: 0;
+    padding: 10px;
+    border: none;
+    outline: none;
+    font-family: monospace;
+    font-size: 13px;
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+}
+textarea {
+    resize: none;
+    border-right: 1px solid var(--vscode-editorGroup-border);
+}
+.json-output {
     overflow: auto;
-    white-space: pre;
 }
-#toolbar {
-    position: absolute;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+.json-output details {
+    margin-left: 16px;
 }
+.json-output summary {
+    cursor: pointer;
+    list-style: none;
+}
+.json-output ul {
+    list-style-type: none;
+    padding-left: 16px;
+    margin: 0;
+}
+.string { color: var(--vscode-terminal-ansiGreen); }
+.number { color: var(--vscode-terminal-ansiYellow); }
+.boolean { color: var(--vscode-terminal-ansiBlue); }
+.null { color: var(--vscode-terminal-ansiBlue); }
+.key { color: var(--vscode-terminal-ansiCyan); }
 button {
     background-color: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
     border: none;
     padding: 4px 8px;
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: pointer;
 }
 button:hover {
@@ -78,32 +115,79 @@ button:hover {
 </style>
 </head>
 <body>
-<div class="container">
-    <div id="toolbar"><button id="format">Format JSON</button></div>
-    <textarea id="input" placeholder="Paste JSON here"></textarea>
-    <pre id="output"></pre>
+<div id="toolbar">
+    <button id="format">Format JSON</button>
+    <button id="clear">Clear</button>
 </div>
+<div id="container">
+    <textarea id="input" placeholder="Paste JSON here"></textarea>
+    <div id="output" class="json-output"></div>
+</div>
+<div id="history"></div>
 <script nonce="${nonce}">
-function syntaxHighlight(json) {
-    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return json
-        .replace(/"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^"\\])*"(?=\s*:)/g, '<span style="color:var(--vscode-terminal-ansiCyan)">$&</span>')
-        .replace(/"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^"\\])*"/g, '<span style="color:var(--vscode-terminal-ansiGreen)">$&</span>')
-        .replace(/\b(true|false)\b/g, '<span style="color:var(--vscode-terminal-ansiBlue)">$1</span>')
-        .replace(/\bnull\b/g, '<span style="color:var(--vscode-terminal-ansiBlue)">$&</span>')
-        .replace(/\b(-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)\b/g, '<span style="color:var(--vscode-terminal-ansiYellow)">$1</span>');
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;');
 }
 
+function renderJson(value) {
+    if (value === null) {
+        return '<span class="null">null</span>';
+    }
+    if (Array.isArray(value)) {
+        if (value.length === 0) {
+            return '[ ]';
+        }
+        const items = value.map(v => '<li>' + renderJson(v) + '</li>').join('');
+        return '<details open><summary>[...]</summary><ul>' + items + '</ul></details>';
+    }
+    switch (typeof value) {
+        case 'object':
+            const entries = Object.entries(value)
+                .map(([k, v]) => '<li><span class="key">"' + escapeHtml(k) + '"</span>: ' + renderJson(v) + '</li>')
+                .join('');
+            if (!entries) {
+                return '{ }';
+            }
+            return '<details open><summary>{...}</summary><ul>' + entries + '</ul></details>';
+        case 'string':
+            return '<span class="string">"' + escapeHtml(value) + '"</span>';
+        case 'number':
+            return '<span class="number">' + value + '</span>';
+        case 'boolean':
+            return '<span class="boolean">' + value + '</span>';
+    }
+    return '';
+}
+const history = [];
 document.getElementById('format').addEventListener('click', () => {
     const inputEl = document.getElementById('input');
-    const outputEl = document.getElementById('output');
-    try {
-        const obj = JSON.parse(inputEl.value);
-        const formatted = JSON.stringify(obj, null, 2);
-        outputEl.innerHTML = syntaxHighlight(formatted);
-    } catch (err) {
-        outputEl.textContent = 'Invalid JSON: ' + err.message;
+    const output = document.getElementById('output');
+    const historyEl = document.getElementById('history');
+    if (!inputEl || !output || !historyEl) {
+        return;
     }
+    const input = inputEl.value;
+    history.unshift(input);
+    historyEl.innerHTML = history.map(h => '<pre>' + escapeHtml(h) + '</pre>').join('');
+    try {
+        const obj = JSON.parse(input);
+        output.style.color = 'inherit';
+        output.innerHTML = renderJson(obj);
+    } catch (err) {
+        output.style.color = 'var(--vscode-errorForeground)';
+        output.textContent = 'Invalid JSON: ' + err.message;
+    }
+});
+
+document.getElementById('clear').addEventListener('click', () => {
+    const inputEl = document.getElementById('input');
+    const output = document.getElementById('output');
+    if (inputEl) inputEl.value = '';
+    if (output) output.innerHTML = '';
 });
 </script>
 </body>
