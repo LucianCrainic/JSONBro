@@ -147,7 +147,7 @@ function renderJson(value) {
         return '<details open><summary>[...]</summary><ul>' + items + '</ul></details>';
     }
     switch (typeof value) {
-        case 'object':
+        case 'object': {
             const entries = Object.entries(value)
                 .map(([k, v]) => '<li><span class="key">"' + escapeHtml(k) + '"</span>: ' + renderJson(v) + '</li>')
                 .join('');
@@ -155,6 +155,7 @@ function renderJson(value) {
                 return '{ }';
             }
             return '<details open><summary>{...}</summary><ul>' + entries + '</ul></details>';
+        }
         case 'string':
             return '<span class="string">"' + escapeHtml(value) + '"</span>';
         case 'number':
