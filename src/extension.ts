@@ -34,16 +34,37 @@ body {
     padding: 0;
     color: var(--vscode-editor-foreground);
     background-color: var(--vscode-editor-background);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
 }
 #toolbar {
     padding: 6px 10px;
     background-color: var(--vscode-editorGroupHeader-tabsBackground);
     border-bottom: 1px solid var(--vscode-editorGroup-border);
-    text-align: right;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
 }
 #container {
     display: flex;
-    height: calc(100vh - 40px);
+    flex: 1;
+}
+#history {
+    height: 100px;
+    overflow-y: auto;
+    border-top: 1px solid var(--vscode-editorGroup-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+}
+#history pre {
+    margin: 2px 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    text-align: center;
 }
 textarea, .json-output {
     flex: 1;
@@ -94,11 +115,15 @@ button:hover {
 </style>
 </head>
 <body>
-<div id="toolbar"><button id="format">Format JSON</button></div>
+<div id="toolbar">
+    <button id="format">Format JSON</button>
+    <button id="clear">Clear</button>
+</div>
 <div id="container">
     <textarea id="input" placeholder="Paste JSON here"></textarea>
     <div id="output" class="json-output"></div>
 </div>
+<div id="history"></div>
 <script nonce="${nonce}">
 function escapeHtml(text) {
     return text
@@ -137,13 +162,17 @@ function renderJson(value) {
     }
     return '';
 }
+const history = [];
 document.getElementById('format').addEventListener('click', () => {
     const inputEl = document.getElementById('input');
     const output = document.getElementById('output');
-    if (!inputEl || !output) {
+    const historyEl = document.getElementById('history');
+    if (!inputEl || !output || !historyEl) {
         return;
     }
     const input = inputEl.value;
+    history.unshift(input);
+    historyEl.innerHTML = history.map(h => '<pre>' + escapeHtml(h) + '</pre>').join('');
     try {
         const obj = JSON.parse(input);
         output.style.color = 'inherit';
@@ -152,6 +181,13 @@ document.getElementById('format').addEventListener('click', () => {
         output.style.color = 'var(--vscode-errorForeground)';
         output.textContent = 'Invalid JSON: ' + err.message;
     }
+});
+
+document.getElementById('clear').addEventListener('click', () => {
+    const inputEl = document.getElementById('input');
+    const output = document.getElementById('output');
+    if (inputEl) inputEl.value = '';
+    if (output) output.innerHTML = '';
 });
 </script>
 </body>
