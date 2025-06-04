@@ -1,5 +1,6 @@
 import { JSONFormatter } from './formatter';
 import { JSONDiff } from './diff';
+import { JSONSearch } from './search';
 
 /**
  * Main webview controller that handles JSON formatting functionality
@@ -7,6 +8,7 @@ import { JSONDiff } from './diff';
 export class WebviewController {
     private history: string[] = [];
     private currentJsonObject: any = null;
+    private jsonSearch: JSONSearch = new JSONSearch();
 
     /**
      * Initializes the webview controller
@@ -21,6 +23,7 @@ export class WebviewController {
         const historyBtn = document.getElementById('history');
         const copyBtn = document.getElementById('copy');
         const minifyBtn = document.getElementById('minify');
+        const searchToggleBtn = document.getElementById('search-toggle');
 
         if (formatBtn) {
             formatBtn.addEventListener('click', () => this.formatJson());
@@ -41,6 +44,13 @@ export class WebviewController {
         if (minifyBtn) {
             minifyBtn.addEventListener('click', () => this.minifyJson());
         }
+
+        if (searchToggleBtn) {
+            searchToggleBtn.addEventListener('click', () => this.toggleInlineSearch());
+        }
+
+        // Inline search event listeners
+        this.setupSearchEventListeners();
     }
 
     private formatJson(): void {
@@ -182,5 +192,161 @@ export class WebviewController {
                 this.updateHistoryPanel(inputEl, output);
             });
         });
+    }
+
+    private setupSearchEventListeners(): void {
+        const searchClose = document.getElementById('search-close');
+        const searchInput = document.getElementById('search-input') as HTMLInputElement;
+        const searchNext = document.getElementById('search-next');
+        const searchPrev = document.getElementById('search-prev');
+
+        if (searchClose) {
+            searchClose.addEventListener('click', () => this.closeSearch());
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', () => this.performSearch());
+            searchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    if (event.shiftKey) {
+                        this.searchPrevious();
+                    } else {
+                        this.searchNext();
+                    }
+                } else if (event.key === 'Escape') {
+                    this.closeSearch();
+                }
+            });
+        }
+
+        if (searchNext) {
+            searchNext.addEventListener('click', () => this.searchNext());
+        }
+
+        if (searchPrev) {
+            searchPrev.addEventListener('click', () => this.searchPrevious());
+        }
+    }
+
+    private toggleInlineSearch(): void {
+        const searchContainer = document.getElementById('search-container');
+        const searchToggleBtn = document.getElementById('search-toggle');
+        const searchInput = document.getElementById('search-input') as HTMLInputElement;
+        
+        // Only allow search if there's JSON output
+        if (!this.currentJsonObject) {
+            return;
+        }
+        
+        if (searchContainer && searchToggleBtn) {
+            const isVisible = searchContainer.style.display !== 'none';
+            
+            if (isVisible) {
+                // Hide search
+                searchContainer.style.display = 'none';
+                searchToggleBtn.style.display = 'flex';
+                this.clearSearch();
+            } else {
+                // Show search
+                searchContainer.style.display = 'flex';
+                searchToggleBtn.style.display = 'none';
+                if (searchInput) {
+                    setTimeout(() => searchInput.focus(), 100);
+                }
+            }
+        }
+    }
+
+    private closeSearch(): void {
+        const searchContainer = document.getElementById('search-container');
+        const searchToggleBtn = document.getElementById('search-toggle');
+        
+        if (searchContainer && searchToggleBtn) {
+            searchContainer.style.display = 'none';
+            searchToggleBtn.style.display = 'flex';
+            this.clearSearch();
+        }
+    }
+
+    private performSearch(): void {
+        try {
+            const searchInput = document.getElementById('search-input') as HTMLInputElement;
+            const output = document.getElementById('output');
+            const searchInfo = document.getElementById('search-info');
+            const searchNext = document.getElementById('search-next') as HTMLButtonElement;
+            const searchPrev = document.getElementById('search-prev') as HTMLButtonElement;
+
+            if (!searchInput || !output || !searchInfo) {
+                return;
+            }
+
+            const searchTerm = searchInput.value.trim();
+            const matchCount = this.jsonSearch.search(searchTerm, output);
+            
+            // Update search info
+            if (matchCount === 0) {
+                searchInfo.textContent = searchTerm ? 'No matches' : '0 matches';
+            } else {
+                const { current, total } = this.jsonSearch.getCurrentMatchInfo();
+                searchInfo.textContent = `${current} of ${total} matches`;
+            }
+
+            // Update navigation buttons
+            if (searchNext && searchPrev) {
+                searchNext.disabled = matchCount === 0;
+                searchPrev.disabled = matchCount === 0;
+            }
+        } catch (error) {
+            console.error('Error performing search:', error);
+            const searchInfo = document.getElementById('search-info');
+            if (searchInfo) {
+                searchInfo.textContent = 'Search error';
+            }
+        }
+    }
+
+    private searchNext(): void {
+        try {
+            this.jsonSearch.nextMatch();
+            this.updateSearchInfo();
+        } catch (error) {
+            console.error('Error navigating to next match:', error);
+        }
+    }
+
+    private searchPrevious(): void {
+        try {
+            this.jsonSearch.previousMatch();
+            this.updateSearchInfo();
+        } catch (error) {
+            console.error('Error navigating to previous match:', error);
+        }
+    }
+
+    private updateSearchInfo(): void {
+        const searchInfo = document.getElementById('search-info');
+        if (searchInfo) {
+            const { current, total } = this.jsonSearch.getCurrentMatchInfo();
+            searchInfo.textContent = total > 0 ? `${current} of ${total} matches` : 'No matches';
+        }
+    }
+
+    private clearSearch(): void {
+        try {
+            const searchInput = document.getElementById('search-input') as HTMLInputElement;
+            const output = document.getElementById('output');
+            
+            if (searchInput) {
+                searchInput.value = '';
+            }
+            
+            if (output) {
+                this.jsonSearch.clearHighlights(output);
+            }
+            
+            this.updateSearchInfo();
+        } catch (error) {
+            console.error('Error clearing search:', error);
+        }
     }
 }

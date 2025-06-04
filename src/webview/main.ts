@@ -9,11 +9,11 @@ document.addEventListener('DOMContentLoaded', () => {
 // Close history panel when clicking outside
 document.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
-    const backdrop = document.getElementById('history-backdrop');
-    const panel = document.getElementById('history-panel');
+    const historyBackdrop = document.getElementById('history-backdrop');
+    const historyPanel = document.getElementById('history-panel');
     
-    if (backdrop && panel && target === backdrop) {
-        backdrop.style.display = 'none';
-        panel.style.display = 'none';
+    if (historyBackdrop && historyPanel && target === historyBackdrop) {
+        historyBackdrop.style.display = 'none';
+        historyPanel.style.display = 'none';
     }
 });

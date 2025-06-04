@@ -111,6 +111,62 @@ export class WebviewContentGenerator {
                 background-color: var(--vscode-button-hoverBackground);
             }
 
+            /* Inline Search Container */
+            #search-container {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 4px 8px;
+                background-color: var(--vscode-input-background);
+                border: 1px solid var(--vscode-editorGroup-border);
+                border-radius: 3px;
+                margin-right: 8px;
+            }
+
+            #search-container #search-input {
+                background: none;
+                border: none;
+                color: var(--vscode-input-foreground);
+                font-size: 12px;
+                outline: none;
+                width: 150px;
+                padding: 2px 4px;
+            }
+
+            #search-container #search-input::placeholder {
+                color: var(--vscode-input-placeholderForeground);
+            }
+
+            #search-container button {
+                background: none;
+                border: none;
+                padding: 2px 4px;
+                margin: 0;
+                border-radius: 2px;
+                min-width: auto;
+            }
+
+            #search-container button:hover {
+                background-color: var(--vscode-toolbar-hoverBackground);
+            }
+
+            #search-container button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            #search-container #search-info {
+                font-size: 11px;
+                color: var(--vscode-descriptionForeground);
+                margin: 0 4px;
+                white-space: nowrap;
+            }
+
+            #search-container .icon {
+                width: 12px;
+                height: 12px;
+            }
+
             .icon {
                 width: 14px;
                 height: 14px;
@@ -214,6 +270,18 @@ export class WebviewContentGenerator {
                 padding: 4px;
                 min-width: auto;
             }
+
+            /* Search Highlighting */
+            .search-highlight {
+                background-color: var(--vscode-editor-findMatchBackground);
+                border: 1px solid var(--vscode-editor-findMatchBorder);
+                border-radius: 2px;
+            }
+
+            .search-highlight.current {
+                background-color: var(--vscode-editor-findMatchHighlightBackground);
+                border-color: var(--vscode-editor-findMatchHighlightBorder);
+            }
         </style>`;
     }
 
@@ -237,6 +305,33 @@ export class WebviewContentGenerator {
                     </button>
                 </div>
                 <div id="toolbar-center">
+                    <div id="search-container" style="display: none;">
+                        <input type="text" id="search-input" placeholder="Search in JSON..." />
+                        <button id="search-prev" title="Previous match">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <polyline points="15,18 9,12 15,6"></polyline>
+                            </svg>
+                        </button>
+                        <button id="search-next" title="Next match">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <polyline points="9,18 15,12 9,6"></polyline>
+                            </svg>
+                        </button>
+                        <span id="search-info">0 matches</span>
+                        <button id="search-close" title="Close search">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <button id="search-toggle" title="Search in formatted JSON">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                        Search
+                    </button>
                     <button id="copy" title="Copy formatted JSON">
                         <svg class="icon" viewBox="0 0 24 24">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
