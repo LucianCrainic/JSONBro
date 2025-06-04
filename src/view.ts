@@ -33,21 +33,27 @@ body {
     display: flex;
     flex: 1;
 }
-#history {
-    height: 100px;
+#history-panel {
+    width: 200px;
+    border-right: 1px solid var(--vscode-editorGroup-border);
     overflow-y: auto;
-    border-top: 1px solid var(--vscode-editorGroup-border);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background-color: var(--vscode-editor-background);
-    color: var(--vscode-editor-foreground);
+    display: none;
+    flex-shrink: 0;
 }
-#history pre {
-    margin: 2px 4px;
+#history-panel.visible {
+    display: block;
+}
+#history-panel pre {
+    margin: 4px;
     white-space: pre-wrap;
     word-break: break-all;
-    text-align: center;
+}
+#history-panel .history-item {
+    padding: 4px;
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
+}
+#history-panel button {
+    margin-top: 4px;
 }
 textarea, .json-output {
     flex: 1;
@@ -101,12 +107,13 @@ button:hover {
 <div id="toolbar">
     <button id="format">Format JSON</button>
     <button id="clear">Clear</button>
+    <button id="toggle-history">History</button>
 </div>
 <div id="container">
+    <div id="history-panel"></div>
     <textarea id="input" placeholder="Paste JSON here"></textarea>
     <div id="output" class="json-output"></div>
 </div>
-<div id="history"></div>
 <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
