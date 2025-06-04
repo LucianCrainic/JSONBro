@@ -29,85 +29,47 @@ function getWebviewContent(): string {
 <title>Format JSON</title>
 <style>
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui;
     margin: 0;
     padding: 0;
     color: var(--vscode-editor-foreground);
     background-color: var(--vscode-editor-background);
     display: flex;
-    flex-direction: column;
     height: 100vh;
+    font-family: var(--vscode-font-family);
 }
-#toolbar {
-    padding: 6px 10px;
-    background-color: var(--vscode-editorGroupHeader-tabsBackground);
-    border-bottom: 1px solid var(--vscode-editorGroup-border);
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-}
-#container {
-    display: flex;
+.container {
     flex: 1;
+    display: flex;
+    position: relative;
 }
-#history {
-    height: 100px;
-    overflow-y: auto;
-    border-top: 1px solid var(--vscode-editorGroup-border);
-    background-color: var(--vscode-editor-background);
-    color: var(--vscode-editor-foreground);
-    padding: 4px;
-}
-#history .item {
-    margin: 2px 0;
-    padding: 2px 4px;
-    cursor: pointer;
-    border-radius: 3px;
-}
-#history .item:hover {
-    background-color: var(--vscode-list-hoverBackground);
-}
-textarea, .json-output {
+#input, #output {
     flex: 1;
-    margin: 0;
-    padding: 10px;
     border: none;
-    outline: none;
+    padding: 1em;
     font-family: monospace;
     font-size: 13px;
+    outline: none;
+    resize: none;
     background-color: var(--vscode-editor-background);
     color: var(--vscode-editor-foreground);
 }
-textarea {
-    resize: none;
-    border-right: 1px solid var(--vscode-editorGroup-border);
-}
-.json-output {
+#output {
+    border-left: 1px solid var(--vscode-editorGroup-border);
     overflow: auto;
+    white-space: pre;
 }
-.json-output details {
-    margin-left: 16px;
+#toolbar {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
 }
-.json-output summary {
-    cursor: pointer;
-    list-style: none;
-}
-.json-output ul {
-    list-style-type: none;
-    padding-left: 16px;
-    margin: 0;
-}
-.string { color: var(--vscode-terminal-ansiGreen); }
-.number { color: var(--vscode-terminal-ansiYellow); }
-.boolean { color: var(--vscode-terminal-ansiBlue); }
-.null { color: var(--vscode-terminal-ansiBlue); }
-.key { color: var(--vscode-terminal-ansiCyan); }
 button {
     background-color: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
     border: none;
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
 }
 button:hover {
@@ -116,111 +78,32 @@ button:hover {
 </style>
 </head>
 <body>
-<div id="toolbar">
-    <button id="format">Format JSON</button>
-    <button id="copy">Copy JSON</button>
-    <button id="clear">Clear</button>
-</div>
-<div id="container">
+<div class="container">
+    <div id="toolbar"><button id="format">Format JSON</button></div>
     <textarea id="input" placeholder="Paste JSON here"></textarea>
-    <div id="output" class="json-output"></div>
+    <pre id="output"></pre>
 </div>
-<div id="history"></div>
 <script nonce="${nonce}">
-function escapeHtml(text) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\"/g, '&quot;');
-}
-
-function renderJson(value) {
-    if (value === null) {
-        return '<span class="null">null</span>';
-    }
-    if (Array.isArray(value)) {
-        if (value.length === 0) {
-            return '[ ]';
-        }
-        const items = value.map(v => '<li>' + renderJson(v) + '</li>').join('');
-        return '<details open><summary>[...]</summary><ul>' + items + '</ul></details>';
-    }
-    switch (typeof value) {
-        case 'object': {
-            const entries = Object.entries(value)
-                .map(([k, v]) => '<li><span class="key">"' + escapeHtml(k) + '"</span>: ' + renderJson(v) + '</li>')
-                .join('');
-            if (!entries) {
-                return '{ }';
-            }
-            return '<details open><summary>{...}</summary><ul>' + entries + '</ul></details>';
-        }
-        case 'string':
-            return '<span class="string">"' + escapeHtml(value) + '"</span>';
-        case 'number':
-            return '<span class="number">' + value + '</span>';
-        case 'boolean':
-            return '<span class="boolean">' + value + '</span>';
-    }
-    return '';
-}
-const history = [];
-let currentFormatted = '';
-
-function renderHistory() {
-    const historyEl = document.getElementById('history');
-    if (!historyEl) return;
-    historyEl.innerHTML = history
-        .map((h, i) => '<div class="item" data-index="' + i + '">' + escapeHtml(h.preview) + '</div>')
-        .join('');
-    Array.from(historyEl.querySelectorAll('.item')).forEach(el => {
-        el.addEventListener('click', () => {
-            const idx = parseInt(el.getAttribute('data-index') || '0', 10);
-            const item = history[idx];
-            const inputEl = document.getElementById('input');
-            const output = document.getElementById('output');
-            if (!item || !inputEl || !output) return;
-            inputEl.value = item.input;
-            output.innerHTML = item.html;
-            currentFormatted = item.formatted;
-        });
-    });
+function syntaxHighlight(json) {
+    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return json
+        .replace(/"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^"\\])*"(?=\s*:)/g, '<span style="color:var(--vscode-terminal-ansiCyan)">$&</span>')
+        .replace(/"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^"\\])*"/g, '<span style="color:var(--vscode-terminal-ansiGreen)">$&</span>')
+        .replace(/\b(true|false)\b/g, '<span style="color:var(--vscode-terminal-ansiBlue)">$1</span>')
+        .replace(/\bnull\b/g, '<span style="color:var(--vscode-terminal-ansiBlue)">$&</span>')
+        .replace(/\b(-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)\b/g, '<span style="color:var(--vscode-terminal-ansiYellow)">$1</span>');
 }
 
 document.getElementById('format').addEventListener('click', () => {
     const inputEl = document.getElementById('input');
-    const output = document.getElementById('output');
-    if (!inputEl || !output) {
-        return;
-    }
-    const input = inputEl.value;
+    const outputEl = document.getElementById('output');
     try {
-        const obj = JSON.parse(input);
+        const obj = JSON.parse(inputEl.value);
         const formatted = JSON.stringify(obj, null, 2);
-        const html = renderJson(obj);
-        currentFormatted = formatted;
-        output.style.color = 'inherit';
-        output.innerHTML = html;
-        history.unshift({ input, formatted, html, preview: formatted.slice(0, 50).replace(/\n/g, ' ') });
-        renderHistory();
+        outputEl.innerHTML = syntaxHighlight(formatted);
     } catch (err) {
-        output.style.color = 'var(--vscode-errorForeground)';
-        output.textContent = 'Invalid JSON: ' + err.message;
+        outputEl.textContent = 'Invalid JSON: ' + err.message;
     }
-});
-
-document.getElementById('copy').addEventListener('click', () => {
-    if (!currentFormatted) return;
-    navigator.clipboard.writeText(currentFormatted);
-});
-
-document.getElementById('clear').addEventListener('click', () => {
-    const inputEl = document.getElementById('input');
-    const output = document.getElementById('output');
-    if (inputEl) inputEl.value = '';
-    if (output) output.innerHTML = '';
-    currentFormatted = '';
 });
 </script>
 </body>
