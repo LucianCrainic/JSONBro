@@ -1,22 +1,11 @@
 import * as vscode from 'vscode';
-import { getWebviewContent } from './view';
+import { CommandHandler } from './commands/command-handler';
 
 export function activate(context: vscode.ExtensionContext) {
-    const disposable = vscode.commands.registerCommand('jsonbro.formatJson', () => {
-        const panel = vscode.window.createWebviewPanel(
-            'jsonbro.formatJson',
-            'Format JSON',
-            vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true
-            }
-        );
-
-        panel.webview.html = getWebviewContent(panel.webview, context.extensionUri);
-    });
-
-    context.subscriptions.push(disposable);
+    console.log('JSONBro extension is now active!');
+    
+    const commandHandler = new CommandHandler(context);
+    commandHandler.registerCommands(context);
 }
 
 export function deactivate() {}

@@ -1,18 +1,17 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "es2015",
     "target": "es2020",
-    "outDir": "out",
+    "outDir": "out/webview",
     "lib": ["es2020", "dom"],
     "sourceMap": true,
-    "rootDir": "src",
+    "rootDir": "src/webview",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true
+    "moduleResolution": "node"
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", ".vscode-test", "out", "media"]
+  "include": ["src/webview/**/*"],
+  "exclude": ["node_modules", ".vscode-test", "out"]
 }
