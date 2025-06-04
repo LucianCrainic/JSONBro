@@ -5,7 +5,7 @@ const history = [];
 let currentJsonObject = null;
 
 function updateHistoryPanel(inputEl, output) {
-    const panel = document.getElementById('history-panel');
+    const panel = document.getElementById('history-content');
     if (!panel) {
         return;
     }
@@ -122,8 +122,40 @@ document.getElementById('clear').addEventListener('click', () => {
 
 document.getElementById('toggle-history').addEventListener('click', () => {
     const panel = document.getElementById('history-panel');
-    if (!panel) {
+    const backdrop = document.getElementById('history-backdrop');
+    if (!panel || !backdrop) {
         return;
     }
     panel.classList.toggle('visible');
+    backdrop.classList.toggle('visible');
+});
+
+// Close history modal when clicking backdrop or close button
+document.getElementById('history-backdrop').addEventListener('click', () => {
+    const panel = document.getElementById('history-panel');
+    const backdrop = document.getElementById('history-backdrop');
+    if (panel && backdrop) {
+        panel.classList.remove('visible');
+        backdrop.classList.remove('visible');
+    }
+});
+
+document.getElementById('history-close').addEventListener('click', () => {
+    const panel = document.getElementById('history-panel');
+    const backdrop = document.getElementById('history-backdrop');
+    if (panel && backdrop) {
+        panel.classList.remove('visible');
+        backdrop.classList.remove('visible');
+    }
+});
+
+// Close history panel when clicking on backdrop
+document.getElementById('history-backdrop').addEventListener('click', () => {
+    const panel = document.getElementById('history-panel');
+    const backdrop = document.getElementById('history-backdrop');
+    if (!panel || !backdrop) {
+        return;
+    }
+    panel.classList.remove('visible');
+    backdrop.classList.remove('visible');
 });

@@ -17,7 +17,7 @@ body {
     margin: 0;
     padding: 0;
     color: var(--vscode-editor-foreground);
-    background-color: var(--vscode-editor-background);
+    background-color: var(--vscode-sideBar-background);
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -46,18 +46,35 @@ body {
     overflow: hidden;
     position: relative;
 }
-#history-panel {
-    width: 200px;
-    border-right: 1px solid var(--vscode-editorGroup-border);
-    overflow-y: auto;
-    display: none;
-    flex-shrink: 0;
-    position: absolute;
-    top: 41px;
+#history-backdrop {
+    position: fixed;
+    top: 0;
     left: 0;
-    height: calc(100vh - 41px);
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    display: none;
+}
+#history-backdrop.visible {
+    display: block;
+}
+#history-panel {
+    width: 500px;
+    max-width: 90vw;
+    height: 400px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     background-color: var(--vscode-editor-background);
-    z-index: 10;
+    z-index: 1000;
+    border: 1px solid var(--vscode-editorGroup-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 #history-panel.visible {
     display: block;
@@ -73,41 +90,81 @@ body {
     background-color: var(--vscode-toolbar-hoverBackground);
 }
 #history-panel .history-item {
-    padding: 4px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--vscode-editorGroup-border);
+    border-radius: 4px;
+    margin: 4px 8px;
+    background-color: var(--vscode-editorWidget-background);
+}
+#history-panel .history-item:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+#history-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--vscode-editorGroupHeader-tabsBackground);
+    border-radius: 8px 8px 0 0;
+}
+#history-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+#history-close {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: var(--vscode-foreground);
+    border-radius: 4px;
+}
+#history-close:hover {
+    background-color: var(--vscode-toolbar-hoverBackground);
+}
+#history-content {
+    padding: 8px;
+    max-height: calc(400px - 60px);
+    overflow-y: auto;
 }
 #history-panel .history-item pre {
-    margin: 0;
+    margin: 0 0 8px 0;
     white-space: pre-wrap;
     word-break: break-all;
+    font-size: 12px;
+    color: var(--vscode-editor-foreground);
 }
 #history-panel .history-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 4px;
-    margin-top: 4px;
+    gap: 6px;
+    margin-top: 8px;
 }
 #history-panel button {
-    padding: 2px 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 textarea, .json-output {
     flex: 1;
     margin: 0;
-    padding: 10px;
+    padding: 16px;
     border: none;
     outline: none;
     font-family: monospace;
     font-size: 13px;
-    background-color: var(--vscode-editor-background);
+    background-color: transparent;
     color: var(--vscode-editor-foreground);
     overflow-y: auto;
-}
-textarea {
     resize: none;
-    border-right: 1px solid var(--vscode-editorGroup-border);
-}
-.json-output {
-    overflow: auto;
+    border-radius: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
 }
 .json-output details {
     margin-left: 16px;
@@ -150,6 +207,20 @@ button:hover {
     display: flex;
     flex: 1;
     overflow: hidden;
+    padding: 12px;
+    gap: 12px;
+}
+.editor-panel {
+    flex: 1;
+    border-radius: 8px;
+    border: 1px solid var(--vscode-editorGroup-border);
+    background-color: var(--vscode-editor-background);
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.2s ease;
+}
+.editor-panel:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 </style>
 </head>
@@ -173,10 +244,26 @@ button:hover {
     </div>
 </div>
 <div id="container">
-    <div id="history-panel"></div>
+    <div id="history-backdrop"></div>
+    <div id="history-panel">
+        <div id="history-header">
+            <h3>History</h3>
+            <button id="history-close" title="Close">
+                <svg class="icon" viewBox="0 0 24 24">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div id="history-content"></div>
+    </div>
     <div id="main-content">
-        <textarea id="input" placeholder="Paste JSON here"></textarea>
-        <div id="output" class="json-output"></div>
+        <div class="editor-panel">
+            <textarea id="input" placeholder="Paste JSON here"></textarea>
+        </div>
+        <div class="editor-panel">
+            <div id="output" class="json-output"></div>
+        </div>
     </div>
 </div>
 <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
