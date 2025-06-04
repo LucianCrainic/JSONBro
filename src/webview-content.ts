@@ -50,13 +50,15 @@ export class WebviewContentGenerator {
             }
 
             #toolbar {
-                padding: 6px 10px;
+                padding: 12px 10px;
                 background-color: var(--vscode-editorGroupHeader-tabsBackground);
                 border-bottom: 1px solid var(--vscode-editorGroup-border);
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 gap: 8px;
+                min-height: 48px;
+                box-sizing: border-box;
             }
 
             #toolbar-left, #toolbar-center {
@@ -69,13 +71,15 @@ export class WebviewContentGenerator {
                 flex: 1;
                 overflow: hidden;
                 position: relative;
+                padding: 16px;
+                gap: 16px;
             }
 
             #input, #output {
                 flex: 1;
-                margin: 8px;
-                padding: 12px;
+                padding: 16px;
                 border: 1px solid var(--vscode-editorGroup-border);
+                border-radius: 8px;
                 background-color: var(--vscode-editor-background);
                 color: var(--vscode-editor-foreground);
                 font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -85,11 +89,11 @@ export class WebviewContentGenerator {
             }
 
             #input {
-                border-right: none;
+                /* Remove border-right override since we're using gap now */
             }
 
             #output {
-                border-left: none;
+                /* Remove border-left override since we're using gap now */
                 overflow-y: auto;
                 white-space: pre-wrap;
             }
@@ -98,13 +102,15 @@ export class WebviewContentGenerator {
                 background-color: var(--vscode-button-background);
                 color: var(--vscode-button-foreground);
                 border: none;
-                padding: 6px 12px;
+                padding: 8px 12px;
                 cursor: pointer;
                 border-radius: 3px;
                 font-size: 12px;
                 display: flex;
                 align-items: center;
                 gap: 4px;
+                height: 32px;
+                box-sizing: border-box;
             }
 
             button:hover {
@@ -116,11 +122,13 @@ export class WebviewContentGenerator {
                 display: flex;
                 align-items: center;
                 gap: 4px;
-                padding: 4px 8px;
+                padding: 6px 8px;
                 background-color: var(--vscode-input-background);
                 border: 1px solid var(--vscode-editorGroup-border);
                 border-radius: 3px;
                 margin-right: 8px;
+                height: 32px;
+                box-sizing: border-box;
             }
 
             #search-container #search-input {
@@ -295,13 +303,6 @@ export class WebviewContentGenerator {
                             <polyline points="8,6 2,12 8,18"></polyline>
                         </svg>
                         Format
-                    </button>
-                    <button id="minify" title="Minify JSON">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <line x1="5" y1="9" x2="19" y2="9"></line>
-                            <line x1="5" y1="15" x2="19" y2="15"></line>
-                        </svg>
-                        Minify
                     </button>
                 </div>
                 <div id="toolbar-center">

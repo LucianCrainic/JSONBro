@@ -22,7 +22,6 @@ export class WebviewController {
         const clearBtn = document.getElementById('clear');
         const historyBtn = document.getElementById('history');
         const copyBtn = document.getElementById('copy');
-        const minifyBtn = document.getElementById('minify');
         const searchToggleBtn = document.getElementById('search-toggle');
 
         if (formatBtn) {
@@ -39,10 +38,6 @@ export class WebviewController {
 
         if (copyBtn) {
             copyBtn.addEventListener('click', () => this.copyToClipboard());
-        }
-
-        if (minifyBtn) {
-            minifyBtn.addEventListener('click', () => this.minifyJson());
         }
 
         if (searchToggleBtn) {
@@ -116,21 +111,6 @@ export class WebviewController {
             }).catch(err => {
                 console.error('Failed to copy to clipboard:', err);
             });
-        }
-    }
-
-    private minifyJson(): void {
-        const inputEl = document.getElementById('input') as HTMLTextAreaElement;
-        
-        if (!inputEl || !this.currentJsonObject) {
-            return;
-        }
-
-        try {
-            const minified = JSON.stringify(this.currentJsonObject);
-            inputEl.value = minified;
-        } catch (error) {
-            console.error('Failed to minify JSON:', error);
         }
     }
 
