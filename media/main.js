@@ -2,6 +2,7 @@ import { escapeHtml, renderJson } from './format.js';
 import { renderJsonDiff } from './diff.js';
 
 const history = [];
+let currentJsonObject = null;
 
 function updateHistoryPanel(inputEl, output) {
     const panel = document.getElementById('history-panel');
@@ -21,9 +22,11 @@ function updateHistoryPanel(inputEl, output) {
             inputEl.value = value;
             try {
                 const obj = JSON.parse(value);
+                currentJsonObject = obj;
                 output.style.color = 'inherit';
                 output.innerHTML = renderJson(obj);
             } catch (err) {
+                currentJsonObject = null;
                 output.style.color = 'var(--vscode-errorForeground)';
                 output.textContent = 'Invalid JSON: ' + err.message;
             }
@@ -49,9 +52,11 @@ document.getElementById('format').addEventListener('click', () => {
     updateHistoryPanel(inputEl, output);
     try {
         const obj = JSON.parse(input);
+        currentJsonObject = obj;
         output.style.color = 'inherit';
         output.innerHTML = renderJson(obj);
     } catch (err) {
+        currentJsonObject = null;
         output.style.color = 'var(--vscode-errorForeground)';
         output.textContent = 'Invalid JSON: ' + err.message;
     }
@@ -65,19 +70,60 @@ document.addEventListener('json-diff', event => {
     }
 });
 
+document.getElementById('copy').addEventListener('click', () => {
+    if (!currentJsonObject) {
+        // Show error feedback if no valid JSON to copy
+        const btn = document.getElementById('copy');
+        const originalText = btn.textContent;
+        btn.textContent = 'No JSON!';
+        btn.style.color = 'var(--vscode-errorForeground)';
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.color = '';
+        }, 1000);
+        return;
+    }
+    
+    // Format the JSON with proper indentation
+    const formattedJson = JSON.stringify(currentJsonObject, null, 2);
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(formattedJson).then(() => {
+        // Visual feedback
+        const btn = document.getElementById('copy');
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.style.color = 'var(--vscode-terminal-ansiGreen)';
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.color = '';
+        }, 1000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        // Show error feedback
+        const btn = document.getElementById('copy');
+        const originalText = btn.textContent;
+        btn.textContent = 'Error!';
+        btn.style.color = 'var(--vscode-errorForeground)';
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.color = '';
+        }, 1000);
+    });
+});
+
 document.getElementById('clear').addEventListener('click', () => {
     const inputEl = document.getElementById('input');
     const output = document.getElementById('output');
     if (inputEl) inputEl.value = '';
     if (output) output.innerHTML = '';
+    currentJsonObject = null;
 });
 
 document.getElementById('toggle-history').addEventListener('click', () => {
     const panel = document.getElementById('history-panel');
-    const btn = document.getElementById('toggle-history');
-    if (!panel || !btn) {
+    if (!panel) {
         return;
     }
     panel.classList.toggle('visible');
-    btn.classList.toggle('visible');
 });

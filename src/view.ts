@@ -28,13 +28,23 @@ body {
     background-color: var(--vscode-editorGroupHeader-tabsBackground);
     border-bottom: 1px solid var(--vscode-editorGroup-border);
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+#toolbar-left {
+    display: flex;
+    gap: 8px;
+}
+#toolbar-center {
+    display: flex;
     gap: 8px;
 }
 #container {
     display: flex;
     flex: 1;
     overflow: hidden;
+    position: relative;
 }
 #history-panel {
     width: 200px;
@@ -42,20 +52,25 @@ body {
     overflow-y: auto;
     display: none;
     flex-shrink: 0;
+    position: absolute;
+    top: 41px;
+    left: 0;
+    height: calc(100vh - 41px);
+    background-color: var(--vscode-editor-background);
+    z-index: 10;
 }
 #history-panel.visible {
     display: block;
 }
 #toggle-history {
-    width: 30px;
-    border-right: 1px solid var(--vscode-editorGroup-border);
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: var(--vscode-foreground);
 }
-#toggle-history.visible + #history-panel {
-    display: block;
+#toggle-history:hover {
+    background-color: var(--vscode-toolbar-hoverBackground);
 }
 #history-panel .history-item {
     padding: 4px;
@@ -131,30 +146,38 @@ button:hover {
     stroke-linejoin: round;
     fill: none;
 }
-#toggle-history .icon {
-    width: 18px;
-    height: 18px;
+#main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
 }
 </style>
 </head>
 <body>
 <div id="toolbar">
-    <button id="format">Format JSON</button>
-    <button id="clear">Clear</button>
+    <div id="toolbar-left">
+        <button id="toggle-history" title="History">
+            <svg class="icon" viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14,2 14,8 20,8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10,9 9,9 8,9"></polyline>
+            </svg>
+        </button>
+    </div>
+    <div id="toolbar-center">
+        <button id="format">Format</button>
+        <button id="copy">Copy</button>
+        <button id="clear">Clear</button>
+    </div>
 </div>
 <div id="container">
-    <button id="toggle-history" title="History">
-        <svg class="icon" viewBox="0 0 24 24">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14,2 14,8 20,8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-            <polyline points="10,9 9,9 8,9"></polyline>
-        </svg>
-    </button>
     <div id="history-panel"></div>
-    <textarea id="input" placeholder="Paste JSON here"></textarea>
-    <div id="output" class="json-output"></div>
+    <div id="main-content">
+        <textarea id="input" placeholder="Paste JSON here"></textarea>
+        <div id="output" class="json-output"></div>
+    </div>
 </div>
 <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 <script nonce="${nonce}" src="${featherIconsUri}"></script>
