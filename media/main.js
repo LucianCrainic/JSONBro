@@ -11,7 +11,7 @@ function updateHistoryPanel(inputEl, output) {
     panel.innerHTML = history
         .map((h, idx) => {
             const preview = escapeHtml(h).slice(0, 100);
-            return `<div class="history-item"><pre>${preview}</pre><div class="history-actions"><button class="show-btn" data-index="${idx}" title="Show">&#x1F441;</button><button class="remove-btn" data-index="${idx}" title="Remove">&#x1F5D1;</button></div></div>`;
+            return `<div class="history-item"><pre>${preview}</pre><div class="history-actions"><button class="show-btn" data-index="${idx}" title="Show"><svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></button><button class="remove-btn" data-index="${idx}" title="Remove"><svg class="icon" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6"></polyline><path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path></svg></button></div></div>`;
         })
         .join('');
     panel.querySelectorAll('button.show-btn').forEach(btn => {

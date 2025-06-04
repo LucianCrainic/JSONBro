@@ -33,5 +33,8 @@
     "@types/vscode": "^1.81.0",
     "typescript": "^5.0.2",
     "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "feather-icons": "^4.29.2"
   }
 }
