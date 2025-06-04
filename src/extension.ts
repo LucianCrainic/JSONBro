@@ -6,7 +6,10 @@ export function activate(context: vscode.ExtensionContext) {
             'jsonbro.formatJson',
             'Format JSON',
             vscode.ViewColumn.One,
-            { enableScripts: true }
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true
+            }
         );
 
         panel.webview.html = getWebviewContent();
