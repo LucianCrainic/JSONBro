@@ -54,17 +54,18 @@ body {
     height: 100px;
     overflow-y: auto;
     border-top: 1px solid var(--vscode-editorGroup-border);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
     background-color: var(--vscode-editor-background);
     color: var(--vscode-editor-foreground);
+    padding: 4px;
 }
-#history pre {
-    margin: 2px 4px;
-    white-space: pre-wrap;
-    word-break: break-all;
-    text-align: center;
+#history .item {
+    margin: 2px 0;
+    padding: 2px 4px;
+    cursor: pointer;
+    border-radius: 3px;
+}
+#history .item:hover {
+    background-color: var(--vscode-list-hoverBackground);
 }
 textarea, .json-output {
     flex: 1;
@@ -117,6 +118,7 @@ button:hover {
 <body>
 <div id="toolbar">
     <button id="format">Format JSON</button>
+    <button id="copy">Copy JSON</button>
     <button id="clear">Clear</button>
 </div>
 <div id="container">
@@ -163,24 +165,53 @@ function renderJson(value) {
     return '';
 }
 const history = [];
+let currentFormatted = '';
+
+function renderHistory() {
+    const historyEl = document.getElementById('history');
+    if (!historyEl) return;
+    historyEl.innerHTML = history
+        .map((h, i) => '<div class="item" data-index="' + i + '">' + escapeHtml(h.preview) + '</div>')
+        .join('');
+    Array.from(historyEl.querySelectorAll('.item')).forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = parseInt(el.getAttribute('data-index') || '0', 10);
+            const item = history[idx];
+            const inputEl = document.getElementById('input');
+            const output = document.getElementById('output');
+            if (!item || !inputEl || !output) return;
+            inputEl.value = item.input;
+            output.innerHTML = item.html;
+            currentFormatted = item.formatted;
+        });
+    });
+}
+
 document.getElementById('format').addEventListener('click', () => {
     const inputEl = document.getElementById('input');
     const output = document.getElementById('output');
-    const historyEl = document.getElementById('history');
-    if (!inputEl || !output || !historyEl) {
+    if (!inputEl || !output) {
         return;
     }
     const input = inputEl.value;
-    history.unshift(input);
-    historyEl.innerHTML = history.map(h => '<pre>' + escapeHtml(h) + '</pre>').join('');
     try {
         const obj = JSON.parse(input);
+        const formatted = JSON.stringify(obj, null, 2);
+        const html = renderJson(obj);
+        currentFormatted = formatted;
         output.style.color = 'inherit';
-        output.innerHTML = renderJson(obj);
+        output.innerHTML = html;
+        history.unshift({ input, formatted, html, preview: formatted.slice(0, 50).replace(/\n/g, ' ') });
+        renderHistory();
     } catch (err) {
         output.style.color = 'var(--vscode-errorForeground)';
         output.textContent = 'Invalid JSON: ' + err.message;
     }
+});
+
+document.getElementById('copy').addEventListener('click', () => {
+    if (!currentFormatted) return;
+    navigator.clipboard.writeText(currentFormatted);
 });
 
 document.getElementById('clear').addEventListener('click', () => {
@@ -188,6 +219,7 @@ document.getElementById('clear').addEventListener('click', () => {
     const output = document.getElementById('output');
     if (inputEl) inputEl.value = '';
     if (output) output.innerHTML = '';
+    currentFormatted = '';
 });
 </script>
 </body>
