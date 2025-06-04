@@ -45,17 +45,34 @@ body {
 #history-panel.visible {
     display: block;
 }
-#history-panel pre {
-    margin: 4px;
-    white-space: pre-wrap;
-    word-break: break-all;
+#toggle-history {
+    width: 30px;
+    border-right: 1px solid var(--vscode-editorGroup-border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#toggle-history.visible + #history-panel {
+    display: block;
 }
 #history-panel .history-item {
     padding: 4px;
     border-bottom: 1px solid var(--vscode-editorGroup-border);
 }
-#history-panel button {
+#history-panel .history-item pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+#history-panel .history-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
     margin-top: 4px;
+}
+#history-panel button {
+    padding: 2px 4px;
 }
 textarea, .json-output {
     flex: 1;
@@ -110,9 +127,9 @@ button:hover {
 <div id="toolbar">
     <button id="format">Format JSON</button>
     <button id="clear">Clear</button>
-    <button id="toggle-history">History</button>
 </div>
 <div id="container">
+    <button id="toggle-history" title="History">&#x1F4D3;</button>
     <div id="history-panel"></div>
     <textarea id="input" placeholder="Paste JSON here"></textarea>
     <div id="output" class="json-output"></div>

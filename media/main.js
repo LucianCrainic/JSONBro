@@ -11,10 +11,10 @@ function updateHistoryPanel(inputEl, output) {
     panel.innerHTML = history
         .map((h, idx) => {
             const preview = escapeHtml(h).slice(0, 100);
-            return `<div class="history-item"><pre>${preview}</pre><button data-index="${idx}">Show</button></div>`;
+            return `<div class="history-item"><pre>${preview}</pre><div class="history-actions"><button class="show-btn" data-index="${idx}" title="Show">&#x1F441;</button><button class="remove-btn" data-index="${idx}" title="Remove">&#x1F5D1;</button></div></div>`;
         })
         .join('');
-    panel.querySelectorAll('button[data-index]').forEach(btn => {
+    panel.querySelectorAll('button.show-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const index = parseInt(btn.getAttribute('data-index'), 10);
             const value = history[index];
@@ -27,6 +27,13 @@ function updateHistoryPanel(inputEl, output) {
                 output.style.color = 'var(--vscode-errorForeground)';
                 output.textContent = 'Invalid JSON: ' + err.message;
             }
+        });
+    });
+    panel.querySelectorAll('button.remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const index = parseInt(btn.getAttribute('data-index'), 10);
+            history.splice(index, 1);
+            updateHistoryPanel(inputEl, output);
         });
     });
 }
@@ -67,8 +74,10 @@ document.getElementById('clear').addEventListener('click', () => {
 
 document.getElementById('toggle-history').addEventListener('click', () => {
     const panel = document.getElementById('history-panel');
-    if (!panel) {
+    const btn = document.getElementById('toggle-history');
+    if (!panel || !btn) {
         return;
     }
     panel.classList.toggle('visible');
+    btn.classList.toggle('visible');
 });
