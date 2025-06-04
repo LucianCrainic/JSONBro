@@ -1,0 +1,37 @@
+{
+  "name": "jsonbro",
+  "displayName": "JSONBro",
+  "description": "A simple VS Code extension for working with JSON.",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "engines": {
+    "vscode": "^1.81.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:extension.sayHello"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.sayHello",
+        "title": "JSONBro: Say Hello"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.7",
+    "@types/vscode": "^1.81.0",
+    "typescript": "^5.0.2",
+    "vsce": "^2.17.0"
+  }
+}
