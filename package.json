@@ -2,8 +2,9 @@
   "name": "jsonbro",
   "displayName": "JSONBro",
   "description": "A simple VS Code extension for working with JSON.",
-  "version": "0.0.1",
-  "publisher": "your-name",
+  "version": "0.1.1",
+  "publisher": "LucianDCrainic",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.81.0"
   },
