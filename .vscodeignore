@@ -1,0 +1,76 @@
+# Development files
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+.gitattributes
+tsconfig*.json
+webpack.config.js
+.eslintrc.json
+
+# Build files (keep only the bundled output)
+out/src/**
+out/**/*.d.ts
+out/**/*.d.ts.map
+
+# Dependencies (bundled by webpack)
+node_modules/**
+
+# Development dependencies and tools
+**/*.map
+.nyc_output
+coverage/**
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Package files
+*.vsix
+
+# Test files
+test/**
+**/*.test.ts
+**/*.test.js
+
+# Documentation source (keep README.md)
+docs/**
+
+# Temporary files
+*.tmp
+*.temp
+.cache/**
+
+# IDE files
+*.swp
+*.swo
+*~
+
+# Distribution folder if you have one
+dist/**

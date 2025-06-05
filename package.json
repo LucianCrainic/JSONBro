@@ -2,7 +2,7 @@
   "name": "jsonbro",
   "displayName": "JSONBro",
   "description": "A simple VS Code extension for working with JSON.",
-  "version": "0.1.1",
+  "version": "0.2.1",
   "publisher": "LucianDCrainic",
   "icon": "images/icon.png",
   "engines": {
@@ -26,11 +26,11 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run clean && npm run compile",
     "compile": "webpack --mode production",
     "compile:dev": "webpack --mode development",
     "watch": "webpack --mode development --watch",
-    "package": "vsce package",
+    "package": "npm run vscode:prepublish && vsce package",
     "clean": "rimraf out"
   },
   "devDependencies": {

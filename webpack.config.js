@@ -12,6 +12,9 @@ module.exports = [
       filename: 'extension.js',
       libraryTarget: 'commonjs2'
     },
+    optimization: {
+      minimize: true
+    },
     devtool: 'nosources-source-map',
     externals: {
       vscode: 'commonjs vscode'
@@ -42,6 +45,9 @@ module.exports = [
     output: {
       path: path.resolve(__dirname, 'out', 'webview'),
       filename: 'main.js'
+    },
+    optimization: {
+      minimize: true
     },
     devtool: 'nosources-source-map',
     resolve: {
