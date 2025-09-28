@@ -34,7 +34,7 @@ export class WebviewController {
         // The UI is already set correctly via the HTML template based on mode
         // Just need to update any JavaScript state if necessary
         if (mode === 'diff') {
-            this.setupDiffSplitters();
+            this.setupDiffMaximize();
         }
     }
 
@@ -600,7 +600,7 @@ export class WebviewController {
 
     private setupSplitter(): void {
         const splitter = document.getElementById('splitter');
-        const container = document.getElementById('container');
+        const container = document.getElementById('format-container');
         const inputPanel = document.getElementById('input-panel');
         const outputPanel = document.getElementById('output-panel');
 
@@ -641,10 +641,19 @@ export class WebviewController {
             
             newInputWidth = Math.max(minWidth, Math.min(newInputWidth, maxWidth));
             
-            // Calculate percentage for input panel
-            const inputWidthPercent = (newInputWidth / availableWidth) * 100;
+            // Calculate the remaining width for output panel
+            const newOutputWidth = availableWidth - newInputWidth;
             
-            inputPanel.style.width = `${inputWidthPercent}%`;
+            // Set both widths explicitly to override flex behavior
+            inputPanel.style.width = `${newInputWidth}px`;
+            inputPanel.style.flexBasis = `${newInputWidth}px`;
+            inputPanel.style.flexGrow = '0';
+            inputPanel.style.flexShrink = '0';
+            
+            outputPanel.style.width = `${newOutputWidth}px`;
+            outputPanel.style.flexBasis = `${newOutputWidth}px`;
+            outputPanel.style.flexGrow = '0';
+            outputPanel.style.flexShrink = '0';
             
             e.preventDefault();
         };
@@ -660,7 +669,21 @@ export class WebviewController {
 
         // Double-click to reset to 50/50
         const onDoubleClick = () => {
-            inputPanel.style.width = '50%';
+            const containerWidth = container.offsetWidth;
+            const splitterWidth = splitter.offsetWidth;
+            const padding = 32;
+            const availableWidth = containerWidth - splitterWidth - padding;
+            const halfWidth = availableWidth / 2;
+            
+            inputPanel.style.width = `${halfWidth}px`;
+            inputPanel.style.flexBasis = `${halfWidth}px`;
+            inputPanel.style.flexGrow = '0';
+            inputPanel.style.flexShrink = '0';
+            
+            outputPanel.style.width = `${halfWidth}px`;
+            outputPanel.style.flexBasis = `${halfWidth}px`;
+            outputPanel.style.flexGrow = '0';
+            outputPanel.style.flexShrink = '0';
         };
 
         // Splitter events
@@ -677,21 +700,61 @@ export class WebviewController {
         // Keyboard shortcuts for splitter adjustment (format mode only)
         document.addEventListener('keydown', (e) => {
             if (this.currentMode === 'format') {
+                const containerWidth = container.offsetWidth;
+                const splitterWidth = splitter.offsetWidth;
+                const padding = 32;
+                const availableWidth = containerWidth - splitterWidth - padding;
+                
                 // Ctrl/Cmd + 1: Focus input and set to wider view (70/30)
                 if ((e.ctrlKey || e.metaKey) && e.key === '1') {
-                    inputPanel.style.width = '70%';
+                    const inputWidth = availableWidth * 0.7;
+                    const outputWidth = availableWidth * 0.3;
+                    
+                    inputPanel.style.width = `${inputWidth}px`;
+                    inputPanel.style.flexBasis = `${inputWidth}px`;
+                    inputPanel.style.flexGrow = '0';
+                    inputPanel.style.flexShrink = '0';
+                    
+                    outputPanel.style.width = `${outputWidth}px`;
+                    outputPanel.style.flexBasis = `${outputWidth}px`;
+                    outputPanel.style.flexGrow = '0';
+                    outputPanel.style.flexShrink = '0';
+                    
                     const input = document.getElementById('input') as HTMLTextAreaElement;
                     if (input) input.focus();
                     e.preventDefault();
                 }
                 // Ctrl/Cmd + 2: Focus output and set to wider view (30/70)
                 else if ((e.ctrlKey || e.metaKey) && e.key === '2') {
-                    inputPanel.style.width = '30%';
+                    const inputWidth = availableWidth * 0.3;
+                    const outputWidth = availableWidth * 0.7;
+                    
+                    inputPanel.style.width = `${inputWidth}px`;
+                    inputPanel.style.flexBasis = `${inputWidth}px`;
+                    inputPanel.style.flexGrow = '0';
+                    inputPanel.style.flexShrink = '0';
+                    
+                    outputPanel.style.width = `${outputWidth}px`;
+                    outputPanel.style.flexBasis = `${outputWidth}px`;
+                    outputPanel.style.flexGrow = '0';
+                    outputPanel.style.flexShrink = '0';
+                    
                     e.preventDefault();
                 }
                 // Ctrl/Cmd + 0: Reset to equal view (50/50)
                 else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
-                    inputPanel.style.width = '50%';
+                    const halfWidth = availableWidth / 2;
+                    
+                    inputPanel.style.width = `${halfWidth}px`;
+                    inputPanel.style.flexBasis = `${halfWidth}px`;
+                    inputPanel.style.flexGrow = '0';
+                    inputPanel.style.flexShrink = '0';
+                    
+                    outputPanel.style.width = `${halfWidth}px`;
+                    outputPanel.style.flexBasis = `${halfWidth}px`;
+                    outputPanel.style.flexGrow = '0';
+                    outputPanel.style.flexShrink = '0';
+                    
                     e.preventDefault();
                 }
             }
@@ -760,9 +823,9 @@ export class WebviewController {
             }
         }
 
-        // Setup splitters for diff mode
+        // Setup maximize functionality for diff mode
         if (mode === 'diff') {
-            this.setupDiffSplitters();
+            this.setupDiffMaximize();
         }
     }
 
@@ -807,76 +870,108 @@ export class WebviewController {
         }
     }
 
-    private setupDiffSplitters(): void {
-        this.setupDiffSplitter('diff-splitter-left', 'left-json-panel', 'diff-result-panel');
-        this.setupDiffSplitter('diff-splitter-right', 'diff-result-panel', 'right-json-panel');
+    private setupDiffMaximize(): void {
+        // Setup maximize functionality for all three diff panels
+        this.setupMaximizeButton('maximize-left', 'left-json-panel');
+        this.setupMaximizeButton('maximize-diff', 'diff-result-panel');
+        this.setupMaximizeButton('maximize-right', 'right-json-panel');
     }
 
-    private setupDiffSplitter(splitterId: string, leftPanelId: string, rightPanelId: string): void {
-        const splitter = document.getElementById(splitterId);
-        const leftPanel = document.getElementById(leftPanelId);
-        const rightPanel = document.getElementById(rightPanelId);
-        const container = document.getElementById('diff-container');
+    private currentMaximizedPanel: string | null = null;
 
-        if (!splitter || !leftPanel || !rightPanel || !container) {
+    private setupMaximizeButton(buttonId: string, panelId: string): void {
+        const button = document.getElementById(buttonId);
+        const panel = document.getElementById(panelId);
+
+        if (!button || !panel) {
             return;
         }
 
-        let isDragging = false;
-        let startX = 0;
-        let startLeftWidth = 0;
-
-        const onMouseDown = (e: MouseEvent) => {
-            isDragging = true;
-            startX = e.clientX;
-            startLeftWidth = leftPanel.offsetWidth;
-            
-            splitter.classList.add('dragging');
-            document.body.classList.add('dragging');
-            document.body.style.userSelect = 'none';
-            
-            e.preventDefault();
-        };
-
-        const onMouseMove = (e: MouseEvent) => {
-            if (!isDragging) return;
-
-            const deltaX = e.clientX - startX;
-            const containerWidth = container.offsetWidth;
-            const allSplitters = container.querySelectorAll('.diff-splitter');
-            const splitterWidth = Array.from(allSplitters).reduce((sum, s) => sum + s.clientWidth, 0);
-            const padding = 32;
-            const availableWidth = containerWidth - splitterWidth - padding;
-            
-            let newLeftWidth = startLeftWidth + deltaX;
-            
-            // Apply constraints
-            const minWidth = 200;
-            const maxWidth = availableWidth - minWidth * 2;
-            
-            newLeftWidth = Math.max(minWidth, Math.min(newLeftWidth, maxWidth));
-            
-            const leftWidthPercent = (newLeftWidth / availableWidth) * 100;
-            
-            leftPanel.style.width = `${leftWidthPercent}%`;
-            
-            e.preventDefault();
-        };
-
-        const onMouseUp = () => {
-            if (!isDragging) return;
-            
-            isDragging = false;
-            splitter.classList.remove('dragging');
-            document.body.classList.remove('dragging');
-            document.body.style.userSelect = '';
-        };
-
-        splitter.addEventListener('mousedown', onMouseDown);
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        splitter.addEventListener('selectstart', (e) => e.preventDefault());
+        button.addEventListener('click', () => {
+            this.toggleMaximizePanel(panelId);
+        });
     }
+
+    private toggleMaximizePanel(panelId: string): void {
+        const leftPanel = document.getElementById('left-json-panel');
+        const diffPanel = document.getElementById('diff-result-panel');
+        const rightPanel = document.getElementById('right-json-panel');
+
+        if (!leftPanel || !diffPanel || !rightPanel) {
+            return;
+        }
+
+        const allPanels = [leftPanel, diffPanel, rightPanel];
+        const targetPanel = document.getElementById(panelId);
+
+        if (this.currentMaximizedPanel === panelId) {
+            // Already maximized, restore to equal sizes
+            allPanels.forEach(panel => {
+                panel.classList.remove('panel-maximized', 'panel-minimized');
+            });
+            this.currentMaximizedPanel = null;
+            this.updateMaximizeIcons();
+        } else {
+            // Maximize the target panel and minimize others
+            allPanels.forEach(panel => {
+                panel.classList.remove('panel-maximized', 'panel-minimized');
+                if (panel === targetPanel) {
+                    panel.classList.add('panel-maximized');
+                } else {
+                    panel.classList.add('panel-minimized');
+                }
+            });
+            this.currentMaximizedPanel = panelId;
+            this.updateMaximizeIcons();
+        }
+    }
+
+    private updateMaximizeIcons(): void {
+        const buttons = [
+            { id: 'maximize-left', panelId: 'left-json-panel' },
+            { id: 'maximize-diff', panelId: 'diff-result-panel' },
+            { id: 'maximize-right', panelId: 'right-json-panel' }
+        ];
+
+        buttons.forEach(({ id, panelId }) => {
+            const button = document.getElementById(id);
+            const svg = button?.querySelector('svg path');
+            
+            if (!svg) return;
+
+            if (this.currentMaximizedPanel === panelId) {
+                // Show minimize icon
+                svg.setAttribute('d', 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z');
+                button?.setAttribute('title', 'Restore panel');
+            } else {
+                // Show maximize icon
+                svg.setAttribute('d', 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z');
+                button?.setAttribute('title', 'Maximize panel');
+            }
+        });
+    }
+
+    private resetPanelSizes(): void {
+        const leftPanel = document.getElementById('left-json-panel');
+        const diffPanel = document.getElementById('diff-result-panel');
+        const rightPanel = document.getElementById('right-json-panel');
+
+        if (!leftPanel || !diffPanel || !rightPanel) {
+            return;
+        }
+
+        const allPanels = [leftPanel, diffPanel, rightPanel];
+        
+        // Remove all maximize/minimize classes
+        allPanels.forEach(panel => {
+            panel.classList.remove('panel-maximized', 'panel-minimized');
+        });
+        
+        this.currentMaximizedPanel = null;
+        this.updateMaximizeIcons();
+    }
+
+
 
     private setupGlobalKeyboardShortcuts(): void {
         document.addEventListener('keydown', (e) => {
@@ -897,6 +992,11 @@ export class WebviewController {
             // Ctrl/Cmd + K: Clear inputs
             else if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 this.clearInput();
+                e.preventDefault();
+            }
+            // Ctrl/Cmd + 0: Reset panel sizes (diff mode only)
+            else if ((e.ctrlKey || e.metaKey) && e.key === '0' && this.currentMode === 'diff') {
+                this.resetPanelSizes();
                 e.preventDefault();
             }
         });
