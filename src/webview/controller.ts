@@ -27,6 +27,18 @@ export class WebviewController {
     }
 
     /**
+     * Sets the initial mode based on the command that opened the webview
+     */
+    public setInitialMode(mode: 'format' | 'diff'): void {
+        this.currentMode = mode;
+        // The UI is already set correctly via the HTML template based on mode
+        // Just need to update any JavaScript state if necessary
+        if (mode === 'diff') {
+            this.setupDiffSplitters();
+        }
+    }
+
+    /**
      * Attempts to parse JSON with support for single quotes and other common variations
      */
     private parseFlexibleJson(input: string): any {

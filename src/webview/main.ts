@@ -4,6 +4,12 @@ import { WebviewController } from './controller';
 document.addEventListener('DOMContentLoaded', () => {
     const controller = new WebviewController();
     controller.initialize();
+    
+    // Set initial mode based on data attribute
+    const initialMode = document.body.getAttribute('data-initial-mode') as 'format' | 'diff' | null;
+    if (initialMode) {
+        controller.setInitialMode(initialMode);
+    }
 });
 
 // Close history panel when clicking outside
