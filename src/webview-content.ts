@@ -82,7 +82,7 @@ export class WebviewContentGenerator {
 
             #diff-container {
                 /* Three-pane layout for diff mode */
-                gap: 8px;
+                gap: 4px;
             }
 
             #input-panel {
@@ -159,19 +159,21 @@ export class WebviewContentGenerator {
             }
 
             /* Diff Mode Styles */
-            #left-json-panel, #right-json-panel {
-                min-width: 200px;
-                max-width: 40%;
-                width: 30%;
-                display: flex;
-                flex-direction: column;
-            }
-
-            #diff-result-panel {
+            #left-json-panel, #right-json-panel, #diff-result-panel {
                 flex: 1;
                 min-width: 200px;
                 display: flex;
                 flex-direction: column;
+                transition: flex 0.3s ease;
+            }
+
+            /* Maximized panel states */
+            .panel-maximized {
+                flex: 10 !important;
+            }
+
+            .panel-minimized {
+                flex: 0.5 !important;
             }
 
             .panel-header {
@@ -180,6 +182,9 @@ export class WebviewContentGenerator {
                 border-bottom: none;
                 border-radius: 8px 8px 0 0;
                 padding: 8px 12px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
             }
 
             .panel-header h3 {
@@ -187,6 +192,29 @@ export class WebviewContentGenerator {
                 font-size: 12px;
                 font-weight: 600;
                 color: var(--vscode-editor-foreground);
+            }
+
+            .maximize-btn {
+                background: none;
+                border: none;
+                color: var(--vscode-icon-foreground);
+                cursor: pointer;
+                padding: 4px;
+                border-radius: 3px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0.7;
+                transition: all 0.2s ease;
+            }
+
+            .maximize-btn:hover {
+                background-color: var(--vscode-toolbar-hoverBackground);
+                opacity: 1;
+            }
+
+            .maximize-btn:active {
+                background-color: var(--vscode-toolbar-activeBackground);
             }
 
             #left-json, #right-json {
@@ -204,7 +232,7 @@ export class WebviewContentGenerator {
 
             #diff-output {
                 flex: 1;
-                padding: 0;
+                padding: 12px;
                 border: 1px solid var(--vscode-editorGroup-border);
                 border-radius: 0 0 8px 8px;
                 background-color: var(--vscode-editor-background);
@@ -219,30 +247,7 @@ export class WebviewContentGenerator {
                 margin-top: 0;
             }
 
-            .diff-splitter {
-                width: 6px;
-                background-color: transparent;
-                cursor: col-resize;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                position: relative;
-            }
 
-            .diff-splitter::before {
-                content: '';
-                width: 1px;
-                height: 40px;
-                background-color: var(--vscode-editorGroup-border);
-                border-radius: 1px;
-                opacity: 0.5;
-                transition: opacity 0.2s ease;
-            }
-
-            .diff-splitter:hover::before, .diff-splitter.dragging::before {
-                opacity: 1;
-                background-color: var(--vscode-focusBorder);
-            }
 
             /* Diff Result Styles */
             .diff-result {
@@ -275,18 +280,18 @@ export class WebviewContentGenerator {
             }
 
             .diff-item {
-                margin-bottom: 1px;
-                padding: 2px 8px;
+                margin-bottom: 0;
+                padding: 1px 6px;
                 border-radius: 2px;
                 border-left: 2px solid;
                 display: flex;
                 align-items: center;
                 flex-wrap: wrap;
-                gap: 3px;
+                gap: 2px;
             }
 
             .diff-item:first-child {
-                padding-top: 4px;
+                padding-top: 1px;
             }
 
             .diff-item.diff-modified {
@@ -329,7 +334,7 @@ export class WebviewContentGenerator {
 
             .diff-path {
                 font-weight: 600;
-                margin-bottom: 2px;
+                margin-bottom: 0;
                 font-size: 10px;
                 opacity: 0.9;
                 color: var(--vscode-descriptionForeground);
@@ -361,7 +366,7 @@ export class WebviewContentGenerator {
             }
 
             .diff-inline-change {
-                margin-top: 1px;
+                margin-top: 0;
                 display: flex;
                 align-items: center;
                 gap: 4px;
@@ -745,20 +750,33 @@ export class WebviewContentGenerator {
                 <div id="left-json-panel">
                     <div class="panel-header">
                         <h3>Original JSON</h3>
+                        <button id="maximize-left" class="maximize-btn" title="Maximize panel">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                            </svg>
+                        </button>
                     </div>
                     <textarea id="left-json" placeholder="Enter original JSON here..."></textarea>
                 </div>
-                <div id="diff-splitter-left" class="diff-splitter" title="Drag to resize"></div>
                 <div id="diff-result-panel">
                     <div class="panel-header">
                         <h3>Differences</h3>
+                        <button id="maximize-diff" class="maximize-btn" title="Maximize panel">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                            </svg>
+                        </button>
                     </div>
                     <div id="diff-output"></div>
                 </div>
-                <div id="diff-splitter-right" class="diff-splitter" title="Drag to resize"></div>
                 <div id="right-json-panel">
                     <div class="panel-header">
                         <h3>Modified JSON</h3>
+                        <button id="maximize-right" class="maximize-btn" title="Maximize panel">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                            </svg>
+                        </button>
                     </div>
                     <textarea id="right-json" placeholder="Enter modified JSON here..."></textarea>
                 </div>
