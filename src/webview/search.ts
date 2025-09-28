@@ -130,46 +130,143 @@ export class JSONSearch {
      * Finds all text matches in the element tree
      */
     private findMatches(element: HTMLElement): void {
+        // Get the complete text content of the element
+        const fullText = element.textContent || '';
+        const lowerFullText = fullText.toLowerCase();
+        
+        // Find all match positions in the full text
+        const matchPositions: Array<{start: number, end: number}> = [];
+        let startIndex = 0;
+        let matchIndex: number;
+
+        while ((matchIndex = lowerFullText.indexOf(this.searchTerm, startIndex)) !== -1) {
+            matchPositions.push({
+                start: matchIndex,
+                end: matchIndex + this.searchTerm.length
+            });
+            startIndex = matchIndex + 1;
+        }
+
+        // If no matches found, return early
+        if (matchPositions.length === 0) {
+            return;
+        }
+
+        // Create a mapping from text positions to DOM nodes
+        const nodeMap = this.createTextToNodeMap(element);
+
+        // Process each match position and highlight it
+        matchPositions.reverse().forEach(pos => {
+            this.highlightMatchAtPosition(element, pos.start, pos.end, nodeMap, fullText);
+        });
+    }
+
+    /**
+     * Creates a mapping from text positions to their corresponding DOM text nodes
+     */
+    private createTextToNodeMap(element: HTMLElement): Array<{node: Text, nodeStartPos: number, nodeEndPos: number}> {
+        const nodeMap: Array<{node: Text, nodeStartPos: number, nodeEndPos: number}> = [];
         const walker = document.createTreeWalker(
             element,
             NodeFilter.SHOW_TEXT,
             null
         );
 
-        interface MatchInfo {
-            textNode: Text;
-            startIndex: number;
-            endIndex: number;
-        }
-
-        const matchInfos: MatchInfo[] = [];
+        let currentPos = 0;
         let node: Node | null;
-        
-        // First pass: collect all matches without modifying the DOM
+
         while (node = walker.nextNode()) {
             if (node.nodeType === Node.TEXT_NODE && node.textContent) {
                 const textNode = node as Text;
-                const text = textNode.textContent;
-                if (!text) continue;
+                const textLength = node.textContent.length;
                 
-                const lowerText = text.toLowerCase();
-                let startIndex = 0;
-                let matchIndex: number;
-
-                while ((matchIndex = lowerText.indexOf(this.searchTerm, startIndex)) !== -1) {
-                    matchInfos.push({
-                        textNode,
-                        startIndex: matchIndex,
-                        endIndex: matchIndex + this.searchTerm.length
-                    });
-                    startIndex = matchIndex + 1; // Continue searching from next character
-                }
+                nodeMap.push({
+                    node: textNode,
+                    nodeStartPos: currentPos,
+                    nodeEndPos: currentPos + textLength
+                });
+                
+                currentPos += textLength;
             }
         }
 
-        // Second pass: apply highlights in reverse order to avoid index shifting
-        matchInfos.reverse().forEach(matchInfo => {
-            this.highlightMatch(matchInfo);
+        return nodeMap;
+    }
+
+    /**
+     * Highlights a match at a specific position in the full text
+     */
+    private highlightMatchAtPosition(
+        element: HTMLElement, 
+        startPos: number, 
+        endPos: number, 
+        nodeMap: Array<{node: Text, nodeStartPos: number, nodeEndPos: number}>,
+        fullText: string
+    ): void {
+        // Find which text nodes contain the start and end of the match
+        const startNodeInfo = nodeMap.find(info => startPos >= info.nodeStartPos && startPos < info.nodeEndPos);
+        const endNodeInfo = nodeMap.find(info => endPos > info.nodeStartPos && endPos <= info.nodeEndPos);
+
+        if (!startNodeInfo || !endNodeInfo) {
+            return;
+        }
+
+        // If the match is within a single text node, use the simple highlighting
+        if (startNodeInfo === endNodeInfo) {
+            const nodeStartOffset = startPos - startNodeInfo.nodeStartPos;
+            const nodeEndOffset = endPos - startNodeInfo.nodeStartPos;
+            
+            this.highlightMatch({
+                textNode: startNodeInfo.node,
+                startIndex: nodeStartOffset,
+                endIndex: nodeEndOffset
+            });
+        } else {
+            // Handle matches that span multiple text nodes
+            this.highlightSpanningMatch(startNodeInfo, endNodeInfo, startPos, endPos, nodeMap, fullText);
+        }
+    }
+
+    /**
+     * Highlights matches that span across multiple text nodes
+     */
+    private highlightSpanningMatch(
+        startNodeInfo: {node: Text, nodeStartPos: number, nodeEndPos: number},
+        endNodeInfo: {node: Text, nodeStartPos: number, nodeEndPos: number},
+        startPos: number,
+        endPos: number,
+        nodeMap: Array<{node: Text, nodeStartPos: number, nodeEndPos: number}>,
+        fullText: string
+    ): void {
+        // Get all nodes involved in the match
+        const involvedNodes = nodeMap.filter(info => 
+            (info.nodeStartPos < endPos && info.nodeEndPos > startPos)
+        );
+
+        // Process each involved node
+        involvedNodes.forEach((nodeInfo, index) => {
+            const isFirstNode = nodeInfo === startNodeInfo;
+            const isLastNode = nodeInfo === endNodeInfo;
+            
+            let nodeStartOffset = 0;
+            let nodeEndOffset = nodeInfo.node.textContent ? nodeInfo.node.textContent.length : 0;
+            
+            if (isFirstNode) {
+                nodeStartOffset = startPos - nodeInfo.nodeStartPos;
+            }
+            
+            if (isLastNode) {
+                nodeEndOffset = endPos - nodeInfo.nodeStartPos;
+            }
+            
+            // Only highlight if there's content to highlight in this node
+            if (nodeStartOffset < nodeEndOffset && nodeEndOffset > 0) {
+                this.highlightMatch({
+                    textNode: nodeInfo.node,
+                    startIndex: nodeStartOffset,
+                    endIndex: nodeEndOffset
+                });
+            }
         });
     }
 
