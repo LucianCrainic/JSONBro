@@ -23,20 +23,19 @@ export class CommandHandler {
             () => this.formatJson()
         );
 
-        const validateJsonCommand = vscode.commands.registerCommand(
-            'jsonbro.validateJson',
-            () => this.validateJson()
+        const diffJsonCommand = vscode.commands.registerCommand(
+            'jsonbro.diffJson',
+            () => this.diffJson()
         );
 
-        context.subscriptions.push(formatJsonCommand, validateJsonCommand);
+        context.subscriptions.push(formatJsonCommand, diffJsonCommand);
     }
 
     private formatJson(): void {
         this.webviewProvider.showFormatPanel();
     }
 
-    private validateJson(): void {
-        // Future implementation for JSON validation
-        vscode.window.showInformationMessage('JSON validation feature coming soon!');
+    private diffJson(): void {
+        this.webviewProvider.showDiffPanel();
     }
 }
