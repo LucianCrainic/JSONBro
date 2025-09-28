@@ -13,11 +13,13 @@ export class WebviewContentGenerator {
     /**
      * Generates the complete HTML content for the webview
      */
-    public getWebviewContent(webview: vscode.Webview): string {
+    public getWebviewContent(webview: vscode.Webview, mode: 'format' | 'diff' = 'format'): string {
         const nonce = this.getNonce();
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'main.js')
         );
+
+        const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -25,11 +27,11 @@ export class WebviewContentGenerator {
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSONBro - Format JSON</title>
+    <title>${title}</title>
     ${this.getStyles()}
 </head>
-<body>
-    ${this.getBodyContent()}
+<body data-initial-mode="${mode}">
+    ${this.getBodyContent(mode)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -645,19 +647,19 @@ export class WebviewContentGenerator {
         </style>`;
     }
 
-    private getBodyContent(): string {
+    private getBodyContent(mode: 'format' | 'diff' = 'format'): string {
         return `
             <div id="toolbar">
                 <div id="toolbar-left">
                     <div id="mode-switcher">
-                        <button id="format-mode" class="mode-btn active" title="Format JSON">
+                        <button id="format-mode" class="mode-btn ${mode === 'format' ? 'active' : ''}" title="Format JSON">
                             <svg class="icon" viewBox="0 0 24 24">
                                 <polyline points="16,18 22,12 16,6"></polyline>
                                 <polyline points="8,6 2,12 8,18"></polyline>
                             </svg>
                             Format
                         </button>
-                        <button id="diff-mode" class="mode-btn" title="Compare JSON">
+                        <button id="diff-mode" class="mode-btn ${mode === 'diff' ? 'active' : ''}" title="Compare JSON">
                             <svg class="icon" viewBox="0 0 24 24">
                                 <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
                                 <path d="M9 12h6"></path>
@@ -666,12 +668,14 @@ export class WebviewContentGenerator {
                             Diff
                         </button>
                     </div>
-                    <button id="action-btn" title="Format JSON">
+                    <button id="action-btn" title="${mode === 'format' ? 'Format JSON' : 'Compare JSON'}">
                         <svg class="icon" viewBox="0 0 24 24">
-                            <polyline points="16,18 22,12 16,6"></polyline>
-                            <polyline points="8,6 2,12 8,18"></polyline>
+                            ${mode === 'format' 
+                                ? '<polyline points="16,18 22,12 16,6"></polyline><polyline points="8,6 2,12 8,18"></polyline>'
+                                : '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M9 12h6"></path><path d="M12 9v6"></path>'
+                            }
                         </svg>
-                        <span id="action-text">Format</span>
+                        <span id="action-text">${mode === 'format' ? 'Format' : 'Compare'}</span>
                     </button>
                 </div>
                 <div id="toolbar-center">
@@ -695,14 +699,14 @@ export class WebviewContentGenerator {
                             </svg>
                         </button>
                     </div>
-                    <button id="search-toggle" title="Search in formatted JSON">
+                    <button id="search-toggle" title="Search in formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                         <svg class="icon" viewBox="0 0 24 24">
                             <circle cx="11" cy="11" r="8"></circle>
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
                         Search
                     </button>
-                    <button id="copy" title="Copy formatted JSON">
+                    <button id="copy" title="Copy formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                         <svg class="icon" viewBox="0 0 24 24">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="m5,15H4a2,2 0 0,1 -2,-2V4a2,2 0 0,1 2,-2H13a2,2 0 0,1 2,2v1"></path>
@@ -726,7 +730,7 @@ export class WebviewContentGenerator {
                 </div>
             </div>
             <!-- Format Mode Container -->
-            <div id="format-container" class="mode-container">
+            <div id="format-container" class="mode-container" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                 <div id="input-panel">
                     <textarea id="input" placeholder="Enter your JSON here..."></textarea>
                 </div>
@@ -737,7 +741,7 @@ export class WebviewContentGenerator {
             </div>
 
             <!-- Diff Mode Container -->
-            <div id="diff-container" class="mode-container" style="display: none;">
+            <div id="diff-container" class="mode-container" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
                 <div id="left-json-panel">
                     <div class="panel-header">
                         <h3>Original JSON</h3>

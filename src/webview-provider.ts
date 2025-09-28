@@ -17,9 +17,26 @@ export class WebviewProvider {
      * Shows the JSON format panel
      */
     public showFormatPanel(): void {
+        this.showPanel('format');
+    }
+
+    /**
+     * Shows the JSON diff panel
+     */
+    public showDiffPanel(): void {
+        this.showPanel('diff');
+    }
+
+    /**
+     * Shows the webview panel with the specified mode
+     */
+    private showPanel(mode: 'format' | 'diff'): void {
+        const panelId = mode === 'format' ? 'jsonbro.formatJson' : 'jsonbro.diffJson';
+        const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
+
         const panel = vscode.window.createWebviewPanel(
-            'jsonbro.formatJson',
-            'JSONBro - Format JSON',
+            panelId,
+            title,
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -31,7 +48,7 @@ export class WebviewProvider {
             }
         );
 
-        panel.webview.html = this.contentGenerator.getWebviewContent(panel.webview);
+        panel.webview.html = this.contentGenerator.getWebviewContent(panel.webview, mode);
 
         // Handle messages from the webview (if needed in the future)
         panel.webview.onDidReceiveMessage(
