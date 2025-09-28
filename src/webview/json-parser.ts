@@ -43,7 +43,7 @@ export class JSONParser {
 
         for (let i = 0; i < input.length; i++) {
             const char = input[i];
-            const prevChar = i > 0 ? input[i - 1] : '';
+            const nextChar = i + 1 < input.length ? input[i + 1] : '';
 
             if (escaped) {
                 result += char;
@@ -52,6 +52,12 @@ export class JSONParser {
             }
 
             if (char === '\\') {
+                if (inSingleQuotes && nextChar === "'") {
+                    // Unescape single quotes inside single-quoted strings
+                    result += "'";
+                    i++; // Skip the next quote character
+                    continue;
+                }
                 escaped = true;
                 result += char;
                 continue;
