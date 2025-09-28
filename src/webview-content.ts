@@ -66,13 +66,36 @@ export class WebviewContentGenerator {
                 gap: 8px;
             }
 
-            #container {
+            .mode-container {
                 display: flex;
                 flex: 1;
                 overflow: hidden;
                 position: relative;
                 padding: 16px;
-                gap: 16px;
+            }
+
+            #format-container {
+                /* Default format mode styles */
+            }
+
+            #diff-container {
+                /* Three-pane layout for diff mode */
+                gap: 8px;
+            }
+
+            #input-panel {
+                min-width: 200px;
+                max-width: calc(100% - 220px);
+                width: 50%;
+                display: flex;
+                flex-direction: column;
+            }
+
+            #output-panel {
+                flex: 1;
+                min-width: 200px;
+                display: flex;
+                flex-direction: column;
             }
 
             #input, #output {
@@ -88,14 +111,269 @@ export class WebviewContentGenerator {
                 outline: none;
             }
 
-            #input {
-                /* Remove border-right override since we're using gap now */
-            }
-
             #output {
-                /* Remove border-left override since we're using gap now */
                 overflow-y: auto;
                 white-space: pre-wrap;
+            }
+
+            #splitter {
+                width: 8px;
+                background-color: transparent;
+                cursor: col-resize;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+                margin: 0 4px;
+            }
+
+            #splitter::before {
+                content: '';
+                width: 2px;
+                height: 40px;
+                background-color: var(--vscode-editorGroup-border);
+                border-radius: 1px;
+                opacity: 0.5;
+                transition: opacity 0.2s ease;
+            }
+
+            #splitter:hover::before {
+                opacity: 1;
+                background-color: var(--vscode-focusBorder);
+            }
+
+            #splitter.dragging::before {
+                opacity: 1;
+                background-color: var(--vscode-focusBorder);
+            }
+
+            /* Add visual feedback during drag */
+            body.dragging {
+                cursor: col-resize !important;
+            }
+
+            body.dragging * {
+                cursor: col-resize !important;
+            }
+
+            /* Diff Mode Styles */
+            #left-json-panel, #right-json-panel {
+                min-width: 200px;
+                max-width: 40%;
+                width: 30%;
+                display: flex;
+                flex-direction: column;
+            }
+
+            #diff-result-panel {
+                flex: 1;
+                min-width: 200px;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .panel-header {
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                border: 1px solid var(--vscode-editorGroup-border);
+                border-bottom: none;
+                border-radius: 8px 8px 0 0;
+                padding: 8px 12px;
+            }
+
+            .panel-header h3 {
+                margin: 0;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--vscode-editor-foreground);
+            }
+
+            #left-json, #right-json {
+                flex: 1;
+                padding: 16px;
+                border: 1px solid var(--vscode-editorGroup-border);
+                border-radius: 0 0 8px 8px;
+                background-color: var(--vscode-editor-background);
+                color: var(--vscode-editor-foreground);
+                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 13px;
+                resize: none;
+                outline: none;
+            }
+
+            #diff-output {
+                flex: 1;
+                padding: 0;
+                border: 1px solid var(--vscode-editorGroup-border);
+                border-radius: 0 0 8px 8px;
+                background-color: var(--vscode-editor-background);
+                color: var(--vscode-editor-foreground);
+                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 13px;
+                overflow-y: auto;
+                white-space: pre-wrap;
+            }
+
+            #diff-output > * {
+                margin-top: 0;
+            }
+
+            .diff-splitter {
+                width: 6px;
+                background-color: transparent;
+                cursor: col-resize;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+            }
+
+            .diff-splitter::before {
+                content: '';
+                width: 1px;
+                height: 40px;
+                background-color: var(--vscode-editorGroup-border);
+                border-radius: 1px;
+                opacity: 0.5;
+                transition: opacity 0.2s ease;
+            }
+
+            .diff-splitter:hover::before, .diff-splitter.dragging::before {
+                opacity: 1;
+                background-color: var(--vscode-focusBorder);
+            }
+
+            /* Diff Result Styles */
+            .diff-result {
+                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 11px;
+                line-height: 1.3;
+                margin: 0;
+                padding: 0;
+            }
+
+            .diff-result.no-changes {
+                text-align: center;
+                padding: 16px;
+                margin: 0;
+                color: var(--vscode-testing-iconPassed);
+                font-size: 12px;
+            }
+
+            .diff-items {
+                margin: 0;
+                padding: 0;
+            }
+
+            .diff-items > * {
+                margin-top: 0;
+            }
+
+            .diff-items > *:first-child {
+                margin-top: 0 !important;
+            }
+
+            .diff-item {
+                margin-bottom: 1px;
+                padding: 2px 8px;
+                border-radius: 2px;
+                border-left: 2px solid;
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 3px;
+            }
+
+            .diff-item:first-child {
+                padding-top: 4px;
+            }
+
+            .diff-item.diff-modified {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .diff-item:first-child {
+                margin-top: 0;
+            }
+
+            .expandable-value {
+                cursor: pointer;
+                text-decoration: underline;
+                text-decoration-style: dotted;
+                opacity: 0.8;
+            }
+
+            .expandable-value:hover {
+                opacity: 1;
+                background-color: var(--vscode-toolbar-hoverBackground);
+                padding: 1px 2px;
+                border-radius: 2px;
+            }
+
+            .diff-item.diff-added {
+                background-color: var(--vscode-diffEditor-insertedTextBackground);
+                border-left-color: var(--vscode-gitDecoration-addedResourceForeground);
+            }
+
+            .diff-item.diff-removed {
+                background-color: var(--vscode-diffEditor-removedTextBackground);
+                border-left-color: var(--vscode-gitDecoration-deletedResourceForeground);
+            }
+
+            .diff-item.diff-modified {
+                background-color: var(--vscode-diffEditor-border);
+                border-left-color: var(--vscode-gitDecoration-modifiedResourceForeground);
+            }
+
+            .diff-path {
+                font-weight: 600;
+                margin-bottom: 2px;
+                font-size: 10px;
+                opacity: 0.9;
+                color: var(--vscode-descriptionForeground);
+            }
+
+            .diff-value {
+                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 10px;
+                padding: 1px 3px;
+                border-radius: 2px;
+                margin: 1px 0;
+                word-break: break-all;
+            }
+
+            .diff-value.old-value {
+                background-color: var(--vscode-diffEditor-removedTextBackground);
+                color: var(--vscode-gitDecoration-deletedResourceForeground);
+            }
+
+            .diff-value.new-value {
+                background-color: var(--vscode-diffEditor-insertedTextBackground);
+                color: var(--vscode-gitDecoration-addedResourceForeground);
+            }
+
+            .diff-values {
+                display: flex;
+                flex-direction: column;
+                gap: 1px;
+            }
+
+            .diff-inline-change {
+                margin-top: 1px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 10px;
+            }
+
+            .diff-inline-change .diff-value {
+                margin: 0;
+            }
+
+            .diff-error {
+                color: var(--vscode-errorForeground);
+                padding: 16px;
+                text-align: center;
             }
 
             button {
@@ -115,6 +393,46 @@ export class WebviewContentGenerator {
 
             button:hover {
                 background-color: var(--vscode-button-hoverBackground);
+            }
+
+            /* Mode Switcher */
+            #mode-switcher {
+                display: flex;
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                border: 1px solid var(--vscode-editorGroup-border);
+                border-radius: 3px;
+                overflow: hidden;
+                margin-right: 8px;
+            }
+
+            .mode-btn {
+                background-color: transparent;
+                color: var(--vscode-tab-inactiveForeground);
+                border: none;
+                border-right: 1px solid var(--vscode-editorGroup-border);
+                padding: 8px 12px;
+                cursor: pointer;
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                height: 32px;
+                box-sizing: border-box;
+                transition: all 0.2s ease;
+            }
+
+            .mode-btn:last-child {
+                border-right: none;
+            }
+
+            .mode-btn:hover {
+                background-color: var(--vscode-tab-hoverBackground);
+                color: var(--vscode-tab-activeForeground);
+            }
+
+            .mode-btn.active {
+                background-color: var(--vscode-tab-activeBackground);
+                color: var(--vscode-tab-activeForeground);
             }
 
             /* Inline Search Container */
@@ -279,6 +597,40 @@ export class WebviewContentGenerator {
                 min-width: auto;
             }
 
+            /* Diff History Styles */
+            .diff-history-item .diff-preview {
+                flex: 1;
+                font-size: 11px;
+            }
+
+            .diff-preview-header {
+                font-size: 10px;
+                color: var(--vscode-descriptionForeground);
+                margin-bottom: 4px;
+            }
+
+            .diff-preview-content {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .left-preview, .right-preview {
+                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+                font-size: 10px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .left-preview {
+                color: var(--vscode-gitDecoration-modifiedResourceForeground);
+            }
+
+            .right-preview {
+                color: var(--vscode-gitDecoration-addedResourceForeground);
+            }
+
             /* Search Highlighting */
             .search-highlight {
                 background-color: var(--vscode-editor-findMatchBackground);
@@ -297,12 +649,29 @@ export class WebviewContentGenerator {
         return `
             <div id="toolbar">
                 <div id="toolbar-left">
-                    <button id="format" title="Format JSON">
+                    <div id="mode-switcher">
+                        <button id="format-mode" class="mode-btn active" title="Format JSON">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <polyline points="16,18 22,12 16,6"></polyline>
+                                <polyline points="8,6 2,12 8,18"></polyline>
+                            </svg>
+                            Format
+                        </button>
+                        <button id="diff-mode" class="mode-btn" title="Compare JSON">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                                <path d="M9 12h6"></path>
+                                <path d="M12 9v6"></path>
+                            </svg>
+                            Diff
+                        </button>
+                    </div>
+                    <button id="action-btn" title="Format JSON">
                         <svg class="icon" viewBox="0 0 24 24">
                             <polyline points="16,18 22,12 16,6"></polyline>
                             <polyline points="8,6 2,12 8,18"></polyline>
                         </svg>
-                        Format
+                        <span id="action-text">Format</span>
                     </button>
                 </div>
                 <div id="toolbar-center">
@@ -356,9 +725,39 @@ export class WebviewContentGenerator {
                     </button>
                 </div>
             </div>
-            <div id="container">
-                <textarea id="input" placeholder="Enter your JSON here..."></textarea>
-                <div id="output"></div>
+            <!-- Format Mode Container -->
+            <div id="format-container" class="mode-container">
+                <div id="input-panel">
+                    <textarea id="input" placeholder="Enter your JSON here..."></textarea>
+                </div>
+                <div id="splitter" title="Drag to resize panes or double-click to reset to 50/50"></div>
+                <div id="output-panel">
+                    <div id="output"></div>
+                </div>
+            </div>
+
+            <!-- Diff Mode Container -->
+            <div id="diff-container" class="mode-container" style="display: none;">
+                <div id="left-json-panel">
+                    <div class="panel-header">
+                        <h3>Original JSON</h3>
+                    </div>
+                    <textarea id="left-json" placeholder="Enter original JSON here..."></textarea>
+                </div>
+                <div id="diff-splitter-left" class="diff-splitter" title="Drag to resize"></div>
+                <div id="diff-result-panel">
+                    <div class="panel-header">
+                        <h3>Differences</h3>
+                    </div>
+                    <div id="diff-output"></div>
+                </div>
+                <div id="diff-splitter-right" class="diff-splitter" title="Drag to resize"></div>
+                <div id="right-json-panel">
+                    <div class="panel-header">
+                        <h3>Modified JSON</h3>
+                    </div>
+                    <textarea id="right-json" placeholder="Enter modified JSON here..."></textarea>
+                </div>
             </div>
             <div id="history-backdrop">
                 <div id="history-panel">
