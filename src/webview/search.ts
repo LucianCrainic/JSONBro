@@ -31,17 +31,17 @@ export class JSONSearch {
     public nextMatch(): void {
         if (this.matches.length === 0) return;
 
-        // Remove current highlight
+        // Remove current highlight from all parts of the current match
         if (this.currentMatchIndex >= 0) {
-            this.matches[this.currentMatchIndex].classList.remove('current');
+            this.highlightMatchGroup(this.currentMatchIndex, false);
         }
 
         // Move to next match
         this.currentMatchIndex = (this.currentMatchIndex + 1) % this.matches.length;
         
-        // Highlight current match and scroll to it
+        // Highlight current match group and scroll to it
+        this.highlightMatchGroup(this.currentMatchIndex, true);
         const currentMatch = this.matches[this.currentMatchIndex];
-        currentMatch.classList.add('current');
         currentMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
@@ -51,9 +51,9 @@ export class JSONSearch {
     public previousMatch(): void {
         if (this.matches.length === 0) return;
 
-        // Remove current highlight
+        // Remove current highlight from all parts of the current match
         if (this.currentMatchIndex >= 0) {
-            this.matches[this.currentMatchIndex].classList.remove('current');
+            this.highlightMatchGroup(this.currentMatchIndex, false);
         }
 
         // Move to previous match
@@ -61,10 +61,31 @@ export class JSONSearch {
             ? this.matches.length - 1 
             : this.currentMatchIndex - 1;
         
-        // Highlight current match and scroll to it
+        // Highlight current match group and scroll to it
+        this.highlightMatchGroup(this.currentMatchIndex, true);
         const currentMatch = this.matches[this.currentMatchIndex];
-        currentMatch.classList.add('current');
         currentMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    /**
+     * Highlights or unhighlights all parts of a match group
+     */
+    private highlightMatchGroup(matchIndex: number, highlight: boolean): void {
+        if (matchIndex < 0 || matchIndex >= this.matches.length) return;
+
+        const matchElement = this.matches[matchIndex];
+        const matchId = matchElement.getAttribute('data-match-id');
+        if (!matchId) return;
+
+        // Find all highlight elements with the same match ID
+        const allHighlights = document.querySelectorAll(`span.search-highlight[data-match-id="${matchId}"]`);
+        allHighlights.forEach(element => {
+            if (highlight) {
+                element.classList.add('current');
+            } else {
+                element.classList.remove('current');
+            }
+        });
     }
 
     /**
@@ -134,17 +155,29 @@ export class JSONSearch {
         const fullText = element.textContent || '';
         const lowerFullText = fullText.toLowerCase();
         
-        // Find all match positions in the full text
+        // Find all non-overlapping match positions in the full text
         const matchPositions: Array<{start: number, end: number}> = [];
         let startIndex = 0;
         let matchIndex: number;
 
         while ((matchIndex = lowerFullText.indexOf(this.searchTerm, startIndex)) !== -1) {
-            matchPositions.push({
-                start: matchIndex,
-                end: matchIndex + this.searchTerm.length
-            });
-            startIndex = matchIndex + 1;
+            const matchStart = matchIndex;
+            const matchEnd = matchIndex + this.searchTerm.length;
+            
+            // Check if this match overlaps with any existing match
+            const overlaps = matchPositions.some(existing => 
+                (matchStart < existing.end && matchEnd > existing.start)
+            );
+            
+            if (!overlaps) {
+                matchPositions.push({
+                    start: matchStart,
+                    end: matchEnd
+                });
+            }
+            
+            // Move past this match to avoid finding the same match again
+            startIndex = matchIndex + this.searchTerm.length;
         }
 
         // If no matches found, return early
@@ -152,20 +185,18 @@ export class JSONSearch {
             return;
         }
 
-        // Create a mapping from text positions to DOM nodes
-        const nodeMap = this.createTextToNodeMap(element);
-
-        // Process each match position and highlight it
-        matchPositions.reverse().forEach(pos => {
-            this.highlightMatchAtPosition(element, pos.start, pos.end, nodeMap, fullText);
-        });
+        // Apply highlights using a more robust approach
+        this.applyHighlights(element, matchPositions);
     }
 
+
+
     /**
-     * Creates a mapping from text positions to their corresponding DOM text nodes
+     * Applies highlights using a more robust tree-walking approach
      */
-    private createTextToNodeMap(element: HTMLElement): Array<{node: Text, nodeStartPos: number, nodeEndPos: number}> {
-        const nodeMap: Array<{node: Text, nodeStartPos: number, nodeEndPos: number}> = [];
+    private applyHighlights(element: HTMLElement, matchPositions: Array<{start: number, end: number}>): void {
+        if (matchPositions.length === 0) return;
+
         const walker = document.createTreeWalker(
             element,
             NodeFilter.SHOW_TEXT,
@@ -174,150 +205,120 @@ export class JSONSearch {
 
         let currentPos = 0;
         let node: Node | null;
+        const nodesToProcess: Array<{node: Text, highlights: Array<{start: number, end: number, matchId: number}>}> = [];
 
+        // First pass: collect all text nodes and determine which highlights apply to each
         while (node = walker.nextNode()) {
             if (node.nodeType === Node.TEXT_NODE && node.textContent) {
                 const textNode = node as Text;
                 const textLength = node.textContent.length;
-                
-                nodeMap.push({
-                    node: textNode,
-                    nodeStartPos: currentPos,
-                    nodeEndPos: currentPos + textLength
+                const nodeStart = currentPos;
+                const nodeEnd = currentPos + textLength;
+
+                // Find highlights that intersect with this text node
+                const nodeHighlights: Array<{start: number, end: number, matchId: number}> = [];
+                matchPositions.forEach((match, matchId) => {
+                    if (match.start < nodeEnd && match.end > nodeStart) {
+                        // Convert global positions to local node positions
+                        const localStart = Math.max(0, match.start - nodeStart);
+                        const localEnd = Math.min(textLength, match.end - nodeStart);
+                        if (localStart < localEnd) {
+                            nodeHighlights.push({ start: localStart, end: localEnd, matchId });
+                        }
+                    }
                 });
-                
+
+                if (nodeHighlights.length > 0) {
+                    nodesToProcess.push({ node: textNode, highlights: nodeHighlights });
+                }
+
                 currentPos += textLength;
             }
         }
 
-        return nodeMap;
-    }
-
-    /**
-     * Highlights a match at a specific position in the full text
-     */
-    private highlightMatchAtPosition(
-        element: HTMLElement, 
-        startPos: number, 
-        endPos: number, 
-        nodeMap: Array<{node: Text, nodeStartPos: number, nodeEndPos: number}>,
-        fullText: string
-    ): void {
-        // Find which text nodes contain the start and end of the match
-        const startNodeInfo = nodeMap.find(info => startPos >= info.nodeStartPos && startPos < info.nodeEndPos);
-        const endNodeInfo = nodeMap.find(info => endPos > info.nodeStartPos && endPos <= info.nodeEndPos);
-
-        if (!startNodeInfo || !endNodeInfo) {
-            return;
-        }
-
-        // If the match is within a single text node, use the simple highlighting
-        if (startNodeInfo === endNodeInfo) {
-            const nodeStartOffset = startPos - startNodeInfo.nodeStartPos;
-            const nodeEndOffset = endPos - startNodeInfo.nodeStartPos;
-            
-            this.highlightMatch({
-                textNode: startNodeInfo.node,
-                startIndex: nodeStartOffset,
-                endIndex: nodeEndOffset
-            });
-        } else {
-            // Handle matches that span multiple text nodes
-            this.highlightSpanningMatch(startNodeInfo, endNodeInfo, startPos, endPos, nodeMap, fullText);
-        }
-    }
-
-    /**
-     * Highlights matches that span across multiple text nodes
-     */
-    private highlightSpanningMatch(
-        startNodeInfo: {node: Text, nodeStartPos: number, nodeEndPos: number},
-        endNodeInfo: {node: Text, nodeStartPos: number, nodeEndPos: number},
-        startPos: number,
-        endPos: number,
-        nodeMap: Array<{node: Text, nodeStartPos: number, nodeEndPos: number}>,
-        fullText: string
-    ): void {
-        // Get all nodes involved in the match
-        const involvedNodes = nodeMap.filter(info => 
-            (info.nodeStartPos < endPos && info.nodeEndPos > startPos)
-        );
-
-        // Process each involved node
-        involvedNodes.forEach((nodeInfo, index) => {
-            const isFirstNode = nodeInfo === startNodeInfo;
-            const isLastNode = nodeInfo === endNodeInfo;
-            
-            let nodeStartOffset = 0;
-            let nodeEndOffset = nodeInfo.node.textContent ? nodeInfo.node.textContent.length : 0;
-            
-            if (isFirstNode) {
-                nodeStartOffset = startPos - nodeInfo.nodeStartPos;
-            }
-            
-            if (isLastNode) {
-                nodeEndOffset = endPos - nodeInfo.nodeStartPos;
-            }
-            
-            // Only highlight if there's content to highlight in this node
-            if (nodeStartOffset < nodeEndOffset && nodeEndOffset > 0) {
-                this.highlightMatch({
-                    textNode: nodeInfo.node,
-                    startIndex: nodeStartOffset,
-                    endIndex: nodeEndOffset
-                });
-            }
+        // Second pass: apply highlights to each node (in reverse order to preserve positions)
+        nodesToProcess.reverse().forEach(({ node, highlights }) => {
+            this.applyHighlightsToNode(node, highlights);
         });
     }
 
     /**
-     * Highlights a single match
+     * Applies multiple highlights to a single text node
      */
-    private highlightMatch(matchInfo: { textNode: Text; startIndex: number; endIndex: number }): void {
-        const { textNode, startIndex, endIndex } = matchInfo;
-        const text = textNode.textContent;
-        
-        if (!text || startIndex >= text.length) {
-            return; // Invalid match info
-        }
+    private applyHighlightsToNode(textNode: Text, highlights: Array<{start: number, end: number, matchId: number}>): void {
+        const text = textNode.textContent || '';
+        if (!text) return;
 
         const parent = textNode.parentNode;
-        if (!parent) {
-            return;
+        if (!parent) return;
+
+        // Sort highlights by position (reverse order for processing)
+        highlights.sort((a, b) => b.start - a.start);
+
+        let currentText = text;
+        const fragments: Array<Node> = [];
+        let lastEnd = text.length;
+        const createdHighlights: Array<{element: HTMLElement, matchId: number}> = [];
+
+        // Process highlights from right to left to maintain positions
+        highlights.forEach(({ start, end, matchId }) => {
+            if (start >= 0 && end <= text.length && start < end) {
+                // Add text after this highlight
+                if (lastEnd > end) {
+                    const afterText = currentText.substring(end, lastEnd);
+                    if (afterText) {
+                        fragments.unshift(document.createTextNode(afterText));
+                    }
+                }
+
+                // Add the highlight
+                const highlightText = currentText.substring(start, end);
+                const highlight = document.createElement('span');
+                highlight.className = 'search-highlight';
+                highlight.setAttribute('data-match-id', matchId.toString());
+                highlight.textContent = highlightText;
+                
+                createdHighlights.push({ element: highlight, matchId });
+                fragments.unshift(highlight);
+
+                lastEnd = start;
+            }
+        });
+
+        // Add any remaining text at the beginning
+        if (lastEnd > 0) {
+            const beforeText = currentText.substring(0, lastEnd);
+            if (beforeText) {
+                fragments.unshift(document.createTextNode(beforeText));
+            }
         }
 
-        const beforeText = text.substring(0, startIndex);
-        const matchText = text.substring(startIndex, endIndex);
-        const afterText = text.substring(endIndex);
-
-        // Create highlight span
-        const highlight = document.createElement('span');
-        highlight.className = 'search-highlight';
-        highlight.textContent = matchText;
-        this.matches.push(highlight);
-
-        // Build the replacement nodes
-        const replacementNodes: Node[] = [];
-        
-        if (beforeText) {
-            replacementNodes.push(document.createTextNode(beforeText));
-        }
-        
-        replacementNodes.push(highlight);
-        
-        if (afterText) {
-            replacementNodes.push(document.createTextNode(afterText));
-        }
-
-        // Replace the original text node with the new nodes
-        if (replacementNodes.length > 0) {
-            // Insert all new nodes before the original
-            replacementNodes.forEach(newNode => {
-                parent.insertBefore(newNode, textNode);
+        // Replace the original text node with all fragments
+        if (fragments.length > 0) {
+            fragments.forEach(fragment => {
+                parent.insertBefore(fragment, textNode);
             });
-            // Remove the original text node
             parent.removeChild(textNode);
         }
+
+        // Group highlights by matchId and only add one representative per match to this.matches
+        const matchGroups = new Map<number, HTMLElement[]>();
+        createdHighlights.forEach(({ element, matchId }) => {
+            if (!matchGroups.has(matchId)) {
+                matchGroups.set(matchId, []);
+            }
+            matchGroups.get(matchId)!.push(element);
+        });
+
+        // Add only the first highlight element from each match group
+        matchGroups.forEach((elements, matchId) => {
+            if (elements.length > 0) {
+                // Only add to matches array if this is the first time we see this matchId
+                if (!this.matches.some(m => m.getAttribute('data-match-id') === matchId.toString())) {
+                    this.matches.push(elements[0]);
+                }
+            }
+        });
     }
 
     /**
@@ -326,7 +327,7 @@ export class JSONSearch {
     private highlightMatches(): void {
         if (this.matches.length > 0) {
             this.currentMatchIndex = 0;
-            this.matches[0].classList.add('current');
+            this.highlightMatchGroup(0, true);
             this.matches[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
