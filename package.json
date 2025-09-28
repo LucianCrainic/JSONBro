@@ -20,8 +20,8 @@
         "title": "JSONBro: Format JSON"
       },
       {
-        "command": "jsonbro.validateJson",
-        "title": "JSONBro: Validate JSON"
+        "command": "jsonbro.diffJson",
+        "title": "JSONBro: Diff JSON"
       }
     ]
   },
