@@ -36,8 +36,35 @@ describe('JSONParser.parseFlexible', () => {
     });
 
     it('throws descriptive error when parsing invalid JSON fails twice', () => {
-        const malformed = "{'name': 'Dana', trailing: true,}";
+        const malformed = "{'name': 'Dana', 'invalid': +++}";
         expect(() => JSONParser.parseFlexible(malformed)).toThrow(SyntaxError);
+    });
+
+    it('parses JSON with Python-style booleans and None', () => {
+        const input = '{"flag": True, "enabled": False, "value": None}';
+        expect(JSONParser.parseFlexible(input)).toEqual({
+            flag: true,
+            enabled: false,
+            value: null,
+        });
+    });
+
+    it('handles mixed Python and JavaScript-style values', () => {
+        const input = "{'name': 'Bob', 'active': True, 'count': None, 'valid': false}";
+        expect(JSONParser.parseFlexible(input)).toEqual({
+            name: 'Bob',
+            active: true,
+            count: null,
+            valid: false,
+        });
+    });
+
+    it('removes trailing commas', () => {
+        const input = '{"name": "Alice", "age": 30,}';
+        expect(JSONParser.parseFlexible(input)).toEqual({
+            name: 'Alice',
+            age: 30,
+        });
     });
 });
 
