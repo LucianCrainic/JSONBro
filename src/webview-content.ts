@@ -534,90 +534,7 @@ export class WebviewContentGenerator {
                 margin: 2px 0;
             }
 
-            /* History Panel */
-            #history-backdrop {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0, 0, 0, 0.5);
-                z-index: 1000;
-                display: none;
-            }
-
-            #history-panel {
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                width: 80%;
-                max-width: 600px;
-                height: 60%;
-                background-color: var(--vscode-editor-background);
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 4px;
-                display: none;
-                flex-direction: column;
-                z-index: 1001;
-            }
-
-            #history-header {
-                padding: 12px;
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                border-bottom: 1px solid var(--vscode-editorGroup-border);
-                font-weight: bold;
-            }
-
-            #history-content {
-                flex: 1;
-                overflow-y: auto;
-                padding: 8px;
-            }
-
-            .history-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 8px;
-                border-bottom: 1px solid var(--vscode-editorGroup-border);
-            }
-
-            .history-item pre {
-                flex: 1;
-                margin: 0;
-                font-size: 11px;
-                color: var(--vscode-descriptionForeground);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .history-actions {
-                display: flex;
-                gap: 4px;
-                margin-left: 8px;
-            }
-
-            .history-actions button {
-                padding: 4px;
-                min-width: auto;
-            }
-
-            /* Diff History Styles */
-            .diff-history-item .diff-preview {
-                flex: 1;
-                font-size: 11px;
-            }
-
-            .diff-preview-header {
-                font-size: 10px;
-                color: var(--vscode-descriptionForeground);
-                margin-bottom: 4px;
-            }
-
-            .diff-preview-content {
-                display: flex;
+            /* Search Styles */
                 flex-direction: column;
                 gap: 2px;
             }
@@ -725,13 +642,6 @@ export class WebviewContentGenerator {
                         </svg>
                         Clear
                     </button>
-                    <button id="history" title="Show history">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12,6 12,12 16,14"></polyline>
-                        </svg>
-                        History
-                    </button>
                 </div>
             </div>
             <!-- Format Mode Container -->
@@ -779,12 +689,6 @@ export class WebviewContentGenerator {
                         </button>
                     </div>
                     <textarea id="right-json" placeholder="Enter modified JSON here..."></textarea>
-                </div>
-            </div>
-            <div id="history-backdrop">
-                <div id="history-panel">
-                    <div id="history-header">JSON History</div>
-                    <div id="history-content"></div>
                 </div>
             </div>
         `;
