@@ -26,7 +26,7 @@ export class JSONFormatter {
                 return '[ ]';
             }
             const items = value.map(v => '<li>' + this.renderJson(v) + '</li>').join('');
-            return `<details open><summary>[...]</summary><ul>${items}</ul></details>`;
+            return `<details open><summary></summary><ul>${items}</ul></details>`;
         }
 
         switch (typeof value) {
@@ -37,7 +37,7 @@ export class JSONFormatter {
                 if (!entries) {
                     return '{ }';
                 }
-                return `<details open><summary>{...}</summary><ul>${entries}</ul></details>`;
+                return `<details open><summary></summary><ul>${entries}</ul></details>`;
             case 'string':
                 return `<span class="string">"${this.escapeHtml(value)}"</span>`;
             case 'number':
