@@ -3,26 +3,28 @@ import { JSONDiff } from './diff';
 import { JSONSearch } from './search';
 import { JSONParser } from './json-parser';
 
+// VS Code API declaration
+declare function acquireVsCodeApi(): any;
+
 /**
  * Main webview controller that handles JSON formatting functionality
  */
-interface DiffHistoryEntry {
-    leftJson: string;
-    rightJson: string;
-    timestamp: number;
-}
-
 export class WebviewController {
-    private formatHistory: string[] = [];
-    private diffHistory: DiffHistoryEntry[] = [];
     private currentJsonObject: any = null;
     private jsonSearch: JSONSearch = new JSONSearch();
     private currentMode: 'format' | 'diff' = 'format';
+    private vscode: any;
+    private isLoadingFromHistory: boolean = false;
 
     /**
      * Initializes the webview controller
      */
     public initialize(): void {
+        // Acquire VS Code API once during initialization
+        if (typeof acquireVsCodeApi !== 'undefined') {
+            this.vscode = acquireVsCodeApi();
+        }
+        
         this.setupEventListeners();
         this.setupSplitter();
     }
@@ -54,7 +56,6 @@ export class WebviewController {
         
         // Other controls
         const clearBtn = document.getElementById('clear');
-        const historyBtn = document.getElementById('history');
         const copyBtn = document.getElementById('copy');
         const searchToggleBtn = document.getElementById('search-toggle');
 
@@ -80,10 +81,6 @@ export class WebviewController {
             clearBtn.addEventListener('click', () => this.clearInput());
         }
 
-        if (historyBtn) {
-            historyBtn.addEventListener('click', () => this.toggleHistory());
-        }
-
         if (copyBtn) {
             copyBtn.addEventListener('click', () => this.copyToClipboard());
         }
@@ -97,6 +94,9 @@ export class WebviewController {
 
         // Global keyboard shortcuts
         this.setupGlobalKeyboardShortcuts();
+
+        // Listen for messages from the extension
+        this.setupMessageHandling();
     }
 
     private formatJson(): void {
@@ -113,18 +113,19 @@ export class WebviewController {
             return;
         }
 
-        // Add to history
-        this.formatHistory.unshift(input);
-        if (this.formatHistory.length > 50) {
-            this.formatHistory = this.formatHistory.slice(0, 50); // Keep only last 50 items
-        }
-
         try {
             const parsedJson = this.parseFlexibleJson(input);
             this.currentJsonObject = parsedJson;
             output.style.color = 'inherit';
             output.innerHTML = JSONFormatter.renderJson(parsedJson);
-            this.updateHistoryPanel(inputEl, output);
+            
+            // Only send message to extension to add to history if not loading from history
+            if (!this.isLoadingFromHistory) {
+                this.postMessage({
+                    command: 'addFormatHistory',
+                    json: input
+                });
+            }
         } catch (error) {
             this.currentJsonObject = null;
             output.style.color = 'var(--vscode-errorForeground)';
@@ -132,6 +133,61 @@ export class WebviewController {
                 ? JSONParser.getParseErrorMessage(input, error)
                 : 'Unknown parsing error';
             output.textContent = errorMessage;
+        }
+    }
+
+    /**
+     * Sends a message to the VS Code extension
+     */
+    private postMessage(message: any): void {
+        if (this.vscode) {
+            this.vscode.postMessage(message);
+        }
+    }
+
+    /**
+     * Sets up message handling from the extension
+     */
+    private setupMessageHandling(): void {
+        window.addEventListener('message', event => {
+            const message = event.data;
+            switch (message.command) {
+                case 'loadJson':
+                    this.loadJsonContent(message.json);
+                    break;
+                case 'loadDiff':
+                    this.loadDiffContent(message.leftJson, message.rightJson);
+                    break;
+            }
+        });
+    }
+
+    /**
+     * Loads JSON content into the format panel
+     */
+    private loadJsonContent(json: string): void {
+        const inputEl = document.getElementById('input') as HTMLTextAreaElement;
+        if (inputEl) {
+            this.isLoadingFromHistory = true;
+            inputEl.value = json;
+            this.formatJson();
+            this.isLoadingFromHistory = false;
+        }
+    }
+
+    /**
+     * Loads JSON content into the diff panel
+     */
+    private loadDiffContent(leftJson: string, rightJson: string): void {
+        const leftInput = document.getElementById('left-json') as HTMLTextAreaElement;
+        const rightInput = document.getElementById('right-json') as HTMLTextAreaElement;
+        
+        if (leftInput && rightInput) {
+            this.isLoadingFromHistory = true;
+            leftInput.value = leftJson;
+            rightInput.value = rightJson;
+            this.compareJson();
+            this.isLoadingFromHistory = false;
         }
     }
 
@@ -147,37 +203,12 @@ export class WebviewController {
             const rightJsonEl = document.getElementById('right-json') as HTMLTextAreaElement;
             const diffOutput = document.getElementById('diff-output');
             
-            // Save to diff history if both inputs have content
-            if (leftJsonEl && rightJsonEl && leftJsonEl.value.trim() && rightJsonEl.value.trim()) {
-                this.diffHistory.unshift({
-                    leftJson: leftJsonEl.value.trim(),
-                    rightJson: rightJsonEl.value.trim(),
-                    timestamp: Date.now()
-                });
-                if (this.diffHistory.length > 50) {
-                    this.diffHistory = this.diffHistory.slice(0, 50);
-                }
-                // Update the history panel to show the new entry
-                this.updateHistoryPanel();
-            }
-            
             if (leftJsonEl) leftJsonEl.value = '';
             if (rightJsonEl) rightJsonEl.value = '';
             if (diffOutput) diffOutput.innerHTML = '';
         }
         
         this.currentJsonObject = null;
-    }
-
-    private toggleHistory(): void {
-        const backdrop = document.getElementById('history-backdrop');
-        const panel = document.getElementById('history-panel');
-        
-        if (backdrop && panel) {
-            const isVisible = backdrop.style.display === 'block';
-            backdrop.style.display = isVisible ? 'none' : 'block';
-            panel.style.display = isVisible ? 'none' : 'block';
-        }
     }
 
     private copyToClipboard(): void {
@@ -201,138 +232,6 @@ export class WebviewController {
                 });
             }
         }
-    }
-
-    private updateHistoryPanel(inputEl?: HTMLTextAreaElement, output?: HTMLElement): void {
-        const panel = document.getElementById('history-content');
-        if (!panel) {
-            return;
-        }
-
-        if (this.currentMode === 'format') {
-            this.updateFormatHistoryPanel(panel, inputEl!, output!);
-        } else {
-            this.updateDiffHistoryPanel(panel);
-        }
-    }
-
-    private updateFormatHistoryPanel(panel: HTMLElement, inputEl: HTMLTextAreaElement, output: HTMLElement): void {
-        panel.innerHTML = this.formatHistory
-            .map((h: string, idx: number) => {
-                const preview = JSONFormatter.escapeHtml(h).slice(0, 100);
-                return `
-                    <div class="history-item">
-                        <pre>${preview}</pre>
-                        <div class="history-actions">
-                            <button class="show-btn" data-index="${idx}" title="Show">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                            </button>
-                            <button class="remove-btn" data-index="${idx}" title="Remove">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <polyline points="3,6 5,6 21,6"></polyline>
-                                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            })
-            .join('');
-
-        // Attach event listeners to format history buttons
-        panel.querySelectorAll('button.show-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.getAttribute('data-index') || '0', 10);
-                const value = this.formatHistory[index];
-                inputEl.value = value;
-                
-                try {
-                    const obj = this.parseFlexibleJson(value);
-                    this.currentJsonObject = obj;
-                    output.style.color = 'inherit';
-                    output.innerHTML = JSONFormatter.renderJson(obj);
-                } catch (err) {
-                    this.currentJsonObject = null;
-                    output.style.color = 'var(--vscode-errorForeground)';
-                    const errorMessage = err instanceof Error 
-                        ? JSONParser.getParseErrorMessage(value, err)
-                        : 'Unknown parsing error';
-                    output.textContent = errorMessage;
-                }
-            });
-        });
-
-        panel.querySelectorAll('button.remove-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.getAttribute('data-index') || '0', 10);
-                this.formatHistory.splice(index, 1);
-                this.updateHistoryPanel(inputEl, output);
-            });
-        });
-    }
-
-    private updateDiffHistoryPanel(panel: HTMLElement): void {
-        panel.innerHTML = this.diffHistory
-            .map((entry: DiffHistoryEntry, idx: number) => {
-                const leftPreview = JSONFormatter.escapeHtml(entry.leftJson).slice(0, 50);
-                const rightPreview = JSONFormatter.escapeHtml(entry.rightJson).slice(0, 50);
-                const date = new Date(entry.timestamp).toLocaleString();
-                return `
-                    <div class="history-item diff-history-item">
-                        <div class="diff-preview">
-                            <div class="diff-preview-header">${date}</div>
-                            <div class="diff-preview-content">
-                                <div class="left-preview">L: ${leftPreview}${entry.leftJson.length > 50 ? '...' : ''}</div>
-                                <div class="right-preview">R: ${rightPreview}${entry.rightJson.length > 50 ? '...' : ''}</div>
-                            </div>
-                        </div>
-                        <div class="history-actions">
-                            <button class="show-btn" data-index="${idx}" title="Show">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                            </button>
-                            <button class="remove-btn" data-index="${idx}" title="Remove">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <polyline points="3,6 5,6 21,6"></polyline>
-                                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            })
-            .join('');
-
-        // Attach event listeners to diff history buttons
-        panel.querySelectorAll('button.show-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.getAttribute('data-index') || '0', 10);
-                const entry = this.diffHistory[index];
-                
-                const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
-                const rightJsonEl = document.getElementById('right-json') as HTMLTextAreaElement;
-                
-                if (leftJsonEl && rightJsonEl) {
-                    leftJsonEl.value = entry.leftJson;
-                    rightJsonEl.value = entry.rightJson;
-                    // Automatically run the comparison
-                    this.compareJson();
-                }
-            });
-        });
-
-        panel.querySelectorAll('button.remove-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.getAttribute('data-index') || '0', 10);
-                this.diffHistory.splice(index, 1);
-                this.updateHistoryPanel();
-            });
-        });
     }
 
     private setupSearchEventListeners(): void {
@@ -753,6 +652,15 @@ export class WebviewController {
             // Generate and display the diff
             diffOutput.style.color = 'inherit';
             diffOutput.innerHTML = JSONDiff.renderJsonDiff(leftParsed, rightParsed);
+            
+            // Only send message to extension to add to history if not loading from history
+            if (!this.isLoadingFromHistory) {
+                this.postMessage({
+                    command: 'addDiffHistory',
+                    leftJson: leftJson,
+                    rightJson: rightJson
+                });
+            }
             
             // Setup expandable value handlers
             this.setupExpandableValues(diffOutput);
