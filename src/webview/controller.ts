@@ -38,6 +38,8 @@ export class WebviewController {
         // Just need to update any JavaScript state if necessary
         if (mode === 'diff') {
             this.setupDiffMaximize();
+        } else if (mode === 'format') {
+            this.setupFormatMaximize();
         }
     }
 
@@ -57,6 +59,7 @@ export class WebviewController {
         // Other controls
         const clearBtn = document.getElementById('clear');
         const copyBtn = document.getElementById('copy');
+        const saveBtn = document.getElementById('save');
         const searchToggleBtn = document.getElementById('search-toggle');
 
         if (formatModeBtn) {
@@ -83,6 +86,10 @@ export class WebviewController {
 
         if (copyBtn) {
             copyBtn.addEventListener('click', () => this.copyToClipboard());
+        }
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => this.saveFormattedJson());
         }
 
         if (searchToggleBtn) {
@@ -231,6 +238,53 @@ export class WebviewController {
                     console.error('Failed to copy to clipboard:', err);
                 });
             }
+        }
+    }
+
+    private saveFormattedJson(): void {
+        if (this.currentJsonObject) {
+            const formatted = JSON.stringify(this.currentJsonObject, null, 2);
+            // Send message to extension to show save dialog
+            this.postMessage({
+                command: 'saveFormattedJson',
+                content: formatted
+            });
+        } else {
+            // If no parsed JSON object, try to get the formatted output directly
+            const output = document.getElementById('output');
+            if (output && output.textContent && output.textContent.trim()) {
+                // Extract the JSON text from the formatted output
+                const jsonText = this.extractJsonFromFormattedOutput(output);
+                if (jsonText) {
+                    // Send message to extension to show save dialog
+                    this.postMessage({
+                        command: 'saveFormattedJson',
+                        content: jsonText
+                    });
+                }
+            }
+        }
+    }
+
+    private extractJsonFromFormattedOutput(outputElement: HTMLElement): string | null {
+        try {
+            // If currentJsonObject exists, use it
+            if (this.currentJsonObject) {
+                return JSON.stringify(this.currentJsonObject, null, 2);
+            }
+            
+            // Otherwise, try to extract from the HTML content
+            const textContent = outputElement.textContent || '';
+            if (textContent.trim()) {
+                // Try to parse it to validate it's valid JSON
+                const parsed = JSON.parse(textContent);
+                return JSON.stringify(parsed, null, 2);
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Failed to extract JSON from output:', error);
+            return null;
         }
     }
 
@@ -615,9 +669,11 @@ export class WebviewController {
             }
         }
 
-        // Setup maximize functionality for diff mode
+        // Setup maximize functionality based on mode
         if (mode === 'diff') {
             this.setupDiffMaximize();
+        } else if (mode === 'format') {
+            this.setupFormatMaximize();
         }
     }
 
@@ -678,6 +734,12 @@ export class WebviewController {
         this.setupMaximizeButton('maximize-right', 'right-json-panel');
     }
 
+    private setupFormatMaximize(): void {
+        // Setup maximize functionality for format mode panels
+        this.setupMaximizeButton('maximize-input', 'input-panel');
+        this.setupMaximizeButton('maximize-output', 'output-panel');
+    }
+
     private currentMaximizedPanel: string | null = null;
 
     private setupMaximizeButton(buttonId: string, panelId: string): void {
@@ -694,15 +756,28 @@ export class WebviewController {
     }
 
     private toggleMaximizePanel(panelId: string): void {
-        const leftPanel = document.getElementById('left-json-panel');
-        const diffPanel = document.getElementById('diff-result-panel');
-        const rightPanel = document.getElementById('right-json-panel');
+        // Get panels based on current mode
+        let allPanels: HTMLElement[] = [];
+        
+        if (this.currentMode === 'diff') {
+            const leftPanel = document.getElementById('left-json-panel');
+            const diffPanel = document.getElementById('diff-result-panel');
+            const rightPanel = document.getElementById('right-json-panel');
+            if (leftPanel && diffPanel && rightPanel) {
+                allPanels = [leftPanel, diffPanel, rightPanel];
+            }
+        } else if (this.currentMode === 'format') {
+            const inputPanel = document.getElementById('input-panel');
+            const outputPanel = document.getElementById('output-panel');
+            if (inputPanel && outputPanel) {
+                allPanels = [inputPanel, outputPanel];
+            }
+        }
 
-        if (!leftPanel || !diffPanel || !rightPanel) {
+        if (allPanels.length === 0) {
             return;
         }
 
-        const allPanels = [leftPanel, diffPanel, rightPanel];
         const targetPanel = document.getElementById(panelId);
 
         if (this.currentMaximizedPanel === panelId) {
@@ -728,10 +803,15 @@ export class WebviewController {
     }
 
     private updateMaximizeIcons(): void {
+        // Define buttons for both modes
         const buttons = [
+            // Diff mode buttons
             { id: 'maximize-left', panelId: 'left-json-panel' },
             { id: 'maximize-diff', panelId: 'diff-result-panel' },
-            { id: 'maximize-right', panelId: 'right-json-panel' }
+            { id: 'maximize-right', panelId: 'right-json-panel' },
+            // Format mode buttons
+            { id: 'maximize-input', panelId: 'input-panel' },
+            { id: 'maximize-output', panelId: 'output-panel' }
         ];
 
         buttons.forEach(({ id, panelId }) => {
