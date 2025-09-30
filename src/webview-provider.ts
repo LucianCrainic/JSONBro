@@ -2,6 +2,8 @@
  * Webview provider for creating and managing JSON formatter webviews
  */
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as os from 'os';
 import { WebviewContentGenerator } from './webview-content';
 import { JSONBroActivityBarProvider } from './activity-bar-provider';
 
@@ -147,10 +149,41 @@ export class WebviewProvider {
                     case 'addDiffHistory':
                         this.activityBarProvider.addDiffHistory(message.leftJson, message.rightJson);
                         break;
+                    case 'saveFormattedJson':
+                        this.saveFormattedJsonToFile(message.content);
+                        break;
                 }
             },
             undefined,
             this.context.subscriptions
         );
+    }
+
+    /**
+     * Show save dialog and save formatted JSON to user-selected file
+     */
+    private async saveFormattedJsonToFile(content: string): Promise<void> {
+        try {
+            // Get the user's home directory
+            const homeDir = vscode.Uri.file(os.homedir());
+            const defaultUri = vscode.Uri.joinPath(homeDir, 'formatted.json');
+            
+            const saveUri = await vscode.window.showSaveDialog({
+                defaultUri: defaultUri,
+                filters: {
+                    'JSON Files': ['json'],
+                    'All Files': ['*']
+                },
+                saveLabel: 'Save JSON'
+            });
+
+            if (saveUri) {
+                await fs.promises.writeFile(saveUri.fsPath, content, 'utf8');
+                vscode.window.showInformationMessage(`JSON saved to ${saveUri.fsPath}`);
+            }
+        } catch (error) {
+            console.error('Error saving file:', error);
+            vscode.window.showErrorMessage(`Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     }
 }
