@@ -22,8 +22,82 @@
       {
         "command": "jsonbro.diffJson",
         "title": "JSONBro: Diff JSON"
+      },
+      {
+        "command": "jsonbro.openFromActivityBar",
+        "title": "Open JSONBro",
+        "icon": "$(json)"
+      },
+      {
+        "command": "jsonbro.removeFormatHistory",
+        "title": "Remove Entry",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "jsonbro.removeDiffHistory",
+        "title": "Remove Entry",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "jsonbro.renameFormatHistory",
+        "title": "Rename Entry",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "jsonbro.renameDiffHistory",
+        "title": "Rename Entry",
+        "icon": "$(edit)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "jsonbro",
+          "title": "JSONBro",
+          "icon": "$(json)"
+        }
+      ]
+    },
+    "views": {
+      "jsonbro": [
+        {
+          "id": "jsonbro.explorer",
+          "name": "JSONBro",
+          "when": "true"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "jsonbro.openFromActivityBar",
+          "when": "view == jsonbro.explorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "jsonbro.renameFormatHistory",
+          "when": "view == jsonbro.explorer && viewItem == formatHistoryEntry",
+          "group": "inline@1"
+        },
+        {
+          "command": "jsonbro.removeFormatHistory",
+          "when": "view == jsonbro.explorer && viewItem == formatHistoryEntry",
+          "group": "inline@2"
+        },
+        {
+          "command": "jsonbro.renameDiffHistory",
+          "when": "view == jsonbro.explorer && viewItem == diffHistoryEntry",
+          "group": "inline@1"
+        },
+        {
+          "command": "jsonbro.removeDiffHistory",
+          "when": "view == jsonbro.explorer && viewItem == diffHistoryEntry",
+          "group": "inline@2"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run clean && npm run compile",
