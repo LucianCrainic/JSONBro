@@ -111,6 +111,8 @@ export class WebviewContentGenerator {
                 font-size: 13px;
                 resize: none;
                 outline: none;
+                position: relative;
+                transition: all 0.2s ease;
             }
 
             #output {
@@ -635,6 +637,14 @@ export class WebviewContentGenerator {
                         </svg>
                         Copy
                     </button>
+                    <button id="save" title="Save formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="m19,21H5a2,2 0 0,1 -2,-2V5a2,2 0 0,1 2,-2H14l5,5v11a2,2 0 0,1 -2,2z"></path>
+                            <polyline points="17,21 17,13 7,13 7,21"></polyline>
+                            <polyline points="7,3 7,8 15,8"></polyline>
+                        </svg>
+                        Save
+                    </button>
                     <button id="clear" title="Clear input">
                         <svg class="icon" viewBox="0 0 24 24">
                             <polyline points="3,6 5,6 21,6"></polyline>
@@ -647,10 +657,26 @@ export class WebviewContentGenerator {
             <!-- Format Mode Container -->
             <div id="format-container" class="mode-container" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                 <div id="input-panel">
+                    <div class="panel-header">
+                        <h3>JSON Input</h3>
+                        <button id="maximize-input" class="maximize-btn" title="Maximize panel">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                            </svg>
+                        </button>
+                    </div>
                     <textarea id="input" placeholder="Enter your JSON here..."></textarea>
                 </div>
                 <div id="splitter" title="Drag to resize panes or double-click to reset to 50/50"></div>
                 <div id="output-panel">
+                    <div class="panel-header">
+                        <h3>Formatted Output</h3>
+                        <button id="maximize-output" class="maximize-btn" title="Maximize panel">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div id="output"></div>
                 </div>
             </div>
