@@ -11,15 +11,3 @@ document.addEventListener('DOMContentLoaded', () => {
         controller.setInitialMode(initialMode);
     }
 });
-
-// Close history panel when clicking outside
-document.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement;
-    const historyBackdrop = document.getElementById('history-backdrop');
-    const historyPanel = document.getElementById('history-panel');
-    
-    if (historyBackdrop && historyPanel && target === historyBackdrop) {
-        historyBackdrop.style.display = 'none';
-        historyPanel.style.display = 'none';
-    }
-});
