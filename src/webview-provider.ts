@@ -3,14 +3,18 @@
  */
 import * as vscode from 'vscode';
 import { WebviewContentGenerator } from './webview-content';
+import { JSONBroActivityBarProvider } from './activity-bar-provider';
 
 export class WebviewProvider {
     private context: vscode.ExtensionContext;
     private contentGenerator: WebviewContentGenerator;
+    private activityBarProvider: JSONBroActivityBarProvider;
+    private existingPanels: Map<string, vscode.WebviewPanel> = new Map();
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, activityBarProvider: JSONBroActivityBarProvider) {
         this.context = context;
         this.contentGenerator = new WebviewContentGenerator(context);
+        this.activityBarProvider = activityBarProvider;
     }
 
     /**
@@ -25,6 +29,72 @@ export class WebviewProvider {
      */
     public showDiffPanel(): void {
         this.showPanel('diff');
+    }
+
+    /**
+     * Shows or focuses the format panel (default for activity bar)
+     */
+    public showOrFocusFormatPanel(): void {
+        const existingPanel = this.existingPanels.get('format');
+        if (existingPanel) {
+            existingPanel.reveal();
+        } else {
+            this.showFormatPanel();
+        }
+    }
+
+    /**
+     * Loads JSON from format history into the format panel
+     */
+    public loadFormatHistory(json: string): void {
+        const existingPanel = this.existingPanels.get('format');
+        if (existingPanel) {
+            existingPanel.webview.postMessage({
+                command: 'loadJson',
+                json: json
+            });
+            existingPanel.reveal();
+        } else {
+            this.showFormatPanel();
+            // Wait a bit for the panel to load, then send the message
+            setTimeout(() => {
+                const panel = this.existingPanels.get('format');
+                if (panel) {
+                    panel.webview.postMessage({
+                        command: 'loadJson',
+                        json: json
+                    });
+                }
+            }, 100);
+        }
+    }
+
+    /**
+     * Loads JSON from diff history into the diff panel
+     */
+    public loadDiffHistory(leftJson: string, rightJson: string): void {
+        const existingPanel = this.existingPanels.get('diff');
+        if (existingPanel) {
+            existingPanel.webview.postMessage({
+                command: 'loadDiff',
+                leftJson: leftJson,
+                rightJson: rightJson
+            });
+            existingPanel.reveal();
+        } else {
+            this.showDiffPanel();
+            // Wait a bit for the panel to load, then send the message
+            setTimeout(() => {
+                const panel = this.existingPanels.get('diff');
+                if (panel) {
+                    panel.webview.postMessage({
+                        command: 'loadDiff',
+                        leftJson: leftJson,
+                        rightJson: rightJson
+                    });
+                }
+            }, 100);
+        }
     }
 
     /**
@@ -48,9 +118,20 @@ export class WebviewProvider {
             }
         );
 
+        // Set JSON file icon for the panel
+        panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'images', 'json-file-icon.svg');
+
+        // Track the panel
+        this.existingPanels.set(mode, panel);
+
+        // Remove from tracking when disposed
+        panel.onDidDispose(() => {
+            this.existingPanels.delete(mode);
+        });
+
         panel.webview.html = this.contentGenerator.getWebviewContent(panel.webview, mode);
 
-        // Handle messages from the webview (if needed in the future)
+        // Handle messages from the webview
         panel.webview.onDidReceiveMessage(
             message => {
                 switch (message.command) {
@@ -59,6 +140,12 @@ export class WebviewProvider {
                         break;
                     case 'showInfo':
                         vscode.window.showInformationMessage(message.text);
+                        break;
+                    case 'addFormatHistory':
+                        this.activityBarProvider.addFormatHistory(message.json);
+                        break;
+                    case 'addDiffHistory':
+                        this.activityBarProvider.addDiffHistory(message.leftJson, message.rightJson);
                         break;
                 }
             },
