@@ -58,6 +58,11 @@ jobs:
     - name: Package extension
       run: vsce package --out jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
       
+    - name: Publish to VS Code Marketplace
+      env:
+        VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
+      run: vsce publish --packagePath jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
+      
     - name: Create checksum
       run: |
         sha256sum jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix > jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
