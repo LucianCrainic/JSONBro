@@ -6,7 +6,7 @@ describe('JSONFormatter.renderJson', () => {
     });
 
     it('renders empty arrays compactly', () => {
-        expect(JSONFormatter.renderJson([])).toBe('[ ]');
+        expect(JSONFormatter.renderJson([])).toBe('<span class="json-array">[]</span>');
     });
 
     it('renders arrays with nested values using expandable markup', () => {
@@ -18,7 +18,7 @@ describe('JSONFormatter.renderJson', () => {
     });
 
     it('renders empty objects compactly', () => {
-        expect(JSONFormatter.renderJson({})).toBe('{ }');
+        expect(JSONFormatter.renderJson({})).toBe('<span class="json-object">{}</span>');
     });
 
     it('renders objects with escaped keys and values', () => {
@@ -28,7 +28,7 @@ describe('JSONFormatter.renderJson', () => {
         const html = JSONFormatter.renderJson(input);
         expect(html).toContain('&lt;danger&gt;');
         expect(html).toContain('Value with &lt;tags&gt; &amp; &quot;quotes&quot;');
-        expect(html.startsWith('<details open><summary></summary>')).toBe(true);
+        expect(html.startsWith('<span class="json-object"><span class="brace">{</span><details open><summary></summary>')).toBe(true);
     });
 
     it('renders boolean and number primitives', () => {
