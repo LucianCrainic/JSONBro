@@ -20,7 +20,12 @@ export class JSONSearch {
         }
 
         this.findMatches(outputElement);
-        this.highlightMatches();
+        
+        // Just highlight matches without scrolling
+        if (this.matches.length > 0) {
+            this.currentMatchIndex = 0;
+            this.highlightMatchGroup(0, true);
+        }
 
         return this.matches.length;
     }
@@ -240,6 +245,13 @@ export class JSONSearch {
         nodesToProcess.reverse().forEach(({ node, highlights }) => {
             this.applyHighlightsToNode(node, highlights);
         });
+        
+        // Sort matches array to ensure they're in document order (top to bottom)
+        this.matches.sort((a, b) => {
+            const aId = parseInt(a.getAttribute('data-match-id') || '0');
+            const bId = parseInt(b.getAttribute('data-match-id') || '0');
+            return aId - bId;
+        });
     }
 
     /**
@@ -319,16 +331,5 @@ export class JSONSearch {
                 }
             }
         });
-    }
-
-    /**
-     * Highlights all matches and sets the first one as current
-     */
-    private highlightMatches(): void {
-        if (this.matches.length > 0) {
-            this.currentMatchIndex = 0;
-            this.highlightMatchGroup(0, true);
-            this.matches[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
     }
 }
