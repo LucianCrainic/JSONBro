@@ -34,6 +34,11 @@ jobs:
     - name: Install vsce (VS Code Extension CLI)
       run: npm install -g @vscode/vsce
       
+    - name: Login to Visual Studio Marketplace
+      env:
+        VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
+      run: echo $VSCE_PAT | vsce login LucianDCrainic
+      
     - name: Extract version from tag
       id: get_version
       run: |
