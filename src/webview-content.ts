@@ -201,16 +201,16 @@ export class WebviewContentGenerator {
                 border: 1px solid var(--vscode-editorGroup-border);
                 color: var(--vscode-icon-foreground);
                 cursor: pointer;
-                padding: 6px;
-                border-radius: 3px;
+                padding: 8px;
+                border-radius: 4px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 opacity: 0.6;
                 transition: all 0.2s ease;
                 z-index: 100;
-                width: 24px;
-                height: 24px;
+                width: 32px;
+                height: 32px;
                 pointer-events: auto;
             }
 
@@ -552,11 +552,12 @@ export class WebviewContentGenerator {
             summary::before {
                 content: '▶ ';
                 display: inline;
-                font-size: 0.7em;
-                color: var(--vscode-icon-foreground);
-                opacity: 0.6;
+                font-size: 0.8em;
+                color: white;
+                opacity: 0.8;
                 transition: transform 0.15s ease;
-                margin-right: 0.2em;
+                margin-right: 0.5em;
+                margin-left: 0.3em;
             }
             
             summary:hover::before {
@@ -742,7 +743,7 @@ export class WebviewContentGenerator {
             <div id="format-container" class="mode-container" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                 <div id="input-panel">
                     <button id="maximize-input" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
                     </button>
@@ -751,7 +752,7 @@ export class WebviewContentGenerator {
                 <div id="splitter" title="Drag to resize panes or double-click to reset to 50/50"></div>
                 <div id="output-panel">
                     <button id="maximize-output" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
                     </button>
@@ -763,7 +764,7 @@ export class WebviewContentGenerator {
             <div id="diff-container" class="mode-container" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
                 <div id="left-json-panel">
                     <button id="maximize-left" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
                     </button>
@@ -771,7 +772,7 @@ export class WebviewContentGenerator {
                 </div>
                 <div id="diff-result-panel">
                     <button id="maximize-diff" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
                     </button>
@@ -779,7 +780,7 @@ export class WebviewContentGenerator {
                 </div>
                 <div id="right-json-panel">
                     <button id="maximize-right" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
                     </button>
