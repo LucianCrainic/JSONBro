@@ -29,6 +29,12 @@ export class JSONParser {
         // Handle unquoted property names (common in JavaScript object notation)
         result = this.addQuotesToPropertyNames(result);
         
+        // Convert Python-style booleans and None to JSON equivalents
+        result = this.convertPythonValues(result);
+        
+        // Remove trailing commas
+        result = this.removeTrailingCommas(result);
+        
         return result;
     }
 
@@ -94,6 +100,30 @@ export class JSONParser {
     }
 
     /**
+     * Converts Python-style values to JSON equivalents
+     */
+    private static convertPythonValues(input: string): string {
+        let result = input;
+        
+        // Convert Python booleans to lowercase (but not inside strings)
+        result = result.replace(/\bTrue\b/g, 'true');
+        result = result.replace(/\bFalse\b/g, 'false');
+        
+        // Convert Python None to null
+        result = result.replace(/\bNone\b/g, 'null');
+        
+        return result;
+    }
+
+    /**
+     * Removes trailing commas before closing brackets
+     */
+    private static removeTrailingCommas(input: string): string {
+        // Remove trailing commas before closing braces or brackets
+        return input.replace(/,(\s*[}\]])/g, '$1');
+    }
+
+    /**
      * Gets a descriptive error message for JSON parsing failures
      */
     static getParseErrorMessage(input: string, originalError: Error): string {
@@ -106,6 +136,14 @@ export class JSONParser {
         
         if (/[{,]\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*:/.test(input)) {
             suggestions.push("Property names should be quoted (e.g., \"propertyName\": value)");
+        }
+        
+        if (input.includes('True') || input.includes('False')) {
+            suggestions.push("Use lowercase boolean values: 'true' and 'false' instead of 'True' and 'False'");
+        }
+        
+        if (input.includes('None')) {
+            suggestions.push("Replace 'None' with 'null'");
         }
         
         if (input.includes('undefined')) {

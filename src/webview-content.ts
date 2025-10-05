@@ -13,11 +13,13 @@ export class WebviewContentGenerator {
     /**
      * Generates the complete HTML content for the webview
      */
-    public getWebviewContent(webview: vscode.Webview): string {
+    public getWebviewContent(webview: vscode.Webview, mode: 'format' | 'diff' = 'format'): string {
         const nonce = this.getNonce();
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'main.js')
         );
+
+        const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -25,11 +27,11 @@ export class WebviewContentGenerator {
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSONBro - Format JSON</title>
+    <title>${title}</title>
     ${this.getStyles()}
 </head>
-<body>
-    ${this.getBodyContent()}
+<body data-initial-mode="${mode}">
+    ${this.getBodyContent(mode)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -80,7 +82,7 @@ export class WebviewContentGenerator {
 
             #diff-container {
                 /* Three-pane layout for diff mode */
-                gap: 8px;
+                gap: 4px;
             }
 
             #input-panel {
@@ -89,6 +91,11 @@ export class WebviewContentGenerator {
                 width: 50%;
                 display: flex;
                 flex-direction: column;
+                position: relative;
+            }
+
+            #input-panel.panel-maximized {
+                max-width: none;
             }
 
             #output-panel {
@@ -96,11 +103,13 @@ export class WebviewContentGenerator {
                 min-width: 200px;
                 display: flex;
                 flex-direction: column;
+                position: relative;
             }
 
             #input, #output {
                 flex: 1;
                 padding: 16px;
+                padding-top: 40px;
                 border: 1px solid var(--vscode-editorGroup-border);
                 border-radius: 8px;
                 background-color: var(--vscode-editor-background);
@@ -109,6 +118,7 @@ export class WebviewContentGenerator {
                 font-size: 13px;
                 resize: none;
                 outline: none;
+                transition: all 0.2s ease;
             }
 
             #output {
@@ -125,6 +135,10 @@ export class WebviewContentGenerator {
                 justify-content: center;
                 position: relative;
                 margin: 0 4px;
+            }
+
+            #splitter.hidden {
+                display: none;
             }
 
             #splitter::before {
@@ -157,41 +171,64 @@ export class WebviewContentGenerator {
             }
 
             /* Diff Mode Styles */
-            #left-json-panel, #right-json-panel {
-                min-width: 200px;
-                max-width: 40%;
-                width: 30%;
-                display: flex;
-                flex-direction: column;
-            }
-
-            #diff-result-panel {
+            #left-json-panel, #right-json-panel, #diff-result-panel {
                 flex: 1;
                 min-width: 200px;
                 display: flex;
                 flex-direction: column;
+                transition: flex 0.3s ease;
+                position: relative;
+            }
+
+            /* Maximized panel states */
+            .panel-maximized {
+                flex: 1 !important;
+            }
+
+            .panel-minimized {
+                display: none !important;
             }
 
             .panel-header {
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-bottom: none;
-                border-radius: 8px 8px 0 0;
-                padding: 8px 12px;
+                display: none;
             }
 
-            .panel-header h3 {
-                margin: 0;
-                font-size: 12px;
-                font-weight: 600;
-                color: var(--vscode-editor-foreground);
+            .maximize-btn {
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                border: 1px solid var(--vscode-editorGroup-border);
+                color: var(--vscode-icon-foreground);
+                cursor: pointer;
+                padding: 8px;
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0.6;
+                transition: all 0.2s ease;
+                z-index: 100;
+                width: 32px;
+                height: 32px;
+                pointer-events: auto;
+            }
+
+            .maximize-btn:hover {
+                background-color: var(--vscode-toolbar-hoverBackground);
+                opacity: 1;
+            }
+
+            .maximize-btn:active {
+                background-color: var(--vscode-toolbar-activeBackground);
             }
 
             #left-json, #right-json {
                 flex: 1;
                 padding: 16px;
+                padding-top: 40px;
                 border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 0 0 8px 8px;
+                border-radius: 8px;
                 background-color: var(--vscode-editor-background);
                 color: var(--vscode-editor-foreground);
                 font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -202,9 +239,10 @@ export class WebviewContentGenerator {
 
             #diff-output {
                 flex: 1;
-                padding: 0;
+                padding: 12px;
+                padding-top: 40px;
                 border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 0 0 8px 8px;
+                border-radius: 8px;
                 background-color: var(--vscode-editor-background);
                 color: var(--vscode-editor-foreground);
                 font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -217,30 +255,7 @@ export class WebviewContentGenerator {
                 margin-top: 0;
             }
 
-            .diff-splitter {
-                width: 6px;
-                background-color: transparent;
-                cursor: col-resize;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                position: relative;
-            }
 
-            .diff-splitter::before {
-                content: '';
-                width: 1px;
-                height: 40px;
-                background-color: var(--vscode-editorGroup-border);
-                border-radius: 1px;
-                opacity: 0.5;
-                transition: opacity 0.2s ease;
-            }
-
-            .diff-splitter:hover::before, .diff-splitter.dragging::before {
-                opacity: 1;
-                background-color: var(--vscode-focusBorder);
-            }
 
             /* Diff Result Styles */
             .diff-result {
@@ -273,18 +288,18 @@ export class WebviewContentGenerator {
             }
 
             .diff-item {
-                margin-bottom: 1px;
-                padding: 2px 8px;
+                margin-bottom: 0;
+                padding: 1px 6px;
                 border-radius: 2px;
                 border-left: 2px solid;
                 display: flex;
                 align-items: center;
                 flex-wrap: wrap;
-                gap: 3px;
+                gap: 2px;
             }
 
             .diff-item:first-child {
-                padding-top: 4px;
+                padding-top: 1px;
             }
 
             .diff-item.diff-modified {
@@ -327,7 +342,7 @@ export class WebviewContentGenerator {
 
             .diff-path {
                 font-weight: 600;
-                margin-bottom: 2px;
+                margin-bottom: 0;
                 font-size: 10px;
                 opacity: 0.9;
                 color: var(--vscode-descriptionForeground);
@@ -359,7 +374,7 @@ export class WebviewContentGenerator {
             }
 
             .diff-inline-change {
-                margin-top: 1px;
+                margin-top: 0;
                 display: flex;
                 align-items: center;
                 gap: 4px;
@@ -506,111 +521,107 @@ export class WebviewContentGenerator {
             .number { color: var(--vscode-debugTokenExpression-number); }
             .boolean { color: var(--vscode-debugTokenExpression-boolean); }
             .null { color: var(--vscode-debugTokenExpression-name); }
-            .key { color: var(--vscode-debugTokenExpression-name); font-weight: bold; }
+            .key { 
+                color: var(--vscode-debugTokenExpression-name); 
+                font-weight: bold;
+            }
+            .bracket, .brace { color: var(--vscode-editor-foreground); }
+            
+            .json-array, .json-object {
+                display: inline;
+            }
 
             details {
-                margin-left: 1em;
+                display: inline;
+                margin: 0;
             }
 
             summary {
                 cursor: pointer;
                 user-select: none;
+                display: inline;
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+            
+            summary::-webkit-details-marker {
+                display: none;
+            }
+            
+            summary::before {
+                content: '▶ ';
+                display: inline;
+                font-size: 0.8em;
+                color: white;
+                opacity: 0.8;
+                transition: transform 0.15s ease;
+                margin-right: 0.5em;
+                margin-left: 0.3em;
+            }
+            
+            summary:hover::before {
+                opacity: 1;
+            }
+            
+            details[open] > summary::before {
+                content: '▼ ';
+            }
+            
+            details:not([open]) > summary::after {
+                content: ' ...';
+                opacity: 0.5;
+                color: var(--vscode-descriptionForeground);
             }
 
             ul {
                 list-style: none;
-                padding-left: 1em;
+                list-style-type: none;
+                padding-left: 1.5em;
                 margin: 0;
+                display: block;
             }
 
             li {
-                margin: 2px 0;
-            }
-
-            /* History Panel */
-            #history-backdrop {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0, 0, 0, 0.5);
-                z-index: 1000;
-                display: none;
-            }
-
-            #history-panel {
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                width: 80%;
-                max-width: 600px;
-                height: 60%;
-                background-color: var(--vscode-editor-background);
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 4px;
-                display: none;
-                flex-direction: column;
-                z-index: 1001;
-            }
-
-            #history-header {
-                padding: 12px;
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                border-bottom: 1px solid var(--vscode-editorGroup-border);
-                font-weight: bold;
-            }
-
-            #history-content {
-                flex: 1;
-                overflow-y: auto;
-                padding: 8px;
-            }
-
-            .history-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 8px;
-                border-bottom: 1px solid var(--vscode-editorGroup-border);
-            }
-
-            .history-item pre {
-                flex: 1;
+                display: block;
                 margin: 0;
-                font-size: 11px;
-                color: var(--vscode-descriptionForeground);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                padding: 0;
+                list-style: none;
+                list-style-type: none;
+            }
+            
+            li::before {
+                content: none;
+                display: none;
+            }
+            
+            li::marker {
+                content: none;
+                display: none;
+            }
+            
+            /* Add commas after items except the last one */
+            li:not(:last-child)::after {
+                content: ',';
             }
 
-            .history-actions {
-                display: flex;
-                gap: 4px;
-                margin-left: 8px;
+            .json-items {
+                display: block;
+                padding-left: 1.5em;
+                margin: 0;
             }
 
-            .history-actions button {
-                padding: 4px;
-                min-width: auto;
+            .json-line {
+                display: block;
+                margin: 0;
+                padding: 0;
             }
 
-            /* Diff History Styles */
-            .diff-history-item .diff-preview {
-                flex: 1;
-                font-size: 11px;
+            .comma {
+                color: var(--vscode-editor-foreground);
             }
 
-            .diff-preview-header {
-                font-size: 10px;
-                color: var(--vscode-descriptionForeground);
-                margin-bottom: 4px;
-            }
-
-            .diff-preview-content {
-                display: flex;
+            /* Search Styles */
                 flex-direction: column;
                 gap: 2px;
             }
@@ -645,19 +656,19 @@ export class WebviewContentGenerator {
         </style>`;
     }
 
-    private getBodyContent(): string {
+    private getBodyContent(mode: 'format' | 'diff' = 'format'): string {
         return `
             <div id="toolbar">
                 <div id="toolbar-left">
                     <div id="mode-switcher">
-                        <button id="format-mode" class="mode-btn active" title="Format JSON">
+                        <button id="format-mode" class="mode-btn ${mode === 'format' ? 'active' : ''}" title="Format JSON">
                             <svg class="icon" viewBox="0 0 24 24">
                                 <polyline points="16,18 22,12 16,6"></polyline>
                                 <polyline points="8,6 2,12 8,18"></polyline>
                             </svg>
                             Format
                         </button>
-                        <button id="diff-mode" class="mode-btn" title="Compare JSON">
+                        <button id="diff-mode" class="mode-btn ${mode === 'diff' ? 'active' : ''}" title="Compare JSON">
                             <svg class="icon" viewBox="0 0 24 24">
                                 <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
                                 <path d="M9 12h6"></path>
@@ -666,12 +677,14 @@ export class WebviewContentGenerator {
                             Diff
                         </button>
                     </div>
-                    <button id="action-btn" title="Format JSON">
+                    <button id="action-btn" title="${mode === 'format' ? 'Format JSON' : 'Compare JSON'}">
                         <svg class="icon" viewBox="0 0 24 24">
-                            <polyline points="16,18 22,12 16,6"></polyline>
-                            <polyline points="8,6 2,12 8,18"></polyline>
+                            ${mode === 'format' 
+                                ? '<polyline points="16,18 22,12 16,6"></polyline><polyline points="8,6 2,12 8,18"></polyline>'
+                                : '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M9 12h6"></path><path d="M12 9v6"></path>'
+                            }
                         </svg>
-                        <span id="action-text">Format</span>
+                        <span id="action-text">${mode === 'format' ? 'Format' : 'Compare'}</span>
                     </button>
                 </div>
                 <div id="toolbar-center">
@@ -695,19 +708,27 @@ export class WebviewContentGenerator {
                             </svg>
                         </button>
                     </div>
-                    <button id="search-toggle" title="Search in formatted JSON">
+                    <button id="search-toggle" title="Search in formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                         <svg class="icon" viewBox="0 0 24 24">
                             <circle cx="11" cy="11" r="8"></circle>
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
                         Search
                     </button>
-                    <button id="copy" title="Copy formatted JSON">
+                    <button id="copy" title="Copy formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                         <svg class="icon" viewBox="0 0 24 24">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="m5,15H4a2,2 0 0,1 -2,-2V4a2,2 0 0,1 2,-2H13a2,2 0 0,1 2,2v1"></path>
                         </svg>
                         Copy
+                    </button>
+                    <button id="save" title="Save formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="m19,21H5a2,2 0 0,1 -2,-2V5a2,2 0 0,1 2,-2H14l5,5v11a2,2 0 0,1 -2,2z"></path>
+                            <polyline points="17,21 17,13 7,13 7,21"></polyline>
+                            <polyline points="7,3 7,8 15,8"></polyline>
+                        </svg>
+                        Save
                     </button>
                     <button id="clear" title="Clear input">
                         <svg class="icon" viewBox="0 0 24 24">
@@ -716,53 +737,54 @@ export class WebviewContentGenerator {
                         </svg>
                         Clear
                     </button>
-                    <button id="history" title="Show history">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12,6 12,12 16,14"></polyline>
-                        </svg>
-                        History
-                    </button>
                 </div>
             </div>
             <!-- Format Mode Container -->
-            <div id="format-container" class="mode-container">
+            <div id="format-container" class="mode-container" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                 <div id="input-panel">
+                    <button id="maximize-input" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <textarea id="input" placeholder="Enter your JSON here..."></textarea>
                 </div>
                 <div id="splitter" title="Drag to resize panes or double-click to reset to 50/50"></div>
                 <div id="output-panel">
+                    <button id="maximize-output" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <div id="output"></div>
                 </div>
             </div>
 
             <!-- Diff Mode Container -->
-            <div id="diff-container" class="mode-container" style="display: none;">
+            <div id="diff-container" class="mode-container" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
                 <div id="left-json-panel">
-                    <div class="panel-header">
-                        <h3>Original JSON</h3>
-                    </div>
+                    <button id="maximize-left" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <textarea id="left-json" placeholder="Enter original JSON here..."></textarea>
                 </div>
-                <div id="diff-splitter-left" class="diff-splitter" title="Drag to resize"></div>
                 <div id="diff-result-panel">
-                    <div class="panel-header">
-                        <h3>Differences</h3>
-                    </div>
+                    <button id="maximize-diff" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <div id="diff-output"></div>
                 </div>
-                <div id="diff-splitter-right" class="diff-splitter" title="Drag to resize"></div>
                 <div id="right-json-panel">
-                    <div class="panel-header">
-                        <h3>Modified JSON</h3>
-                    </div>
+                    <button id="maximize-right" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="18" height="18">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <textarea id="right-json" placeholder="Enter modified JSON here..."></textarea>
-                </div>
-            </div>
-            <div id="history-backdrop">
-                <div id="history-panel">
-                    <div id="history-header">JSON History</div>
-                    <div id="history-content"></div>
                 </div>
             </div>
         `;

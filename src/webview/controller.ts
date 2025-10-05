@@ -1,144 +1,53 @@
 import { JSONFormatter } from './formatter';
 import { JSONDiff } from './diff';
 import { JSONSearch } from './search';
+import { JSONParser } from './json-parser';
+
+// VS Code API declaration
+declare function acquireVsCodeApi(): any;
 
 /**
  * Main webview controller that handles JSON formatting functionality
  */
-interface DiffHistoryEntry {
-    leftJson: string;
-    rightJson: string;
-    timestamp: number;
-}
-
 export class WebviewController {
-    private formatHistory: string[] = [];
-    private diffHistory: DiffHistoryEntry[] = [];
     private currentJsonObject: any = null;
     private jsonSearch: JSONSearch = new JSONSearch();
     private currentMode: 'format' | 'diff' = 'format';
+    private vscode: any;
+    private isLoadingFromHistory: boolean = false;
 
     /**
      * Initializes the webview controller
      */
     public initialize(): void {
+        // Acquire VS Code API once during initialization
+        if (typeof acquireVsCodeApi !== 'undefined') {
+            this.vscode = acquireVsCodeApi();
+        }
+        
         this.setupEventListeners();
         this.setupSplitter();
+    }
+
+    /**
+     * Sets the initial mode based on the command that opened the webview
+     */
+    public setInitialMode(mode: 'format' | 'diff'): void {
+        this.currentMode = mode;
+        // The UI is already set correctly via the HTML template based on mode
+        // Just need to update any JavaScript state if necessary
+        if (mode === 'diff') {
+            this.setupDiffMaximize();
+        } else if (mode === 'format') {
+            this.setupFormatMaximize();
+        }
     }
 
     /**
      * Attempts to parse JSON with support for single quotes and other common variations
      */
     private parseFlexibleJson(input: string): any {
-        // First, try standard JSON parsing
-        try {
-            return JSON.parse(input);
-        } catch (error) {
-            // If that fails, try to fix common issues and parse again
-            const normalizedInput = this.normalizeJsonString(input);
-            return JSON.parse(normalizedInput);
-        }
-    }
-
-    /**
-     * Normalizes a JSON-like string to valid JSON format
-     */
-    private normalizeJsonString(input: string): string {
-        let result = input.trim();
-        
-        // Convert single quotes to double quotes for property names and string values
-        result = this.convertSingleQuotesToDouble(result);
-        
-        // Handle unquoted property names (common in JavaScript object notation)
-        result = this.addQuotesToPropertyNames(result);
-        
-        return result;
-    }
-
-    /**
-     * Converts single quotes to double quotes while preserving quotes inside strings
-     */
-    private convertSingleQuotesToDouble(input: string): string {
-        let result = '';
-        let inDoubleQuotes = false;
-        let inSingleQuotes = false;
-        let escaped = false;
-
-        for (let i = 0; i < input.length; i++) {
-            const char = input[i];
-
-            if (escaped) {
-                result += char;
-                escaped = false;
-                continue;
-            }
-
-            if (char === '\\') {
-                escaped = true;
-                result += char;
-                continue;
-            }
-
-            if (char === '"' && !inSingleQuotes) {
-                inDoubleQuotes = !inDoubleQuotes;
-                result += char;
-            } else if (char === "'" && !inDoubleQuotes) {
-                if (!inSingleQuotes) {
-                    // Starting a single-quoted string, convert to double quote
-                    inSingleQuotes = true;
-                    result += '"';
-                } else {
-                    // Ending a single-quoted string, convert to double quote
-                    inSingleQuotes = false;
-                    result += '"';
-                }
-            } else {
-                result += char;
-            }
-        }
-
-        return result;
-    }
-
-    /**
-     * Adds quotes to unquoted property names
-     */
-    private addQuotesToPropertyNames(input: string): string {
-        // This regex matches unquoted property names in object notation
-        // It looks for word characters followed by a colon, not already in quotes
-        return input.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
-    }
-
-    /**
-     * Gets a descriptive error message for JSON parsing failures
-     */
-    private getParseErrorMessage(input: string, originalError: Error): string {
-        const suggestions: string[] = [];
-        
-        // Check for common issues
-        if (input.includes("'")) {
-            suggestions.push("Try using double quotes (\") instead of single quotes (')");
-        }
-        
-        if (/[{,]\s*[a-zA-Z_$][a-zA-Z0-9_$]*\s*:/.test(input)) {
-            suggestions.push("Property names should be quoted (e.g., \"propertyName\": value)");
-        }
-        
-        if (input.includes('undefined')) {
-            suggestions.push("Replace 'undefined' with 'null' or remove the property");
-        }
-        
-        if (/,\s*[}\]]/.test(input)) {
-            suggestions.push("Remove trailing commas before closing brackets");
-        }
-
-        let message = `Invalid JSON: ${originalError.message}`;
-        
-        if (suggestions.length > 0) {
-            message += '\n\nSuggestions:\n• ' + suggestions.join('\n• ');
-        }
-        
-        return message;
+        return JSONParser.parseFlexible(input);
     }
 
     private setupEventListeners(): void {
@@ -149,8 +58,8 @@ export class WebviewController {
         
         // Other controls
         const clearBtn = document.getElementById('clear');
-        const historyBtn = document.getElementById('history');
         const copyBtn = document.getElementById('copy');
+        const saveBtn = document.getElementById('save');
         const searchToggleBtn = document.getElementById('search-toggle');
 
         if (formatModeBtn) {
@@ -175,12 +84,12 @@ export class WebviewController {
             clearBtn.addEventListener('click', () => this.clearInput());
         }
 
-        if (historyBtn) {
-            historyBtn.addEventListener('click', () => this.toggleHistory());
-        }
-
         if (copyBtn) {
             copyBtn.addEventListener('click', () => this.copyToClipboard());
+        }
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => this.saveFormattedJson());
         }
 
         if (searchToggleBtn) {
@@ -192,6 +101,12 @@ export class WebviewController {
 
         // Global keyboard shortcuts
         this.setupGlobalKeyboardShortcuts();
+
+        // Listen for messages from the extension
+        this.setupMessageHandling();
+        
+        // Custom copy handler for formatted output
+        this.setupCopyHandler();
     }
 
     private formatJson(): void {
@@ -208,25 +123,81 @@ export class WebviewController {
             return;
         }
 
-        // Add to history
-        this.formatHistory.unshift(input);
-        if (this.formatHistory.length > 50) {
-            this.formatHistory = this.formatHistory.slice(0, 50); // Keep only last 50 items
-        }
-
         try {
             const parsedJson = this.parseFlexibleJson(input);
             this.currentJsonObject = parsedJson;
             output.style.color = 'inherit';
             output.innerHTML = JSONFormatter.renderJson(parsedJson);
-            this.updateHistoryPanel(inputEl, output);
+            
+            // Only send message to extension to add to history if not loading from history
+            if (!this.isLoadingFromHistory) {
+                this.postMessage({
+                    command: 'addFormatHistory',
+                    json: input
+                });
+            }
         } catch (error) {
             this.currentJsonObject = null;
             output.style.color = 'var(--vscode-errorForeground)';
             const errorMessage = error instanceof Error 
-                ? this.getParseErrorMessage(input, error)
+                ? JSONParser.getParseErrorMessage(input, error)
                 : 'Unknown parsing error';
             output.textContent = errorMessage;
+        }
+    }
+
+    /**
+     * Sends a message to the VS Code extension
+     */
+    private postMessage(message: any): void {
+        if (this.vscode) {
+            this.vscode.postMessage(message);
+        }
+    }
+
+    /**
+     * Sets up message handling from the extension
+     */
+    private setupMessageHandling(): void {
+        window.addEventListener('message', event => {
+            const message = event.data;
+            switch (message.command) {
+                case 'loadJson':
+                    this.loadJsonContent(message.json);
+                    break;
+                case 'loadDiff':
+                    this.loadDiffContent(message.leftJson, message.rightJson);
+                    break;
+            }
+        });
+    }
+
+    /**
+     * Loads JSON content into the format panel
+     */
+    private loadJsonContent(json: string): void {
+        const inputEl = document.getElementById('input') as HTMLTextAreaElement;
+        if (inputEl) {
+            this.isLoadingFromHistory = true;
+            inputEl.value = json;
+            this.formatJson();
+            this.isLoadingFromHistory = false;
+        }
+    }
+
+    /**
+     * Loads JSON content into the diff panel
+     */
+    private loadDiffContent(leftJson: string, rightJson: string): void {
+        const leftInput = document.getElementById('left-json') as HTMLTextAreaElement;
+        const rightInput = document.getElementById('right-json') as HTMLTextAreaElement;
+        
+        if (leftInput && rightInput) {
+            this.isLoadingFromHistory = true;
+            leftInput.value = leftJson;
+            rightInput.value = rightJson;
+            this.compareJson();
+            this.isLoadingFromHistory = false;
         }
     }
 
@@ -242,37 +213,12 @@ export class WebviewController {
             const rightJsonEl = document.getElementById('right-json') as HTMLTextAreaElement;
             const diffOutput = document.getElementById('diff-output');
             
-            // Save to diff history if both inputs have content
-            if (leftJsonEl && rightJsonEl && leftJsonEl.value.trim() && rightJsonEl.value.trim()) {
-                this.diffHistory.unshift({
-                    leftJson: leftJsonEl.value.trim(),
-                    rightJson: rightJsonEl.value.trim(),
-                    timestamp: Date.now()
-                });
-                if (this.diffHistory.length > 50) {
-                    this.diffHistory = this.diffHistory.slice(0, 50);
-                }
-                // Update the history panel to show the new entry
-                this.updateHistoryPanel();
-            }
-            
             if (leftJsonEl) leftJsonEl.value = '';
             if (rightJsonEl) rightJsonEl.value = '';
             if (diffOutput) diffOutput.innerHTML = '';
         }
         
         this.currentJsonObject = null;
-    }
-
-    private toggleHistory(): void {
-        const backdrop = document.getElementById('history-backdrop');
-        const panel = document.getElementById('history-panel');
-        
-        if (backdrop && panel) {
-            const isVisible = backdrop.style.display === 'block';
-            backdrop.style.display = isVisible ? 'none' : 'block';
-            panel.style.display = isVisible ? 'none' : 'block';
-        }
     }
 
     private copyToClipboard(): void {
@@ -298,136 +244,51 @@ export class WebviewController {
         }
     }
 
-    private updateHistoryPanel(inputEl?: HTMLTextAreaElement, output?: HTMLElement): void {
-        const panel = document.getElementById('history-content');
-        if (!panel) {
-            return;
-        }
-
-        if (this.currentMode === 'format') {
-            this.updateFormatHistoryPanel(panel, inputEl!, output!);
+    private saveFormattedJson(): void {
+        if (this.currentJsonObject) {
+            const formatted = JSON.stringify(this.currentJsonObject, null, 2);
+            // Send message to extension to show save dialog
+            this.postMessage({
+                command: 'saveFormattedJson',
+                content: formatted
+            });
         } else {
-            this.updateDiffHistoryPanel(panel);
+            // If no parsed JSON object, try to get the formatted output directly
+            const output = document.getElementById('output');
+            if (output && output.textContent && output.textContent.trim()) {
+                // Extract the JSON text from the formatted output
+                const jsonText = this.extractJsonFromFormattedOutput(output);
+                if (jsonText) {
+                    // Send message to extension to show save dialog
+                    this.postMessage({
+                        command: 'saveFormattedJson',
+                        content: jsonText
+                    });
+                }
+            }
         }
     }
 
-    private updateFormatHistoryPanel(panel: HTMLElement, inputEl: HTMLTextAreaElement, output: HTMLElement): void {
-        panel.innerHTML = this.formatHistory
-            .map((h: string, idx: number) => {
-                const preview = JSONFormatter.escapeHtml(h).slice(0, 100);
-                return `
-                    <div class="history-item">
-                        <pre>${preview}</pre>
-                        <div class="history-actions">
-                            <button class="show-btn" data-index="${idx}" title="Show">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                            </button>
-                            <button class="remove-btn" data-index="${idx}" title="Remove">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <polyline points="3,6 5,6 21,6"></polyline>
-                                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            })
-            .join('');
-
-        // Attach event listeners to format history buttons
-        panel.querySelectorAll('button.show-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.getAttribute('data-index') || '0', 10);
-                const value = this.formatHistory[index];
-                inputEl.value = value;
-                
-                try {
-                    const obj = this.parseFlexibleJson(value);
-                    this.currentJsonObject = obj;
-                    output.style.color = 'inherit';
-                    output.innerHTML = JSONFormatter.renderJson(obj);
-                } catch (err) {
-                    this.currentJsonObject = null;
-                    output.style.color = 'var(--vscode-errorForeground)';
-                    const errorMessage = err instanceof Error 
-                        ? this.getParseErrorMessage(value, err)
-                        : 'Unknown parsing error';
-                    output.textContent = errorMessage;
-                }
-            });
-        });
-
-        panel.querySelectorAll('button.remove-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.getAttribute('data-index') || '0', 10);
-                this.formatHistory.splice(index, 1);
-                this.updateHistoryPanel(inputEl, output);
-            });
-        });
-    }
-
-    private updateDiffHistoryPanel(panel: HTMLElement): void {
-        panel.innerHTML = this.diffHistory
-            .map((entry: DiffHistoryEntry, idx: number) => {
-                const leftPreview = JSONFormatter.escapeHtml(entry.leftJson).slice(0, 50);
-                const rightPreview = JSONFormatter.escapeHtml(entry.rightJson).slice(0, 50);
-                const date = new Date(entry.timestamp).toLocaleString();
-                return `
-                    <div class="history-item diff-history-item">
-                        <div class="diff-preview">
-                            <div class="diff-preview-header">${date}</div>
-                            <div class="diff-preview-content">
-                                <div class="left-preview">L: ${leftPreview}${entry.leftJson.length > 50 ? '...' : ''}</div>
-                                <div class="right-preview">R: ${rightPreview}${entry.rightJson.length > 50 ? '...' : ''}</div>
-                            </div>
-                        </div>
-                        <div class="history-actions">
-                            <button class="show-btn" data-index="${idx}" title="Show">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                            </button>
-                            <button class="remove-btn" data-index="${idx}" title="Remove">
-                                <svg class="icon" viewBox="0 0 24 24">
-                                    <polyline points="3,6 5,6 21,6"></polyline>
-                                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            })
-            .join('');
-
-        // Attach event listeners to diff history buttons
-        panel.querySelectorAll('button.show-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.getAttribute('data-index') || '0', 10);
-                const entry = this.diffHistory[index];
-                
-                const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
-                const rightJsonEl = document.getElementById('right-json') as HTMLTextAreaElement;
-                
-                if (leftJsonEl && rightJsonEl) {
-                    leftJsonEl.value = entry.leftJson;
-                    rightJsonEl.value = entry.rightJson;
-                    // Automatically run the comparison
-                    this.compareJson();
-                }
-            });
-        });
-
-        panel.querySelectorAll('button.remove-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.getAttribute('data-index') || '0', 10);
-                this.diffHistory.splice(index, 1);
-                this.updateHistoryPanel();
-            });
-        });
+    private extractJsonFromFormattedOutput(outputElement: HTMLElement): string | null {
+        try {
+            // If currentJsonObject exists, use it
+            if (this.currentJsonObject) {
+                return JSON.stringify(this.currentJsonObject, null, 2);
+            }
+            
+            // Otherwise, try to extract from the HTML content
+            const textContent = outputElement.textContent || '';
+            if (textContent.trim()) {
+                // Try to parse it to validate it's valid JSON
+                const parsed = JSON.parse(textContent);
+                return JSON.stringify(parsed, null, 2);
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Failed to extract JSON from output:', error);
+            return null;
+        }
     }
 
     private setupSearchEventListeners(): void {
@@ -588,7 +449,7 @@ export class WebviewController {
 
     private setupSplitter(): void {
         const splitter = document.getElementById('splitter');
-        const container = document.getElementById('container');
+        const container = document.getElementById('format-container');
         const inputPanel = document.getElementById('input-panel');
         const outputPanel = document.getElementById('output-panel');
 
@@ -629,10 +490,19 @@ export class WebviewController {
             
             newInputWidth = Math.max(minWidth, Math.min(newInputWidth, maxWidth));
             
-            // Calculate percentage for input panel
-            const inputWidthPercent = (newInputWidth / availableWidth) * 100;
+            // Calculate the remaining width for output panel
+            const newOutputWidth = availableWidth - newInputWidth;
             
-            inputPanel.style.width = `${inputWidthPercent}%`;
+            // Set both widths explicitly to override flex behavior
+            inputPanel.style.width = `${newInputWidth}px`;
+            inputPanel.style.flexBasis = `${newInputWidth}px`;
+            inputPanel.style.flexGrow = '0';
+            inputPanel.style.flexShrink = '0';
+            
+            outputPanel.style.width = `${newOutputWidth}px`;
+            outputPanel.style.flexBasis = `${newOutputWidth}px`;
+            outputPanel.style.flexGrow = '0';
+            outputPanel.style.flexShrink = '0';
             
             e.preventDefault();
         };
@@ -648,7 +518,21 @@ export class WebviewController {
 
         // Double-click to reset to 50/50
         const onDoubleClick = () => {
-            inputPanel.style.width = '50%';
+            const containerWidth = container.offsetWidth;
+            const splitterWidth = splitter.offsetWidth;
+            const padding = 32;
+            const availableWidth = containerWidth - splitterWidth - padding;
+            const halfWidth = availableWidth / 2;
+            
+            inputPanel.style.width = `${halfWidth}px`;
+            inputPanel.style.flexBasis = `${halfWidth}px`;
+            inputPanel.style.flexGrow = '0';
+            inputPanel.style.flexShrink = '0';
+            
+            outputPanel.style.width = `${halfWidth}px`;
+            outputPanel.style.flexBasis = `${halfWidth}px`;
+            outputPanel.style.flexGrow = '0';
+            outputPanel.style.flexShrink = '0';
         };
 
         // Splitter events
@@ -665,21 +549,61 @@ export class WebviewController {
         // Keyboard shortcuts for splitter adjustment (format mode only)
         document.addEventListener('keydown', (e) => {
             if (this.currentMode === 'format') {
+                const containerWidth = container.offsetWidth;
+                const splitterWidth = splitter.offsetWidth;
+                const padding = 32;
+                const availableWidth = containerWidth - splitterWidth - padding;
+                
                 // Ctrl/Cmd + 1: Focus input and set to wider view (70/30)
                 if ((e.ctrlKey || e.metaKey) && e.key === '1') {
-                    inputPanel.style.width = '70%';
+                    const inputWidth = availableWidth * 0.7;
+                    const outputWidth = availableWidth * 0.3;
+                    
+                    inputPanel.style.width = `${inputWidth}px`;
+                    inputPanel.style.flexBasis = `${inputWidth}px`;
+                    inputPanel.style.flexGrow = '0';
+                    inputPanel.style.flexShrink = '0';
+                    
+                    outputPanel.style.width = `${outputWidth}px`;
+                    outputPanel.style.flexBasis = `${outputWidth}px`;
+                    outputPanel.style.flexGrow = '0';
+                    outputPanel.style.flexShrink = '0';
+                    
                     const input = document.getElementById('input') as HTMLTextAreaElement;
                     if (input) input.focus();
                     e.preventDefault();
                 }
                 // Ctrl/Cmd + 2: Focus output and set to wider view (30/70)
                 else if ((e.ctrlKey || e.metaKey) && e.key === '2') {
-                    inputPanel.style.width = '30%';
+                    const inputWidth = availableWidth * 0.3;
+                    const outputWidth = availableWidth * 0.7;
+                    
+                    inputPanel.style.width = `${inputWidth}px`;
+                    inputPanel.style.flexBasis = `${inputWidth}px`;
+                    inputPanel.style.flexGrow = '0';
+                    inputPanel.style.flexShrink = '0';
+                    
+                    outputPanel.style.width = `${outputWidth}px`;
+                    outputPanel.style.flexBasis = `${outputWidth}px`;
+                    outputPanel.style.flexGrow = '0';
+                    outputPanel.style.flexShrink = '0';
+                    
                     e.preventDefault();
                 }
                 // Ctrl/Cmd + 0: Reset to equal view (50/50)
                 else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
-                    inputPanel.style.width = '50%';
+                    const halfWidth = availableWidth / 2;
+                    
+                    inputPanel.style.width = `${halfWidth}px`;
+                    inputPanel.style.flexBasis = `${halfWidth}px`;
+                    inputPanel.style.flexGrow = '0';
+                    inputPanel.style.flexShrink = '0';
+                    
+                    outputPanel.style.width = `${halfWidth}px`;
+                    outputPanel.style.flexBasis = `${halfWidth}px`;
+                    outputPanel.style.flexGrow = '0';
+                    outputPanel.style.flexShrink = '0';
+                    
                     e.preventDefault();
                 }
             }
@@ -748,9 +672,11 @@ export class WebviewController {
             }
         }
 
-        // Setup splitters for diff mode
+        // Setup maximize functionality based on mode
         if (mode === 'diff') {
-            this.setupDiffSplitters();
+            this.setupDiffMaximize();
+        } else if (mode === 'format') {
+            this.setupFormatMaximize();
         }
     }
 
@@ -786,6 +712,15 @@ export class WebviewController {
             diffOutput.style.color = 'inherit';
             diffOutput.innerHTML = JSONDiff.renderJsonDiff(leftParsed, rightParsed);
             
+            // Only send message to extension to add to history if not loading from history
+            if (!this.isLoadingFromHistory) {
+                this.postMessage({
+                    command: 'addDiffHistory',
+                    leftJson: leftJson,
+                    rightJson: rightJson
+                });
+            }
+            
             // Setup expandable value handlers
             this.setupExpandableValues(diffOutput);
         } catch (error) {
@@ -795,76 +730,155 @@ export class WebviewController {
         }
     }
 
-    private setupDiffSplitters(): void {
-        this.setupDiffSplitter('diff-splitter-left', 'left-json-panel', 'diff-result-panel');
-        this.setupDiffSplitter('diff-splitter-right', 'diff-result-panel', 'right-json-panel');
+    private setupDiffMaximize(): void {
+        // Setup maximize functionality for all three diff panels
+        this.setupMaximizeButton('maximize-left', 'left-json-panel');
+        this.setupMaximizeButton('maximize-diff', 'diff-result-panel');
+        this.setupMaximizeButton('maximize-right', 'right-json-panel');
     }
 
-    private setupDiffSplitter(splitterId: string, leftPanelId: string, rightPanelId: string): void {
-        const splitter = document.getElementById(splitterId);
-        const leftPanel = document.getElementById(leftPanelId);
-        const rightPanel = document.getElementById(rightPanelId);
-        const container = document.getElementById('diff-container');
+    private setupFormatMaximize(): void {
+        // Setup maximize functionality for format mode panels
+        this.setupMaximizeButton('maximize-input', 'input-panel');
+        this.setupMaximizeButton('maximize-output', 'output-panel');
+    }
 
-        if (!splitter || !leftPanel || !rightPanel || !container) {
+    private currentMaximizedPanel: string | null = null;
+
+    private setupMaximizeButton(buttonId: string, panelId: string): void {
+        const button = document.getElementById(buttonId);
+        const panel = document.getElementById(panelId);
+
+        if (!button || !panel) {
             return;
         }
 
-        let isDragging = false;
-        let startX = 0;
-        let startLeftWidth = 0;
-
-        const onMouseDown = (e: MouseEvent) => {
-            isDragging = true;
-            startX = e.clientX;
-            startLeftWidth = leftPanel.offsetWidth;
-            
-            splitter.classList.add('dragging');
-            document.body.classList.add('dragging');
-            document.body.style.userSelect = 'none';
-            
-            e.preventDefault();
-        };
-
-        const onMouseMove = (e: MouseEvent) => {
-            if (!isDragging) return;
-
-            const deltaX = e.clientX - startX;
-            const containerWidth = container.offsetWidth;
-            const allSplitters = container.querySelectorAll('.diff-splitter');
-            const splitterWidth = Array.from(allSplitters).reduce((sum, s) => sum + s.clientWidth, 0);
-            const padding = 32;
-            const availableWidth = containerWidth - splitterWidth - padding;
-            
-            let newLeftWidth = startLeftWidth + deltaX;
-            
-            // Apply constraints
-            const minWidth = 200;
-            const maxWidth = availableWidth - minWidth * 2;
-            
-            newLeftWidth = Math.max(minWidth, Math.min(newLeftWidth, maxWidth));
-            
-            const leftWidthPercent = (newLeftWidth / availableWidth) * 100;
-            
-            leftPanel.style.width = `${leftWidthPercent}%`;
-            
-            e.preventDefault();
-        };
-
-        const onMouseUp = () => {
-            if (!isDragging) return;
-            
-            isDragging = false;
-            splitter.classList.remove('dragging');
-            document.body.classList.remove('dragging');
-            document.body.style.userSelect = '';
-        };
-
-        splitter.addEventListener('mousedown', onMouseDown);
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        splitter.addEventListener('selectstart', (e) => e.preventDefault());
+        button.addEventListener('click', () => {
+            this.toggleMaximizePanel(panelId);
+        });
     }
+
+    private toggleMaximizePanel(panelId: string): void {
+        // Get panels based on current mode
+        let allPanels: HTMLElement[] = [];
+        
+        if (this.currentMode === 'diff') {
+            const leftPanel = document.getElementById('left-json-panel');
+            const diffPanel = document.getElementById('diff-result-panel');
+            const rightPanel = document.getElementById('right-json-panel');
+            if (leftPanel && diffPanel && rightPanel) {
+                allPanels = [leftPanel, diffPanel, rightPanel];
+            }
+        } else if (this.currentMode === 'format') {
+            const inputPanel = document.getElementById('input-panel');
+            const outputPanel = document.getElementById('output-panel');
+            if (inputPanel && outputPanel) {
+                allPanels = [inputPanel, outputPanel];
+            }
+        }
+
+        if (allPanels.length === 0) {
+            return;
+        }
+
+        const targetPanel = document.getElementById(panelId);
+        const splitter = document.getElementById('splitter');
+
+        if (this.currentMaximizedPanel === panelId) {
+            // Already maximized, restore to equal sizes
+            allPanels.forEach(panel => {
+                panel.classList.remove('panel-maximized', 'panel-minimized');
+                // Clear inline styles for format mode panels
+                if (this.currentMode === 'format') {
+                    panel.style.width = '';
+                    panel.style.flexBasis = '';
+                    panel.style.flexGrow = '';
+                    panel.style.flexShrink = '';
+                }
+            });
+            // Show splitter in format mode
+            if (this.currentMode === 'format' && splitter) {
+                splitter.classList.remove('hidden');
+            }
+            this.currentMaximizedPanel = null;
+            this.updateMaximizeIcons();
+        } else {
+            // Maximize the target panel and minimize others
+            allPanels.forEach(panel => {
+                panel.classList.remove('panel-maximized', 'panel-minimized');
+                if (panel === targetPanel) {
+                    panel.classList.add('panel-maximized');
+                    // Clear inline styles to allow CSS class to work
+                    if (this.currentMode === 'format') {
+                        panel.style.width = '';
+                        panel.style.flexBasis = '';
+                        panel.style.flexGrow = '';
+                        panel.style.flexShrink = '';
+                    }
+                } else {
+                    panel.classList.add('panel-minimized');
+                }
+            });
+            // Hide splitter in format mode when maximized
+            if (this.currentMode === 'format' && splitter) {
+                splitter.classList.add('hidden');
+            }
+            this.currentMaximizedPanel = panelId;
+            this.updateMaximizeIcons();
+        }
+    }
+
+    private updateMaximizeIcons(): void {
+        // Define buttons for both modes
+        const buttons = [
+            // Diff mode buttons
+            { id: 'maximize-left', panelId: 'left-json-panel' },
+            { id: 'maximize-diff', panelId: 'diff-result-panel' },
+            { id: 'maximize-right', panelId: 'right-json-panel' },
+            // Format mode buttons
+            { id: 'maximize-input', panelId: 'input-panel' },
+            { id: 'maximize-output', panelId: 'output-panel' }
+        ];
+
+        buttons.forEach(({ id, panelId }) => {
+            const button = document.getElementById(id);
+            const svg = button?.querySelector('svg path');
+            
+            if (!svg) return;
+
+            if (this.currentMaximizedPanel === panelId) {
+                // Show minimize icon
+                svg.setAttribute('d', 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z');
+                button?.setAttribute('title', 'Restore panel');
+            } else {
+                // Show maximize icon
+                svg.setAttribute('d', 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z');
+                button?.setAttribute('title', 'Maximize panel');
+            }
+        });
+    }
+
+    private resetPanelSizes(): void {
+        const leftPanel = document.getElementById('left-json-panel');
+        const diffPanel = document.getElementById('diff-result-panel');
+        const rightPanel = document.getElementById('right-json-panel');
+
+        if (!leftPanel || !diffPanel || !rightPanel) {
+            return;
+        }
+
+        const allPanels = [leftPanel, diffPanel, rightPanel];
+        
+        // Remove all maximize/minimize classes
+        allPanels.forEach(panel => {
+            panel.classList.remove('panel-maximized', 'panel-minimized');
+        });
+        
+        this.currentMaximizedPanel = null;
+        this.updateMaximizeIcons();
+    }
+
+
 
     private setupGlobalKeyboardShortcuts(): void {
         document.addEventListener('keydown', (e) => {
@@ -887,6 +901,11 @@ export class WebviewController {
                 this.clearInput();
                 e.preventDefault();
             }
+            // Ctrl/Cmd + 0: Reset panel sizes (diff mode only)
+            else if ((e.ctrlKey || e.metaKey) && e.key === '0' && this.currentMode === 'diff') {
+                this.resetPanelSizes();
+                e.preventDefault();
+            }
         });
     }
 
@@ -903,5 +922,120 @@ export class WebviewController {
                 }
             });
         });
+    }
+
+    private setupCopyHandler(): void {
+        const output = document.getElementById('output');
+        
+        if (!output) {
+            return;
+        }
+
+        output.addEventListener('copy', (e: ClipboardEvent) => {
+            // Only intercept copy from the formatted output
+            if (this.currentMode === 'format' && this.currentJsonObject) {
+                const selection = window.getSelection();
+                if (selection && selection.rangeCount > 0) {
+                    // Get the selected HTML
+                    const range = selection.getRangeAt(0);
+                    const container = range.cloneContents();
+                    
+                    // Try to extract clean text from the selection
+                    const plainText = this.extractPlainTextFromSelection(container);
+                    
+                    if (plainText && e.clipboardData) {
+                        e.preventDefault();
+                        e.clipboardData.setData('text/plain', plainText);
+                    }
+                }
+            }
+        });
+    }
+
+    private extractPlainTextFromSelection(container: DocumentFragment): string {
+        // Create a temporary div to process the HTML
+        const temp = document.createElement('div');
+        temp.appendChild(container.cloneNode(true));
+        
+        // Remove the summary elements (collapse arrows)
+        temp.querySelectorAll('summary').forEach(el => el.remove());
+        
+        // Process the DOM recursively to build formatted text
+        const result: string[] = [];
+        
+        const processNode = (node: Node, indent: number): void => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const text = node.textContent?.trim();
+                if (text) {
+                    // Add text with current indentation if it's the start of a new line
+                    if (result.length === 0 || result[result.length - 1].includes('\n')) {
+                        result.push('  '.repeat(indent) + text);
+                    } else {
+                        result.push(text);
+                    }
+                }
+                return;
+            }
+            
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+            
+            const element = node as Element;
+            
+            // Handle brackets and braces
+            if (element.classList.contains('bracket') || element.classList.contains('brace')) {
+                const text = element.textContent?.trim();
+                if (text === '[' || text === '{') {
+                    result.push(text);
+                    result.push('\n');
+                } else if (text === ']' || text === '}') {
+                    // Remove trailing comma if present
+                    if (result.length > 0 && result[result.length - 1] === ',') {
+                        result.pop();
+                    }
+                    result.push('\n');
+                    result.push('  '.repeat(Math.max(0, indent - 1)) + text);
+                }
+                return;
+            }
+            
+            // Handle comma elements
+            if (element.classList.contains('comma')) {
+                result.push(',');
+                result.push('\n');
+                return;
+            }
+            
+            // Handle json-line elements
+            if (element.classList.contains('json-line')) {
+                // Process children of json-line with increased indent
+                for (const child of Array.from(element.childNodes)) {
+                    processNode(child, indent);
+                }
+                return;
+            }
+            
+            // Handle json-items (increase indent)
+            if (element.classList.contains('json-items')) {
+                for (const child of Array.from(element.childNodes)) {
+                    processNode(child, indent + 1);
+                }
+                return;
+            }
+            
+            // For other elements, just process children
+            for (const child of Array.from(element.childNodes)) {
+                processNode(child, indent);
+            }
+        };
+        
+        processNode(temp, 0);
+        
+        // Join all parts and clean up extra newlines
+        return result.join('')
+            .split('\n')
+            .map(line => line.trimEnd())
+            .filter((line, i, arr) => line.trim() || i === arr.length - 1) // Remove empty lines except last
+            .join('\n')
+            .trim();
     }
 }

@@ -12,7 +12,7 @@ describe('JSONFormatter.renderJson', () => {
     it('renders arrays with nested values using expandable markup', () => {
         const html = JSONFormatter.renderJson([1, 'two']);
         expect(html).toContain('<details open>');
-        expect(html).toContain('<summary>[...]</summary>');
+        expect(html).toContain('<summary></summary>');
         expect(html).toContain('<span class="number">1</span>');
         expect(html).toContain('<span class="string">"two"</span>');
     });
@@ -28,7 +28,7 @@ describe('JSONFormatter.renderJson', () => {
         const html = JSONFormatter.renderJson(input);
         expect(html).toContain('&lt;danger&gt;');
         expect(html).toContain('Value with &lt;tags&gt; &amp; &quot;quotes&quot;');
-        expect(html.startsWith('<details open><summary>{...}</summary>')).toBe(true);
+        expect(html.startsWith('<details open><summary></summary>')).toBe(true);
     });
 
     it('renders boolean and number primitives', () => {

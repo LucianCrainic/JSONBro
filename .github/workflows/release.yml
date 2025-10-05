@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
@@ -40,35 +44,39 @@ jobs:
       
     - name: Update package.json version to match tag
       run: |
-        npm version ${{ steps.get_version.outputs.VERSION }} --no-git-tag-version
+        CURRENT_VERSION=$(node -p "require('./package.json').version")
+        TARGET_VERSION=${{ steps.get_version.outputs.VERSION }}
+        echo "Current version: $CURRENT_VERSION"
+        echo "Target version: $TARGET_VERSION"
+        if [ "$CURRENT_VERSION" != "$TARGET_VERSION" ]; then
+          npm version $TARGET_VERSION --no-git-tag-version
+          echo "Version updated from $CURRENT_VERSION to $TARGET_VERSION"
+        else
+          echo "Version is already $TARGET_VERSION, skipping update"
+        fi
         
     - name: Package extension
+      env:
+        VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
       run: vsce package --out jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
+      
+    - name: Publish to VS Code Marketplace
+      env:
+        VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
+      run: vsce publish --pat "$VSCE_PAT" --skip-duplicate
       
     - name: Create checksum
       run: |
         sha256sum jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix > jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
         cat jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
       
-    - name: Upload VSIX to release
-      uses: actions/upload-release-asset@v1
+    - name: Upload VSIX and checksum to release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
-        asset_name: jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
-        asset_content_type: application/zip
-        
-    - name: Upload checksum to release
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
-        asset_name: jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
-        asset_content_type: text/plain
+      run: |
+        gh release upload ${{ github.ref_name }} \
+          jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix \
+          jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
         
     - name: Store build artifacts
       uses: actions/upload-artifact@v4
