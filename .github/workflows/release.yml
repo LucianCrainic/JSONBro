@@ -61,7 +61,7 @@ jobs:
     - name: Publish to VS Code Marketplace
       env:
         VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
-      run: vsce publish --pat $VSCE_PAT -i jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
+      run: vsce publish --pat $VSCE_PAT --packagePath jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix --skip-duplicate --no-dependencies
       
     - name: Create checksum
       run: |
