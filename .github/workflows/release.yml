@@ -34,11 +34,6 @@ jobs:
     - name: Install vsce (VS Code Extension CLI)
       run: npm install -g @vscode/vsce
       
-    - name: Login to Visual Studio Marketplace
-      env:
-        VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
-      run: echo $VSCE_PAT | vsce login LucianDCrainic
-      
     - name: Extract version from tag
       id: get_version
       run: |
@@ -66,7 +61,7 @@ jobs:
     - name: Publish to VS Code Marketplace
       env:
         VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
-      run: vsce publish --packagePath jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
+      run: vsce publish --pat $VSCE_PAT --packagePath jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
       
     - name: Create checksum
       run: |
