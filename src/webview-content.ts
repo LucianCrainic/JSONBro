@@ -521,25 +521,103 @@ export class WebviewContentGenerator {
             .number { color: var(--vscode-debugTokenExpression-number); }
             .boolean { color: var(--vscode-debugTokenExpression-boolean); }
             .null { color: var(--vscode-debugTokenExpression-name); }
-            .key { color: var(--vscode-debugTokenExpression-name); font-weight: bold; }
+            .key { 
+                color: var(--vscode-debugTokenExpression-name); 
+                font-weight: bold;
+            }
+            .bracket, .brace { color: var(--vscode-editor-foreground); }
+            
+            .json-array, .json-object {
+                display: inline;
+            }
 
             details {
-                margin-left: 1em;
+                display: inline;
+                margin: 0;
             }
 
             summary {
                 cursor: pointer;
                 user-select: none;
+                display: inline;
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
+            
+            summary::-webkit-details-marker {
+                display: none;
+            }
+            
+            summary::before {
+                content: '▶ ';
+                display: inline;
+                font-size: 0.7em;
+                color: var(--vscode-icon-foreground);
+                opacity: 0.6;
+                transition: transform 0.15s ease;
+                margin-right: 0.2em;
+            }
+            
+            summary:hover::before {
+                opacity: 1;
+            }
+            
+            details[open] > summary::before {
+                content: '▼ ';
+            }
+            
+            details:not([open]) > summary::after {
+                content: ' ...';
+                opacity: 0.5;
+                color: var(--vscode-descriptionForeground);
             }
 
             ul {
                 list-style: none;
-                padding-left: 1em;
+                list-style-type: none;
+                padding-left: 1.5em;
                 margin: 0;
+                display: block;
             }
 
             li {
-                margin: 2px 0;
+                display: block;
+                margin: 0;
+                padding: 0;
+                list-style: none;
+                list-style-type: none;
+            }
+            
+            li::before {
+                content: none;
+                display: none;
+            }
+            
+            li::marker {
+                content: none;
+                display: none;
+            }
+            
+            /* Add commas after items except the last one */
+            li:not(:last-child)::after {
+                content: ',';
+            }
+
+            .json-items {
+                display: block;
+                padding-left: 1.5em;
+                margin: 0;
+            }
+
+            .json-line {
+                display: block;
+                margin: 0;
+                padding: 0;
+            }
+
+            .comma {
+                color: var(--vscode-editor-foreground);
             }
 
             /* Search Styles */
