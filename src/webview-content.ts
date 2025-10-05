@@ -91,6 +91,11 @@ export class WebviewContentGenerator {
                 width: 50%;
                 display: flex;
                 flex-direction: column;
+                position: relative;
+            }
+
+            #input-panel.panel-maximized {
+                max-width: none;
             }
 
             #output-panel {
@@ -98,11 +103,13 @@ export class WebviewContentGenerator {
                 min-width: 200px;
                 display: flex;
                 flex-direction: column;
+                position: relative;
             }
 
             #input, #output {
                 flex: 1;
                 padding: 16px;
+                padding-top: 40px;
                 border: 1px solid var(--vscode-editorGroup-border);
                 border-radius: 8px;
                 background-color: var(--vscode-editor-background);
@@ -111,7 +118,6 @@ export class WebviewContentGenerator {
                 font-size: 13px;
                 resize: none;
                 outline: none;
-                position: relative;
                 transition: all 0.2s ease;
             }
 
@@ -129,6 +135,10 @@ export class WebviewContentGenerator {
                 justify-content: center;
                 position: relative;
                 margin: 0 4px;
+            }
+
+            #splitter.hidden {
+                display: none;
             }
 
             #splitter::before {
@@ -167,47 +177,41 @@ export class WebviewContentGenerator {
                 display: flex;
                 flex-direction: column;
                 transition: flex 0.3s ease;
+                position: relative;
             }
 
             /* Maximized panel states */
             .panel-maximized {
-                flex: 10 !important;
+                flex: 1 !important;
             }
 
             .panel-minimized {
-                flex: 0.5 !important;
+                display: none !important;
             }
 
             .panel-header {
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-bottom: none;
-                border-radius: 8px 8px 0 0;
-                padding: 8px 12px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-
-            .panel-header h3 {
-                margin: 0;
-                font-size: 12px;
-                font-weight: 600;
-                color: var(--vscode-editor-foreground);
+                display: none;
             }
 
             .maximize-btn {
-                background: none;
-                border: none;
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                border: 1px solid var(--vscode-editorGroup-border);
                 color: var(--vscode-icon-foreground);
                 cursor: pointer;
-                padding: 4px;
+                padding: 6px;
                 border-radius: 3px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                opacity: 0.7;
+                opacity: 0.6;
                 transition: all 0.2s ease;
+                z-index: 100;
+                width: 24px;
+                height: 24px;
+                pointer-events: auto;
             }
 
             .maximize-btn:hover {
@@ -222,8 +226,9 @@ export class WebviewContentGenerator {
             #left-json, #right-json {
                 flex: 1;
                 padding: 16px;
+                padding-top: 40px;
                 border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 0 0 8px 8px;
+                border-radius: 8px;
                 background-color: var(--vscode-editor-background);
                 color: var(--vscode-editor-foreground);
                 font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -235,8 +240,9 @@ export class WebviewContentGenerator {
             #diff-output {
                 flex: 1;
                 padding: 12px;
+                padding-top: 40px;
                 border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 0 0 8px 8px;
+                border-radius: 8px;
                 background-color: var(--vscode-editor-background);
                 color: var(--vscode-editor-foreground);
                 font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -657,26 +663,20 @@ export class WebviewContentGenerator {
             <!-- Format Mode Container -->
             <div id="format-container" class="mode-container" style="display: ${mode === 'format' ? 'flex' : 'none'};">
                 <div id="input-panel">
-                    <div class="panel-header">
-                        <h3>JSON Input</h3>
-                        <button id="maximize-input" class="maximize-btn" title="Maximize panel">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <button id="maximize-input" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <textarea id="input" placeholder="Enter your JSON here..."></textarea>
                 </div>
                 <div id="splitter" title="Drag to resize panes or double-click to reset to 50/50"></div>
                 <div id="output-panel">
-                    <div class="panel-header">
-                        <h3>Formatted Output</h3>
-                        <button id="maximize-output" class="maximize-btn" title="Maximize panel">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <button id="maximize-output" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <div id="output"></div>
                 </div>
             </div>
@@ -684,36 +684,27 @@ export class WebviewContentGenerator {
             <!-- Diff Mode Container -->
             <div id="diff-container" class="mode-container" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
                 <div id="left-json-panel">
-                    <div class="panel-header">
-                        <h3>Original JSON</h3>
-                        <button id="maximize-left" class="maximize-btn" title="Maximize panel">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <button id="maximize-left" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <textarea id="left-json" placeholder="Enter original JSON here..."></textarea>
                 </div>
                 <div id="diff-result-panel">
-                    <div class="panel-header">
-                        <h3>Differences</h3>
-                        <button id="maximize-diff" class="maximize-btn" title="Maximize panel">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <button id="maximize-diff" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <div id="diff-output"></div>
                 </div>
                 <div id="right-json-panel">
-                    <div class="panel-header">
-                        <h3>Modified JSON</h3>
-                        <button id="maximize-right" class="maximize-btn" title="Maximize panel">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <button id="maximize-right" class="maximize-btn" title="Maximize panel">
+                        <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                        </svg>
+                    </button>
                     <textarea id="right-json" placeholder="Enter modified JSON here..."></textarea>
                 </div>
             </div>
