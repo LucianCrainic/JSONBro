@@ -107,6 +107,19 @@ export class WebviewController {
         
         // Custom copy handler for formatted output
         this.setupCopyHandler();
+        
+        // Setup line numbers toggle for output panel
+        this.setupLineNumbersToggle();
+    }
+
+    private setupLineNumbersToggle(): void {
+        const lineNumbersToggle = document.getElementById('line-numbers-toggle');
+        if (lineNumbersToggle) {
+            // Set initial state to active (since line numbers are on by default)
+            lineNumbersToggle.classList.add('active');
+            
+            lineNumbersToggle.addEventListener('click', () => this.toggleLineNumbers());
+        }
     }
 
     private formatJson(): void {
@@ -362,6 +375,29 @@ export class WebviewController {
             searchContainer.style.display = 'none';
             searchToggleBtn.style.display = 'flex';
             this.clearSearch();
+        }
+    }
+
+    private toggleLineNumbers(): void {
+        const currentSetting = JSONFormatter.getShowLineNumbers();
+        JSONFormatter.setShowLineNumbers(!currentSetting);
+        
+        // Update button state
+        const lineNumbersToggle = document.getElementById('line-numbers-toggle');
+        if (lineNumbersToggle) {
+            if (!currentSetting) {
+                lineNumbersToggle.classList.add('active');
+            } else {
+                lineNumbersToggle.classList.remove('active');
+            }
+        }
+        
+        // Re-render the JSON if it exists
+        if (this.currentJsonObject) {
+            const output = document.getElementById('output');
+            if (output) {
+                output.innerHTML = JSONFormatter.renderJson(this.currentJsonObject);
+            }
         }
     }
 
