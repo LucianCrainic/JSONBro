@@ -779,12 +779,24 @@ export class WebviewController {
         }
 
         const targetPanel = document.getElementById(panelId);
+        const splitter = document.getElementById('splitter');
 
         if (this.currentMaximizedPanel === panelId) {
             // Already maximized, restore to equal sizes
             allPanels.forEach(panel => {
                 panel.classList.remove('panel-maximized', 'panel-minimized');
+                // Clear inline styles for format mode panels
+                if (this.currentMode === 'format') {
+                    panel.style.width = '';
+                    panel.style.flexBasis = '';
+                    panel.style.flexGrow = '';
+                    panel.style.flexShrink = '';
+                }
             });
+            // Show splitter in format mode
+            if (this.currentMode === 'format' && splitter) {
+                splitter.classList.remove('hidden');
+            }
             this.currentMaximizedPanel = null;
             this.updateMaximizeIcons();
         } else {
@@ -793,10 +805,21 @@ export class WebviewController {
                 panel.classList.remove('panel-maximized', 'panel-minimized');
                 if (panel === targetPanel) {
                     panel.classList.add('panel-maximized');
+                    // Clear inline styles to allow CSS class to work
+                    if (this.currentMode === 'format') {
+                        panel.style.width = '';
+                        panel.style.flexBasis = '';
+                        panel.style.flexGrow = '';
+                        panel.style.flexShrink = '';
+                    }
                 } else {
                     panel.classList.add('panel-minimized');
                 }
             });
+            // Hide splitter in format mode when maximized
+            if (this.currentMode === 'format' && splitter) {
+                splitter.classList.add('hidden');
+            }
             this.currentMaximizedPanel = panelId;
             this.updateMaximizeIcons();
         }
