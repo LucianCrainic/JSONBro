@@ -104,6 +104,9 @@ export class WebviewController {
 
         // Listen for messages from the extension
         this.setupMessageHandling();
+        
+        // Custom copy handler for formatted output
+        this.setupCopyHandler();
     }
 
     private formatJson(): void {
@@ -919,5 +922,120 @@ export class WebviewController {
                 }
             });
         });
+    }
+
+    private setupCopyHandler(): void {
+        const output = document.getElementById('output');
+        
+        if (!output) {
+            return;
+        }
+
+        output.addEventListener('copy', (e: ClipboardEvent) => {
+            // Only intercept copy from the formatted output
+            if (this.currentMode === 'format' && this.currentJsonObject) {
+                const selection = window.getSelection();
+                if (selection && selection.rangeCount > 0) {
+                    // Get the selected HTML
+                    const range = selection.getRangeAt(0);
+                    const container = range.cloneContents();
+                    
+                    // Try to extract clean text from the selection
+                    const plainText = this.extractPlainTextFromSelection(container);
+                    
+                    if (plainText && e.clipboardData) {
+                        e.preventDefault();
+                        e.clipboardData.setData('text/plain', plainText);
+                    }
+                }
+            }
+        });
+    }
+
+    private extractPlainTextFromSelection(container: DocumentFragment): string {
+        // Create a temporary div to process the HTML
+        const temp = document.createElement('div');
+        temp.appendChild(container.cloneNode(true));
+        
+        // Remove the summary elements (collapse arrows)
+        temp.querySelectorAll('summary').forEach(el => el.remove());
+        
+        // Process the DOM recursively to build formatted text
+        const result: string[] = [];
+        
+        const processNode = (node: Node, indent: number): void => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const text = node.textContent?.trim();
+                if (text) {
+                    // Add text with current indentation if it's the start of a new line
+                    if (result.length === 0 || result[result.length - 1].includes('\n')) {
+                        result.push('  '.repeat(indent) + text);
+                    } else {
+                        result.push(text);
+                    }
+                }
+                return;
+            }
+            
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+            
+            const element = node as Element;
+            
+            // Handle brackets and braces
+            if (element.classList.contains('bracket') || element.classList.contains('brace')) {
+                const text = element.textContent?.trim();
+                if (text === '[' || text === '{') {
+                    result.push(text);
+                    result.push('\n');
+                } else if (text === ']' || text === '}') {
+                    // Remove trailing comma if present
+                    if (result.length > 0 && result[result.length - 1] === ',') {
+                        result.pop();
+                    }
+                    result.push('\n');
+                    result.push('  '.repeat(Math.max(0, indent - 1)) + text);
+                }
+                return;
+            }
+            
+            // Handle comma elements
+            if (element.classList.contains('comma')) {
+                result.push(',');
+                result.push('\n');
+                return;
+            }
+            
+            // Handle json-line elements
+            if (element.classList.contains('json-line')) {
+                // Process children of json-line with increased indent
+                for (const child of Array.from(element.childNodes)) {
+                    processNode(child, indent);
+                }
+                return;
+            }
+            
+            // Handle json-items (increase indent)
+            if (element.classList.contains('json-items')) {
+                for (const child of Array.from(element.childNodes)) {
+                    processNode(child, indent + 1);
+                }
+                return;
+            }
+            
+            // For other elements, just process children
+            for (const child of Array.from(element.childNodes)) {
+                processNode(child, indent);
+            }
+        };
+        
+        processNode(temp, 0);
+        
+        // Join all parts and clean up extra newlines
+        return result.join('')
+            .split('\n')
+            .map(line => line.trimEnd())
+            .filter((line, i, arr) => line.trim() || i === arr.length - 1) // Remove empty lines except last
+            .join('\n')
+            .trim();
     }
 }
