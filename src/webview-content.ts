@@ -214,13 +214,46 @@ export class WebviewContentGenerator {
                 pointer-events: auto;
             }
 
-            .maximize-btn:hover {
+            .panel-control-btn {
+                position: absolute;
+                top: 8px;
+                right: 48px;
+                background-color: var(--vscode-editorGroupHeader-tabsBackground);
+                border: 1px solid var(--vscode-editorGroup-border);
+                color: var(--vscode-icon-foreground);
+                cursor: pointer;
+                padding: 8px;
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0.6;
+                transition: all 0.2s ease;
+                z-index: 100;
+                width: 32px;
+                height: 32px;
+                pointer-events: auto;
+            }
+
+            .maximize-btn:hover,
+            .panel-control-btn:hover {
                 background-color: var(--vscode-toolbar-hoverBackground);
                 opacity: 1;
             }
 
-            .maximize-btn:active {
+            .maximize-btn:active,
+            .panel-control-btn:active {
                 background-color: var(--vscode-toolbar-activeBackground);
+            }
+
+            .panel-control-btn.active {
+                opacity: 1;
+                background-color: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+            }
+
+            .panel-control-btn.active:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
             }
 
             #left-json, #right-json {
@@ -408,6 +441,15 @@ export class WebviewContentGenerator {
 
             button:hover {
                 background-color: var(--vscode-button-hoverBackground);
+            }
+
+            button.active {
+                background-color: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+            }
+
+            button.active:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
             }
 
             /* Mode Switcher */
@@ -621,6 +663,23 @@ export class WebviewContentGenerator {
                 color: var(--vscode-editor-foreground);
             }
 
+            /* Line Numbers */
+            .line-number {
+                display: inline-block;
+                min-width: 3em;
+                padding-right: 1em;
+                text-align: right;
+                color: var(--vscode-editorLineNumber-foreground);
+                user-select: none;
+                opacity: 0.7;
+                font-size: 0.9em;
+            }
+
+            .line-number:hover {
+                opacity: 1;
+                color: var(--vscode-editorLineNumber-activeForeground);
+            }
+
             /* Search Styles */
                 flex-direction: column;
                 gap: 2px;
@@ -751,6 +810,16 @@ export class WebviewContentGenerator {
                 </div>
                 <div id="splitter" title="Drag to resize panes or double-click to reset to 50/50"></div>
                 <div id="output-panel">
+                    <button id="line-numbers-toggle" class="panel-control-btn active" title="Toggle line numbers">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <line x1="3" y1="6" x2="6" y2="6" stroke="currentColor" stroke-width="2"></line>
+                            <line x1="10" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="2"></line>
+                            <line x1="3" y1="12" x2="6" y2="12" stroke="currentColor" stroke-width="2"></line>
+                            <line x1="10" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2"></line>
+                            <line x1="3" y1="18" x2="6" y2="18" stroke="currentColor" stroke-width="2"></line>
+                            <line x1="10" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2"></line>
+                        </svg>
+                    </button>
                     <button id="maximize-output" class="maximize-btn" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
