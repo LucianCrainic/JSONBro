@@ -681,27 +681,62 @@ export class WebviewContentGenerator {
                 display: block;
                 margin: 0;
                 padding: 0;
+                line-height: 1.6;
+                font-size: 13px;
             }
 
             .comma {
                 color: var(--vscode-editor-foreground);
             }
 
-            /* Line Numbers */
-            .line-number {
-                display: inline-block;
-                min-width: 3em;
-                padding-right: 1em;
+            .colon {
+                color: var(--vscode-editor-foreground);
+            }
+
+            /* Line Numbers Container */
+            .json-container {
+                display: flex;
+                width: 100%;
+            }
+
+            .line-numbers {
+                flex-shrink: 0;
+                padding: 0 12px 0 0;
                 text-align: right;
                 color: var(--vscode-editorLineNumber-foreground);
                 user-select: none;
-                opacity: 0.7;
-                font-size: 0.9em;
+                border-right: 1px solid var(--vscode-editorGroup-border);
+                background-color: var(--vscode-editor-background);
             }
 
-            .line-number:hover {
+            .json-content {
+                flex: 1;
+                padding-left: 12px;
+                overflow-x: auto;
+            }
+
+            /* Individual Line Number */
+            .line-numbers .line-number {
+                display: block;
+                padding: 0 8px;
+                line-height: 1.6;
+                font-size: 13px;
+                opacity: 0.7;
+                height: auto;
+            }
+
+            .line-numbers .line-number:hover {
                 opacity: 1;
                 color: var(--vscode-editorLineNumber-activeForeground);
+            }
+
+            /* Hide line numbers when disabled */
+            #output.hide-line-numbers .line-numbers {
+                display: none;
+            }
+
+            #output.hide-line-numbers .json-content {
+                padding-left: 0;
             }
 
             /* Search Styles */
