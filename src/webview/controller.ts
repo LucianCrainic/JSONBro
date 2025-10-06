@@ -15,6 +15,7 @@ export class WebviewController {
     private currentMode: 'format' | 'diff' = 'format';
     private vscode: any;
     private isLoadingFromHistory: boolean = false;
+    private strictDiffMode: boolean = false;
 
     /**
      * Initializes the webview controller
@@ -55,6 +56,7 @@ export class WebviewController {
         const formatModeBtn = document.getElementById('format-mode');
         const diffModeBtn = document.getElementById('diff-mode');
         const actionBtn = document.getElementById('action-btn');
+        const strictDiffToggle = document.getElementById('strict-diff-toggle');
         
         // Other controls
         const clearBtn = document.getElementById('clear');
@@ -78,6 +80,10 @@ export class WebviewController {
                     this.compareJson();
                 }
             });
+        }
+
+        if (strictDiffToggle) {
+            strictDiffToggle.addEventListener('click', () => this.toggleStrictDiff());
         }
 
         if (clearBtn) {
@@ -401,6 +407,28 @@ export class WebviewController {
         }
     }
 
+    private toggleStrictDiff(): void {
+        this.strictDiffMode = !this.strictDiffMode;
+        
+        // Update button state
+        const strictDiffToggle = document.getElementById('strict-diff-toggle');
+        if (strictDiffToggle) {
+            if (this.strictDiffMode) {
+                strictDiffToggle.classList.add('active');
+            } else {
+                strictDiffToggle.classList.remove('active');
+            }
+        }
+        
+        // Re-run the comparison if there's already a diff displayed
+        const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
+        const rightJsonEl = document.getElementById('right-json') as HTMLTextAreaElement;
+        
+        if (leftJsonEl && rightJsonEl && leftJsonEl.value.trim() && rightJsonEl.value.trim()) {
+            this.compareJson();
+        }
+    }
+
     private performSearch(): void {
         try {
             const searchInput = document.getElementById('search-input') as HTMLInputElement;
@@ -692,6 +720,7 @@ export class WebviewController {
         // Show/hide buttons based on mode
         const searchToggleBtn = document.getElementById('search-toggle');
         const copyBtn = document.getElementById('copy');
+        const strictDiffToggle = document.getElementById('strict-diff-toggle');
         
         if (searchToggleBtn && copyBtn) {
             if (mode === 'format') {
@@ -706,6 +735,11 @@ export class WebviewController {
                     searchContainer.style.display = 'none';
                 }
             }
+        }
+
+        // Show/hide strict diff toggle
+        if (strictDiffToggle) {
+            strictDiffToggle.style.display = mode === 'diff' ? 'flex' : 'none';
         }
 
         // Setup maximize functionality based on mode
@@ -746,7 +780,7 @@ export class WebviewController {
             
             // Generate and display the diff
             diffOutput.style.color = 'inherit';
-            diffOutput.innerHTML = JSONDiff.renderJsonDiff(leftParsed, rightParsed);
+            diffOutput.innerHTML = JSONDiff.renderJsonDiff(leftParsed, rightParsed, this.strictDiffMode);
             
             // Only send message to extension to add to history if not loading from history
             if (!this.isLoadingFromHistory) {
