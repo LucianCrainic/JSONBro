@@ -50,6 +50,19 @@ export class WebviewController {
     private parseFlexibleJson(input: string): any {
         return JSONParser.parseFlexible(input);
     }
+    
+    /**
+     * Attempts to parse JSON and returns both the result and whether structural fixes were needed
+     * Note: Cosmetic fixes (quotes, trailing commas, Python syntax) don't trigger warnings
+     */
+    private parseFlexibleJsonWithStatus(input: string): { parsed: any; wasFixed: boolean; originalError?: string } {
+        const result = JSONParser.parseWithStatus(input);
+        return { 
+            parsed: result.parsed, 
+            wasFixed: result.wasStructurallyFixed, 
+            originalError: result.originalError 
+        };
+    }
 
     private setupEventListeners(): void {
         // Mode switching
@@ -116,6 +129,9 @@ export class WebviewController {
         
         // Setup line numbers toggle for output panel
         this.setupLineNumbersToggle();
+        
+        // Setup warning notification dismiss button
+        this.setupWarningDismiss();
     }
 
     private setupLineNumbersToggle(): void {
@@ -125,6 +141,13 @@ export class WebviewController {
             lineNumbersToggle.classList.add('active');
             
             lineNumbersToggle.addEventListener('click', () => this.toggleLineNumbers());
+        }
+    }
+    
+    private setupWarningDismiss(): void {
+        const dismissBtn = document.getElementById('dismiss-warning');
+        if (dismissBtn) {
+            dismissBtn.addEventListener('click', () => this.hideWarningNotification());
         }
     }
 
@@ -143,16 +166,26 @@ export class WebviewController {
         }
 
         try {
-            const parsedJson = this.parseFlexibleJson(input);
-            this.currentJsonObject = parsedJson;
+            const { parsed, wasFixed, originalError } = this.parseFlexibleJsonWithStatus(input);
+            this.currentJsonObject = parsed;
             output.style.color = 'inherit';
-            output.innerHTML = JSONFormatter.renderJson(parsedJson);
+            output.innerHTML = JSONFormatter.renderJson(parsed);
+            
+            // Setup fold/unfold click handlers
+            this.setupFoldHandlers(output);
             
             // Ensure proper class for line numbers visibility
             if (JSONFormatter.getShowLineNumbers()) {
                 output.classList.remove('hide-line-numbers');
             } else {
                 output.classList.add('hide-line-numbers');
+            }
+            
+            // Show warning if JSON was auto-fixed
+            if (wasFixed) {
+                this.showWarningNotification(originalError);
+            } else {
+                this.hideWarningNotification();
             }
             
             // Only send message to extension to add to history if not loading from history
@@ -169,6 +202,7 @@ export class WebviewController {
                 ? JSONParser.getParseErrorMessage(input, error)
                 : 'Unknown parsing error';
             output.textContent = errorMessage;
+            this.hideWarningNotification();
         }
     }
 
@@ -1080,8 +1114,13 @@ export class WebviewController {
             } else if (node.nodeType === Node.ELEMENT_NODE) {
                 const el = node as Element;
                 
-                // Skip line number elements
-                if (el.classList.contains('line-number')) {
+                // Skip line number elements and fold arrows
+                if (el.classList.contains('line-number') || el.classList.contains('fold-arrow')) {
+                    return;
+                }
+                
+                // Skip fold ellipsis
+                if (el.classList.contains('fold-ellipsis')) {
                     return;
                 }
                 
@@ -1098,4 +1137,96 @@ export class WebviewController {
         const trimmedResult = result.trimEnd();
         return trimmedResult.length > 0 ? trimmedResult : null;
     }
+    
+    private showWarningNotification(originalError?: string): void {
+        const warningContainer = document.getElementById('warning-notification');
+        if (warningContainer) {
+            const warningMessage = warningContainer.querySelector('.warning-message');
+            if (warningMessage) {
+                warningMessage.textContent = 'JSON auto-corrected! The input had errors that were automatically fixed. The corrected version is displayed below.';
+            }
+            warningContainer.style.display = 'flex';
+        }
+    }
+    
+    private hideWarningNotification(): void {
+        const warningContainer = document.getElementById('warning-notification');
+        if (warningContainer) {
+            warningContainer.style.display = 'none';
+        }
+    }
+
+    /**
+     * Setup click handlers for fold/unfold arrows
+     */
+    private setupFoldHandlers(container: HTMLElement): void {
+        const arrows = container.querySelectorAll('.fold-arrow');
+        arrows.forEach(arrow => {
+            arrow.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const target = e.target as HTMLElement;
+                const foldId = target.getAttribute('data-fold-id');
+                
+                if (!foldId) return;
+                
+                const isFolded = target.classList.contains('folded');
+                const contentElements = container.querySelectorAll(`.foldable-content[data-fold-id="${foldId}"]`);
+                const parentLine = target.closest('.json-line');
+                
+                // Get line numbers container
+                const jsonContainer = container.querySelector('.json-container');
+                const lineNumbers = jsonContainer?.querySelector('.line-numbers');
+                
+                if (isFolded) {
+                    // Unfold
+                    target.classList.remove('folded');
+                    contentElements.forEach(el => {
+                        el.classList.remove('hidden');
+                        // Show corresponding line number
+                        if (lineNumbers) {
+                            const line = el.closest('.json-line');
+                            const lineIndex = Array.from(container.querySelectorAll('.json-line')).indexOf(line as Element);
+                            const lineNumEl = lineNumbers.children[lineIndex] as HTMLElement;
+                            if (lineNumEl) {
+                                lineNumEl.style.display = '';
+                            }
+                        }
+                    });
+                    
+                    // Remove ellipsis if exists
+                    const ellipsis = parentLine?.querySelector('.fold-ellipsis');
+                    if (ellipsis) {
+                        ellipsis.remove();
+                    }
+                } else {
+                    // Fold
+                    target.classList.add('folded');
+                    contentElements.forEach(el => {
+                        el.classList.add('hidden');
+                        // Hide corresponding line number
+                        if (lineNumbers) {
+                            const line = el.closest('.json-line');
+                            const lineIndex = Array.from(container.querySelectorAll('.json-line')).indexOf(line as Element);
+                            const lineNumEl = lineNumbers.children[lineIndex] as HTMLElement;
+                            if (lineNumEl) {
+                                lineNumEl.style.display = 'none';
+                            }
+                        }
+                    });
+                    
+                    // Add ellipsis after the bracket
+                    if (parentLine && !parentLine.querySelector('.fold-ellipsis')) {
+                        const bracket = parentLine.querySelector('.bracket, .brace');
+                        if (bracket) {
+                            const ellipsis = document.createElement('span');
+                            ellipsis.className = 'fold-ellipsis';
+                            ellipsis.textContent = ' ...';
+                            bracket.after(ellipsis);
+                        }
+                    }
+                }
+            });
+        });
+    }
 }
+
