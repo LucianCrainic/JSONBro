@@ -3,6 +3,7 @@
  */
 export class JSONFormatter {
     private static showLineNumbers: boolean = true;
+    private static foldId: number = 0;
 
     /**
      * Escapes HTML characters in text
@@ -30,9 +31,24 @@ export class JSONFormatter {
     }
 
     /**
-     * Renders JSON object as formatted HTML with line numbers on the left
+     * Resets fold ID counter
+     */
+    private static resetFoldId(): void {
+        this.foldId = 0;
+    }
+
+    /**
+     * Gets next unique fold ID
+     */
+    private static getNextFoldId(): number {
+        return this.foldId++;
+    }
+
+    /**
+     * Renders JSON object as formatted HTML with line numbers on the left and folding support
      */
     static renderJson(value: any): string {
+        this.resetFoldId();
         const lines = this.formatJsonToLines(value, 0);
         
         if (!this.showLineNumbers) {
@@ -55,7 +71,7 @@ export class JSONFormatter {
     }
 
     /**
-     * Formats JSON value into an array of line strings
+     * Formats JSON value into an array of line strings with folding support
      */
     private static formatJsonToLines(value: any, indent: number = 0): string[] {
         const lines: string[] = [];
@@ -70,19 +86,22 @@ export class JSONFormatter {
                 return [`${indentStr}<span class="bracket">[]</span>`];
             }
             
-            lines.push(`${indentStr}<span class="bracket">[</span>`);
+            const foldId = this.getNextFoldId();
+            const arrow = `<span class="fold-arrow" data-fold-id="${foldId}">▼</span>`;
+            lines.push(`${indentStr}${arrow}<span class="bracket">[</span>`);
+            
             value.forEach((item, i) => {
                 const itemLines = this.formatJsonToLines(item, indent + 1);
                 const comma = i < value.length - 1 ? '<span class="comma">,</span>' : '';
                 
                 if (itemLines.length === 1) {
-                    lines.push(itemLines[0] + comma);
+                    lines.push(`<span class="foldable-content" data-fold-id="${foldId}">${itemLines[0]}${comma}</span>`);
                 } else {
                     itemLines.forEach((line, j) => {
                         if (j === itemLines.length - 1) {
-                            lines.push(line + comma);
+                            lines.push(`<span class="foldable-content" data-fold-id="${foldId}">${line}${comma}</span>`);
                         } else {
-                            lines.push(line);
+                            lines.push(`<span class="foldable-content" data-fold-id="${foldId}">${line}</span>`);
                         }
                     });
                 }
@@ -98,7 +117,10 @@ export class JSONFormatter {
                 return [`${indentStr}<span class="brace">{}</span>`];
             }
             
-            lines.push(`${indentStr}<span class="brace">{</span>`);
+            const foldId = this.getNextFoldId();
+            const arrow = `<span class="fold-arrow" data-fold-id="${foldId}">▼</span>`;
+            lines.push(`${indentStr}${arrow}<span class="brace">{</span>`);
+            
             entries.forEach(([key, val], i) => {
                 const comma = i < entries.length - 1 ? '<span class="comma">,</span>' : '';
                 const valueLines = this.formatJsonToLines(val, indent + 1);
@@ -107,15 +129,15 @@ export class JSONFormatter {
                 if (valueLines.length === 1) {
                     // Single line value
                     const valuePart = valueLines[0].trim();
-                    lines.push(`${keyIndent}<span class="key">"${this.escapeHtml(key)}"</span><span class="colon">:</span> ${valuePart}${comma}`);
+                    lines.push(`<span class="foldable-content" data-fold-id="${foldId}">${keyIndent}<span class="key">"${this.escapeHtml(key)}"</span><span class="colon">:</span> ${valuePart}${comma}</span>`);
                 } else {
                     // Multi-line value
-                    lines.push(`${keyIndent}<span class="key">"${this.escapeHtml(key)}"</span><span class="colon">:</span> ${valueLines[0].trim()}`);
+                    lines.push(`<span class="foldable-content" data-fold-id="${foldId}">${keyIndent}<span class="key">"${this.escapeHtml(key)}"</span><span class="colon">:</span> ${valueLines[0].trim()}</span>`);
                     for (let j = 1; j < valueLines.length; j++) {
                         if (j === valueLines.length - 1) {
-                            lines.push(valueLines[j] + comma);
+                            lines.push(`<span class="foldable-content" data-fold-id="${foldId}">${valueLines[j]}${comma}</span>`);
                         } else {
-                            lines.push(valueLines[j]);
+                            lines.push(`<span class="foldable-content" data-fold-id="${foldId}">${valueLines[j]}</span>`);
                         }
                     }
                 }
