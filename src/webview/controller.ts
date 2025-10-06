@@ -996,6 +996,9 @@ export class WebviewController {
         // Remove the summary elements (collapse arrows)
         temp.querySelectorAll('summary').forEach(el => el.remove());
         
+        // Remove line numbers so they don't get copied
+        temp.querySelectorAll('.line-number').forEach(el => el.remove());
+        
         // Process the DOM recursively to build formatted text
         const result: string[] = [];
         
