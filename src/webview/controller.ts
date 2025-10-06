@@ -1049,82 +1049,53 @@ export class WebviewController {
         // Remove line numbers so they don't get copied
         temp.querySelectorAll('.line-number').forEach(el => el.remove());
         
-        // Process the DOM recursively to build formatted text
-        const result: string[] = [];
+        // Process each json-line to extract text with proper indentation
+        const lines: string[] = [];
+        const jsonLines = temp.querySelectorAll('.json-line');
         
-        const processNode = (node: Node, indent: number): void => {
+        if (jsonLines.length > 0) {
+            jsonLines.forEach(lineElement => {
+                const lineText = this.extractLineText(lineElement);
+                if (lineText !== null) {
+                    lines.push(lineText);
+                }
+            });
+        } else {
+            // Fallback: if no json-line elements, just get text content
+            const text = temp.textContent || '';
+            return text;
+        }
+        
+        return lines.join('\n');
+    }
+    
+    private extractLineText(element: Element): string | null {
+        let result = '';
+        
+        const processNode = (node: Node): void => {
             if (node.nodeType === Node.TEXT_NODE) {
-                const text = node.textContent?.trim();
-                if (text) {
-                    // Add text with current indentation if it's the start of a new line
-                    if (result.length === 0 || result[result.length - 1].includes('\n')) {
-                        result.push('  '.repeat(indent) + text);
-                    } else {
-                        result.push(text);
-                    }
+                // Preserve all whitespace from text nodes (this includes indentation)
+                const text = node.textContent || '';
+                result += text;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                const el = node as Element;
+                
+                // Skip line number elements
+                if (el.classList.contains('line-number')) {
+                    return;
                 }
-                return;
-            }
-            
-            if (node.nodeType !== Node.ELEMENT_NODE) return;
-            
-            const element = node as Element;
-            
-            // Handle brackets and braces
-            if (element.classList.contains('bracket') || element.classList.contains('brace')) {
-                const text = element.textContent?.trim();
-                if (text === '[' || text === '{') {
-                    result.push(text);
-                    result.push('\n');
-                } else if (text === ']' || text === '}') {
-                    // Remove trailing comma if present
-                    if (result.length > 0 && result[result.length - 1] === ',') {
-                        result.pop();
-                    }
-                    result.push('\n');
-                    result.push('  '.repeat(Math.max(0, indent - 1)) + text);
+                
+                // Process children
+                for (const child of Array.from(el.childNodes)) {
+                    processNode(child);
                 }
-                return;
-            }
-            
-            // Handle comma elements
-            if (element.classList.contains('comma')) {
-                result.push(',');
-                result.push('\n');
-                return;
-            }
-            
-            // Handle json-line elements
-            if (element.classList.contains('json-line')) {
-                // Process children of json-line with increased indent
-                for (const child of Array.from(element.childNodes)) {
-                    processNode(child, indent);
-                }
-                return;
-            }
-            
-            // Handle json-items (increase indent)
-            if (element.classList.contains('json-items')) {
-                for (const child of Array.from(element.childNodes)) {
-                    processNode(child, indent + 1);
-                }
-                return;
-            }
-            
-            // For other elements, just process children
-            for (const child of Array.from(element.childNodes)) {
-                processNode(child, indent);
             }
         };
         
-        processNode(temp, 0);
+        processNode(element);
         
-        // Join all parts and clean up extra newlines
-        return result.join('')
-            .split('\n')
-            .map(line => line.trimEnd())
-            .filter((line, i, arr) => line.trim() || i === arr.length - 1) // Remove empty lines except last
-            .join('\n')
-            .trim();
+        // Only return the line if it has content (don't return empty lines)
+        const trimmedResult = result.trimEnd();
+        return trimmedResult.length > 0 ? trimmedResult : null;
     }
 }
