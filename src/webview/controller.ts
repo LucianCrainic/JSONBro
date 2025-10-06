@@ -148,6 +148,13 @@ export class WebviewController {
             output.style.color = 'inherit';
             output.innerHTML = JSONFormatter.renderJson(parsedJson);
             
+            // Ensure proper class for line numbers visibility
+            if (JSONFormatter.getShowLineNumbers()) {
+                output.classList.remove('hide-line-numbers');
+            } else {
+                output.classList.add('hide-line-numbers');
+            }
+            
             // Only send message to extension to add to history if not loading from history
             if (!this.isLoadingFromHistory) {
                 this.postMessage({
@@ -403,6 +410,15 @@ export class WebviewController {
             const output = document.getElementById('output');
             if (output) {
                 output.innerHTML = JSONFormatter.renderJson(this.currentJsonObject);
+                
+                // Update the output element's class to show/hide line numbers
+                if (!currentSetting) {
+                    // Turning line numbers ON - remove hide class
+                    output.classList.remove('hide-line-numbers');
+                } else {
+                    // Turning line numbers OFF - add hide class
+                    output.classList.add('hide-line-numbers');
+                }
             }
         }
     }
