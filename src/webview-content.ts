@@ -492,6 +492,30 @@ export class WebviewContentGenerator {
                 color: var(--vscode-tab-activeForeground);
             }
 
+            /* Toggle Button (for strict diff mode) */
+            .toggle-btn {
+                padding: 6px 12px;
+                border: 1px solid var(--vscode-editorGroup-border);
+                border-radius: 3px;
+                background-color: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+                transition: all 0.2s;
+            }
+
+            .toggle-btn:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
+            }
+
+            .toggle-btn.active {
+                background-color: var(--vscode-button-background);
+                color: var(--vscode-button-foreground);
+                border-color: var(--vscode-button-background);
+            }
+
+            .toggle-btn.active:hover {
+                background-color: var(--vscode-button-hoverBackground);
+            }
+
             /* Inline Search Container */
             #search-container {
                 display: flex;
@@ -744,6 +768,12 @@ export class WebviewContentGenerator {
                             }
                         </svg>
                         <span id="action-text">${mode === 'format' ? 'Format' : 'Compare'}</span>
+                    </button>
+                    <button id="strict-diff-toggle" class="toggle-btn" title="Strict diff mode: only compare keys from the left JSON, ignoring extra keys in the right JSON" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                        Strict
                     </button>
                 </div>
                 <div id="toolbar-center">
