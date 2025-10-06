@@ -492,6 +492,30 @@ export class WebviewContentGenerator {
                 color: var(--vscode-tab-activeForeground);
             }
 
+            /* Toggle Button (for strict diff mode) */
+            .toggle-btn {
+                padding: 6px 12px;
+                border: 1px solid var(--vscode-editorGroup-border);
+                border-radius: 3px;
+                background-color: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+                transition: all 0.2s;
+            }
+
+            .toggle-btn:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
+            }
+
+            .toggle-btn.active {
+                background-color: var(--vscode-button-background);
+                color: var(--vscode-button-foreground);
+                border-color: var(--vscode-button-background);
+            }
+
+            .toggle-btn.active:hover {
+                background-color: var(--vscode-button-hoverBackground);
+            }
+
             /* Inline Search Container */
             #search-container {
                 display: flex;
@@ -573,47 +597,45 @@ export class WebviewContentGenerator {
                 display: inline;
             }
 
-            details {
-                display: inline;
-                margin: 0;
-            }
-
-            summary {
+            .fold-arrow {
                 cursor: pointer;
                 user-select: none;
-                display: inline;
-                list-style: none;
-                margin: 0;
-                padding: 0;
-            }
-            
-            summary::-webkit-details-marker {
-                display: none;
-            }
-            
-            summary::before {
-                content: '▶ ';
-                display: inline;
+                -webkit-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                display: inline-block;
+                width: 1em;
                 font-size: 0.8em;
-                color: white;
-                opacity: 0.8;
-                transition: transform 0.15s ease;
-                margin-right: 0.5em;
-                margin-left: 0.3em;
+                color: var(--vscode-foreground);
+                opacity: 0.6;
+                transition: opacity 0.15s ease, transform 0.15s ease;
+                margin-right: 0.3em;
             }
-            
-            summary:hover::before {
+
+            .fold-arrow::before {
+                content: attr(data-arrow);
+            }
+
+            .fold-arrow:hover {
                 opacity: 1;
             }
-            
-            details[open] > summary::before {
-                content: '▼ ';
+
+            .fold-arrow.folded {
+                transform: rotate(-90deg);
             }
-            
-            details:not([open]) > summary::after {
-                content: ' ...';
+
+            .foldable-content {
+                display: inline;
+            }
+
+            .foldable-content.hidden {
+                display: none;
+            }
+
+            .fold-ellipsis {
                 opacity: 0.5;
                 color: var(--vscode-descriptionForeground);
+                margin-left: 0.3em;
             }
 
             ul {
@@ -657,27 +679,62 @@ export class WebviewContentGenerator {
                 display: block;
                 margin: 0;
                 padding: 0;
+                line-height: 1.6;
+                font-size: 13px;
             }
 
             .comma {
                 color: var(--vscode-editor-foreground);
             }
 
-            /* Line Numbers */
-            .line-number {
-                display: inline-block;
-                min-width: 3em;
-                padding-right: 1em;
+            .colon {
+                color: var(--vscode-editor-foreground);
+            }
+
+            /* Line Numbers Container */
+            .json-container {
+                display: flex;
+                width: 100%;
+            }
+
+            .line-numbers {
+                flex-shrink: 0;
+                padding: 0 12px 0 0;
                 text-align: right;
                 color: var(--vscode-editorLineNumber-foreground);
                 user-select: none;
-                opacity: 0.7;
-                font-size: 0.9em;
+                border-right: 1px solid var(--vscode-editorGroup-border);
+                background-color: var(--vscode-editor-background);
             }
 
-            .line-number:hover {
+            .json-content {
+                flex: 1;
+                padding-left: 12px;
+                overflow-x: auto;
+            }
+
+            /* Individual Line Number */
+            .line-numbers .line-number {
+                display: block;
+                padding: 0 8px;
+                line-height: 1.6;
+                font-size: 13px;
+                opacity: 0.7;
+                height: auto;
+            }
+
+            .line-numbers .line-number:hover {
                 opacity: 1;
                 color: var(--vscode-editorLineNumber-activeForeground);
+            }
+
+            /* Hide line numbers when disabled */
+            #output.hide-line-numbers .line-numbers {
+                display: none;
+            }
+
+            #output.hide-line-numbers .json-content {
+                padding-left: 0;
             }
 
             /* Search Styles */
@@ -712,6 +769,75 @@ export class WebviewContentGenerator {
                 background-color: var(--vscode-editor-findMatchHighlightBackground);
                 border-color: var(--vscode-editor-findMatchHighlightBorder);
             }
+
+            /* Warning Notification */
+            .warning-notification {
+                position: absolute;
+                top: 48px;
+                left: 8px;
+                right: 48px;
+                background-color: var(--vscode-inputValidation-warningBackground);
+                border: 1px solid var(--vscode-inputValidation-warningBorder);
+                border-radius: 4px;
+                padding: 8px 12px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                z-index: 10;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+                animation: slideDown 0.3s ease;
+            }
+
+            @keyframes slideDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .warning-notification .warning-icon {
+                flex-shrink: 0;
+                stroke: var(--vscode-inputValidation-warningForeground);
+                fill: none;
+                stroke-width: 2;
+            }
+
+            .warning-notification .warning-message {
+                flex: 1;
+                color: var(--vscode-inputValidation-warningForeground);
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            .warning-notification .dismiss-warning-btn {
+                background: none;
+                border: none;
+                padding: 4px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 3px;
+                opacity: 0.7;
+                transition: all 0.2s;
+                min-width: auto;
+                height: auto;
+            }
+
+            .warning-notification .dismiss-warning-btn:hover {
+                background-color: rgba(0, 0, 0, 0.1);
+                opacity: 1;
+            }
+
+            .warning-notification .dismiss-warning-btn svg {
+                stroke: var(--vscode-inputValidation-warningForeground);
+                fill: none;
+                stroke-width: 2;
+            }
         </style>`;
     }
 
@@ -744,6 +870,12 @@ export class WebviewContentGenerator {
                             }
                         </svg>
                         <span id="action-text">${mode === 'format' ? 'Format' : 'Compare'}</span>
+                    </button>
+                    <button id="strict-diff-toggle" class="toggle-btn" title="Strict diff mode: only compare keys from the left JSON, ignoring extra keys in the right JSON" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                        Strict
                     </button>
                 </div>
                 <div id="toolbar-center">
@@ -825,6 +957,20 @@ export class WebviewContentGenerator {
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
                     </button>
+                    <div id="warning-notification" class="warning-notification" style="display: none;">
+                        <svg class="warning-icon" viewBox="0 0 24 24" width="16" height="16">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        <span class="warning-message">JSON auto-corrected! The input had formatting issues. The corrected version is displayed below.</span>
+                        <button id="dismiss-warning" class="dismiss-warning-btn" title="Dismiss">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
                     <div id="output"></div>
                 </div>
             </div>

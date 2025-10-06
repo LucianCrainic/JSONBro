@@ -15,6 +15,7 @@ export class WebviewController {
     private currentMode: 'format' | 'diff' = 'format';
     private vscode: any;
     private isLoadingFromHistory: boolean = false;
+    private strictDiffMode: boolean = false;
 
     /**
      * Initializes the webview controller
@@ -49,12 +50,26 @@ export class WebviewController {
     private parseFlexibleJson(input: string): any {
         return JSONParser.parseFlexible(input);
     }
+    
+    /**
+     * Attempts to parse JSON and returns both the result and whether structural fixes were needed
+     * Note: Cosmetic fixes (quotes, trailing commas, Python syntax) don't trigger warnings
+     */
+    private parseFlexibleJsonWithStatus(input: string): { parsed: any; wasFixed: boolean; originalError?: string } {
+        const result = JSONParser.parseWithStatus(input);
+        return { 
+            parsed: result.parsed, 
+            wasFixed: result.wasStructurallyFixed, 
+            originalError: result.originalError 
+        };
+    }
 
     private setupEventListeners(): void {
         // Mode switching
         const formatModeBtn = document.getElementById('format-mode');
         const diffModeBtn = document.getElementById('diff-mode');
         const actionBtn = document.getElementById('action-btn');
+        const strictDiffToggle = document.getElementById('strict-diff-toggle');
         
         // Other controls
         const clearBtn = document.getElementById('clear');
@@ -78,6 +93,10 @@ export class WebviewController {
                     this.compareJson();
                 }
             });
+        }
+
+        if (strictDiffToggle) {
+            strictDiffToggle.addEventListener('click', () => this.toggleStrictDiff());
         }
 
         if (clearBtn) {
@@ -110,6 +129,9 @@ export class WebviewController {
         
         // Setup line numbers toggle for output panel
         this.setupLineNumbersToggle();
+        
+        // Setup warning notification dismiss button
+        this.setupWarningDismiss();
     }
 
     private setupLineNumbersToggle(): void {
@@ -119,6 +141,13 @@ export class WebviewController {
             lineNumbersToggle.classList.add('active');
             
             lineNumbersToggle.addEventListener('click', () => this.toggleLineNumbers());
+        }
+    }
+    
+    private setupWarningDismiss(): void {
+        const dismissBtn = document.getElementById('dismiss-warning');
+        if (dismissBtn) {
+            dismissBtn.addEventListener('click', () => this.hideWarningNotification());
         }
     }
 
@@ -137,10 +166,27 @@ export class WebviewController {
         }
 
         try {
-            const parsedJson = this.parseFlexibleJson(input);
-            this.currentJsonObject = parsedJson;
+            const { parsed, wasFixed, originalError } = this.parseFlexibleJsonWithStatus(input);
+            this.currentJsonObject = parsed;
             output.style.color = 'inherit';
-            output.innerHTML = JSONFormatter.renderJson(parsedJson);
+            output.innerHTML = JSONFormatter.renderJson(parsed);
+            
+            // Setup fold/unfold click handlers
+            this.setupFoldHandlers(output);
+            
+            // Ensure proper class for line numbers visibility
+            if (JSONFormatter.getShowLineNumbers()) {
+                output.classList.remove('hide-line-numbers');
+            } else {
+                output.classList.add('hide-line-numbers');
+            }
+            
+            // Show warning if JSON was auto-fixed
+            if (wasFixed) {
+                this.showWarningNotification(originalError);
+            } else {
+                this.hideWarningNotification();
+            }
             
             // Only send message to extension to add to history if not loading from history
             if (!this.isLoadingFromHistory) {
@@ -156,6 +202,7 @@ export class WebviewController {
                 ? JSONParser.getParseErrorMessage(input, error)
                 : 'Unknown parsing error';
             output.textContent = errorMessage;
+            this.hideWarningNotification();
         }
     }
 
@@ -397,7 +444,38 @@ export class WebviewController {
             const output = document.getElementById('output');
             if (output) {
                 output.innerHTML = JSONFormatter.renderJson(this.currentJsonObject);
+                
+                // Update the output element's class to show/hide line numbers
+                if (!currentSetting) {
+                    // Turning line numbers ON - remove hide class
+                    output.classList.remove('hide-line-numbers');
+                } else {
+                    // Turning line numbers OFF - add hide class
+                    output.classList.add('hide-line-numbers');
+                }
             }
+        }
+    }
+
+    private toggleStrictDiff(): void {
+        this.strictDiffMode = !this.strictDiffMode;
+        
+        // Update button state
+        const strictDiffToggle = document.getElementById('strict-diff-toggle');
+        if (strictDiffToggle) {
+            if (this.strictDiffMode) {
+                strictDiffToggle.classList.add('active');
+            } else {
+                strictDiffToggle.classList.remove('active');
+            }
+        }
+        
+        // Re-run the comparison if there's already a diff displayed
+        const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
+        const rightJsonEl = document.getElementById('right-json') as HTMLTextAreaElement;
+        
+        if (leftJsonEl && rightJsonEl && leftJsonEl.value.trim() && rightJsonEl.value.trim()) {
+            this.compareJson();
         }
     }
 
@@ -692,6 +770,7 @@ export class WebviewController {
         // Show/hide buttons based on mode
         const searchToggleBtn = document.getElementById('search-toggle');
         const copyBtn = document.getElementById('copy');
+        const strictDiffToggle = document.getElementById('strict-diff-toggle');
         
         if (searchToggleBtn && copyBtn) {
             if (mode === 'format') {
@@ -706,6 +785,11 @@ export class WebviewController {
                     searchContainer.style.display = 'none';
                 }
             }
+        }
+
+        // Show/hide strict diff toggle
+        if (strictDiffToggle) {
+            strictDiffToggle.style.display = mode === 'diff' ? 'flex' : 'none';
         }
 
         // Setup maximize functionality based on mode
@@ -746,7 +830,7 @@ export class WebviewController {
             
             // Generate and display the diff
             diffOutput.style.color = 'inherit';
-            diffOutput.innerHTML = JSONDiff.renderJsonDiff(leftParsed, rightParsed);
+            diffOutput.innerHTML = JSONDiff.renderJsonDiff(leftParsed, rightParsed, this.strictDiffMode);
             
             // Only send message to extension to add to history if not loading from history
             if (!this.isLoadingFromHistory) {
@@ -999,82 +1083,150 @@ export class WebviewController {
         // Remove line numbers so they don't get copied
         temp.querySelectorAll('.line-number').forEach(el => el.remove());
         
-        // Process the DOM recursively to build formatted text
-        const result: string[] = [];
+        // Process each json-line to extract text with proper indentation
+        const lines: string[] = [];
+        const jsonLines = temp.querySelectorAll('.json-line');
         
-        const processNode = (node: Node, indent: number): void => {
+        if (jsonLines.length > 0) {
+            jsonLines.forEach(lineElement => {
+                const lineText = this.extractLineText(lineElement);
+                if (lineText !== null) {
+                    lines.push(lineText);
+                }
+            });
+        } else {
+            // Fallback: if no json-line elements, just get text content
+            const text = temp.textContent || '';
+            return text;
+        }
+        
+        return lines.join('\n');
+    }
+    
+    private extractLineText(element: Element): string | null {
+        let result = '';
+        
+        const processNode = (node: Node): void => {
             if (node.nodeType === Node.TEXT_NODE) {
-                const text = node.textContent?.trim();
-                if (text) {
-                    // Add text with current indentation if it's the start of a new line
-                    if (result.length === 0 || result[result.length - 1].includes('\n')) {
-                        result.push('  '.repeat(indent) + text);
-                    } else {
-                        result.push(text);
-                    }
+                // Preserve all whitespace from text nodes (this includes indentation)
+                const text = node.textContent || '';
+                result += text;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                const el = node as Element;
+                
+                // Skip line number elements and fold arrows
+                if (el.classList.contains('line-number') || el.classList.contains('fold-arrow')) {
+                    return;
                 }
-                return;
-            }
-            
-            if (node.nodeType !== Node.ELEMENT_NODE) return;
-            
-            const element = node as Element;
-            
-            // Handle brackets and braces
-            if (element.classList.contains('bracket') || element.classList.contains('brace')) {
-                const text = element.textContent?.trim();
-                if (text === '[' || text === '{') {
-                    result.push(text);
-                    result.push('\n');
-                } else if (text === ']' || text === '}') {
-                    // Remove trailing comma if present
-                    if (result.length > 0 && result[result.length - 1] === ',') {
-                        result.pop();
-                    }
-                    result.push('\n');
-                    result.push('  '.repeat(Math.max(0, indent - 1)) + text);
+                
+                // Skip fold ellipsis
+                if (el.classList.contains('fold-ellipsis')) {
+                    return;
                 }
-                return;
-            }
-            
-            // Handle comma elements
-            if (element.classList.contains('comma')) {
-                result.push(',');
-                result.push('\n');
-                return;
-            }
-            
-            // Handle json-line elements
-            if (element.classList.contains('json-line')) {
-                // Process children of json-line with increased indent
-                for (const child of Array.from(element.childNodes)) {
-                    processNode(child, indent);
+                
+                // Process children
+                for (const child of Array.from(el.childNodes)) {
+                    processNode(child);
                 }
-                return;
-            }
-            
-            // Handle json-items (increase indent)
-            if (element.classList.contains('json-items')) {
-                for (const child of Array.from(element.childNodes)) {
-                    processNode(child, indent + 1);
-                }
-                return;
-            }
-            
-            // For other elements, just process children
-            for (const child of Array.from(element.childNodes)) {
-                processNode(child, indent);
             }
         };
         
-        processNode(temp, 0);
+        processNode(element);
         
-        // Join all parts and clean up extra newlines
-        return result.join('')
-            .split('\n')
-            .map(line => line.trimEnd())
-            .filter((line, i, arr) => line.trim() || i === arr.length - 1) // Remove empty lines except last
-            .join('\n')
-            .trim();
+        // Only return the line if it has content (don't return empty lines)
+        const trimmedResult = result.trimEnd();
+        return trimmedResult.length > 0 ? trimmedResult : null;
+    }
+    
+    private showWarningNotification(originalError?: string): void {
+        const warningContainer = document.getElementById('warning-notification');
+        if (warningContainer) {
+            const warningMessage = warningContainer.querySelector('.warning-message');
+            if (warningMessage) {
+                warningMessage.textContent = 'JSON auto-corrected! The input had errors that were automatically fixed. The corrected version is displayed below.';
+            }
+            warningContainer.style.display = 'flex';
+        }
+    }
+    
+    private hideWarningNotification(): void {
+        const warningContainer = document.getElementById('warning-notification');
+        if (warningContainer) {
+            warningContainer.style.display = 'none';
+        }
+    }
+
+    /**
+     * Setup click handlers for fold/unfold arrows
+     */
+    private setupFoldHandlers(container: HTMLElement): void {
+        const arrows = container.querySelectorAll('.fold-arrow');
+        arrows.forEach(arrow => {
+            arrow.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const target = e.target as HTMLElement;
+                const foldId = target.getAttribute('data-fold-id');
+                
+                if (!foldId) return;
+                
+                const isFolded = target.classList.contains('folded');
+                const contentElements = container.querySelectorAll(`.foldable-content[data-fold-id="${foldId}"]`);
+                const parentLine = target.closest('.json-line');
+                
+                // Get line numbers container
+                const jsonContainer = container.querySelector('.json-container');
+                const lineNumbers = jsonContainer?.querySelector('.line-numbers');
+                
+                if (isFolded) {
+                    // Unfold
+                    target.classList.remove('folded');
+                    contentElements.forEach(el => {
+                        el.classList.remove('hidden');
+                        // Show corresponding line number
+                        if (lineNumbers) {
+                            const line = el.closest('.json-line');
+                            const lineIndex = Array.from(container.querySelectorAll('.json-line')).indexOf(line as Element);
+                            const lineNumEl = lineNumbers.children[lineIndex] as HTMLElement;
+                            if (lineNumEl) {
+                                lineNumEl.style.display = '';
+                            }
+                        }
+                    });
+                    
+                    // Remove ellipsis if exists
+                    const ellipsis = parentLine?.querySelector('.fold-ellipsis');
+                    if (ellipsis) {
+                        ellipsis.remove();
+                    }
+                } else {
+                    // Fold
+                    target.classList.add('folded');
+                    contentElements.forEach(el => {
+                        el.classList.add('hidden');
+                        // Hide corresponding line number
+                        if (lineNumbers) {
+                            const line = el.closest('.json-line');
+                            const lineIndex = Array.from(container.querySelectorAll('.json-line')).indexOf(line as Element);
+                            const lineNumEl = lineNumbers.children[lineIndex] as HTMLElement;
+                            if (lineNumEl) {
+                                lineNumEl.style.display = 'none';
+                            }
+                        }
+                    });
+                    
+                    // Add ellipsis after the bracket
+                    if (parentLine && !parentLine.querySelector('.fold-ellipsis')) {
+                        const bracket = parentLine.querySelector('.bracket, .brace');
+                        if (bracket) {
+                            const ellipsis = document.createElement('span');
+                            ellipsis.className = 'fold-ellipsis';
+                            ellipsis.textContent = ' ...';
+                            bracket.after(ellipsis);
+                        }
+                    }
+                }
+            });
+        });
     }
 }
+
