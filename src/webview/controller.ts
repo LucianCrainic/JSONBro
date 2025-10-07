@@ -873,7 +873,12 @@ export class WebviewController {
             return;
         }
 
-        button.addEventListener('click', () => {
+        // Remove any existing listener by cloning and replacing the button
+        const newButton = button.cloneNode(true) as HTMLElement;
+        button.parentNode?.replaceChild(newButton, button);
+
+        // Add the click listener to the new button
+        newButton.addEventListener('click', () => {
             this.toggleMaximizePanel(panelId);
         });
     }
