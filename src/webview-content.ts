@@ -235,6 +235,27 @@ export class WebviewContentGenerator {
                 pointer-events: auto;
             }
 
+            /* Multiple panel control buttons - arrange them in a row */
+            #left-json-panel .panel-control-btn:nth-of-type(1) {
+                right: 88px; /* copy button */
+            }
+
+            #left-json-panel .panel-control-btn:nth-of-type(2) {
+                right: 48px; /* clear button */
+            }
+
+            #diff-result-panel .panel-control-btn:nth-of-type(1) {
+                right: 88px; /* apply all button */
+            }
+
+            #diff-result-panel .panel-control-btn:nth-of-type(2) {
+                right: 48px; /* reject all button */
+            }
+
+            #right-json-panel .panel-control-btn:nth-of-type(1) {
+                right: 48px; /* clear button */
+            }
+
             .maximize-btn:hover,
             .panel-control-btn:hover {
                 background-color: var(--vscode-toolbar-hoverBackground);
@@ -254,6 +275,27 @@ export class WebviewContentGenerator {
 
             .panel-control-btn.active:hover {
                 background-color: var(--vscode-button-secondaryHoverBackground);
+            }
+
+            /* Special styling for apply/reject all buttons */
+            .panel-control-btn.apply-all-btn {
+                background-color: var(--vscode-button-background);
+                color: var(--vscode-button-foreground);
+                opacity: 0.8;
+            }
+
+            .panel-control-btn.apply-all-btn:hover {
+                background-color: var(--vscode-button-hoverBackground);
+                opacity: 1;
+            }
+
+            .panel-control-btn.reject-all-btn {
+                background-color: transparent;
+                opacity: 0.6;
+            }
+
+            .panel-control-btn.reject-all-btn:hover {
+                opacity: 1;
             }
 
             #left-json, #right-json {
@@ -422,6 +464,74 @@ export class WebviewContentGenerator {
                 color: var(--vscode-errorForeground);
                 padding: 16px;
                 text-align: center;
+            }
+
+            /* Diff Item Actions */
+            .diff-action-btn {
+                background-color: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+                border: 1px solid var(--vscode-editorGroup-border);
+                padding: 4px;
+                cursor: pointer;
+                border-radius: 3px;
+                font-size: 11px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                height: 24px;
+                min-width: 24px;
+                box-sizing: border-box;
+                transition: all 0.2s ease;
+            }
+
+            .diff-action-btn:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
+            }
+
+            .diff-action-btn:active {
+                transform: scale(0.95);
+            }
+
+            .diff-action-btn svg {
+                width: 12px;
+                height: 12px;
+            }
+
+            .diff-item-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+                gap: 8px;
+            }
+
+            .diff-item-actions {
+                display: flex;
+                gap: 4px;
+                opacity: 0;
+                transition: opacity 0.2s ease;
+            }
+
+            .diff-item:hover .diff-item-actions {
+                opacity: 1;
+            }
+
+            .diff-item.diff-applied {
+                opacity: 0.5;
+                background-color: var(--vscode-editor-background);
+            }
+
+            .diff-item.diff-applied .diff-item-actions {
+                opacity: 0.3;
+            }
+
+            .diff-item.diff-rejected {
+                opacity: 0.3;
+                text-decoration: line-through;
+            }
+
+            .diff-item.diff-rejected .diff-item-actions {
+                opacity: 0.3;
             }
 
             button {
@@ -978,6 +1088,18 @@ export class WebviewContentGenerator {
             <!-- Diff Mode Container -->
             <div id="diff-container" class="mode-container" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
                 <div id="left-json-panel">
+                    <button id="copy-left-json" class="panel-control-btn" title="Copy left JSON to clipboard">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" fill="none" stroke-width="2"></rect>
+                            <path d="m5,15H4a2,2 0 0,1 -2,-2V4a2,2 0 0,1 2,-2H13a2,2 0 0,1 2,2v1" stroke="currentColor" fill="none" stroke-width="2"></path>
+                        </svg>
+                    </button>
+                    <button id="clear-left-json" class="panel-control-btn" title="Clear left JSON">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <polyline points="3,6 5,6 21,6" stroke="currentColor" fill="none" stroke-width="2"></polyline>
+                            <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2" stroke="currentColor" fill="none" stroke-width="2"></path>
+                        </svg>
+                    </button>
                     <button id="maximize-left" class="maximize-btn" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
@@ -986,6 +1108,17 @@ export class WebviewContentGenerator {
                     <textarea id="left-json" placeholder="Enter original JSON here..."></textarea>
                 </div>
                 <div id="diff-result-panel">
+                    <button id="apply-all-diffs" class="panel-control-btn apply-all-btn" title="Apply all differences to the left JSON" style="display: none;">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <polyline points="20 6 9 17 4 12" stroke="currentColor" fill="none" stroke-width="2"></polyline>
+                        </svg>
+                    </button>
+                    <button id="reject-all-diffs" class="panel-control-btn reject-all-btn" title="Reject all differences" style="display: none;">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" fill="none" stroke-width="2"></line>
+                            <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" fill="none" stroke-width="2"></line>
+                        </svg>
+                    </button>
                     <button id="maximize-diff" class="maximize-btn" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
@@ -994,6 +1127,12 @@ export class WebviewContentGenerator {
                     <div id="diff-output"></div>
                 </div>
                 <div id="right-json-panel">
+                    <button id="clear-right-json" class="panel-control-btn" title="Clear right JSON">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <polyline points="3,6 5,6 21,6" stroke="currentColor" fill="none" stroke-width="2"></polyline>
+                            <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2" stroke="currentColor" fill="none" stroke-width="2"></path>
+                        </svg>
+                    </button>
                     <button id="maximize-right" class="maximize-btn" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>

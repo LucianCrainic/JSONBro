@@ -16,6 +16,11 @@ export class WebviewController {
     private vscode: any;
     private isLoadingFromHistory: boolean = false;
     private strictDiffMode: boolean = false;
+    private leftJsonObject: any = null;
+    private rightJsonObject: any = null;
+    private currentDiffs: any[] = [];
+    private diffStates: Map<string, 'pending' | 'applied' | 'rejected'> = new Map();
+    private originalLeftJson: any = null; // Store the original left JSON for undo
 
     /**
      * Initializes the webview controller
@@ -132,6 +137,9 @@ export class WebviewController {
         
         // Setup warning notification dismiss button
         this.setupWarningDismiss();
+        
+        // Setup diff panel controls
+        this.setupDiffPanelControls();
     }
 
     private setupLineNumbersToggle(): void {
@@ -149,6 +157,117 @@ export class WebviewController {
         if (dismissBtn) {
             dismissBtn.addEventListener('click', () => this.hideWarningNotification());
         }
+    }
+
+    private setupDiffPanelControls(): void {
+        // Apply all diffs button
+        const applyAllBtn = document.getElementById('apply-all-diffs');
+        if (applyAllBtn) {
+            applyAllBtn.addEventListener('click', () => this.applyAllDiffs());
+        }
+
+        // Reject all diffs button
+        const rejectAllBtn = document.getElementById('reject-all-diffs');
+        if (rejectAllBtn) {
+            rejectAllBtn.addEventListener('click', () => this.rejectAllDiffs());
+        }
+
+        // Copy left JSON button
+        const copyLeftBtn = document.getElementById('copy-left-json');
+        if (copyLeftBtn) {
+            copyLeftBtn.addEventListener('click', () => this.copyLeftJson());
+        }
+
+        // Clear buttons for JSON panes - also clear diff when clearing JSON
+        const clearLeftBtn = document.getElementById('clear-left-json');
+        if (clearLeftBtn) {
+            clearLeftBtn.addEventListener('click', () => {
+                this.clearLeftJson();
+                this.clearDiffOutput();
+            });
+        }
+
+        const clearRightBtn = document.getElementById('clear-right-json');
+        if (clearRightBtn) {
+            clearRightBtn.addEventListener('click', () => {
+                this.clearRightJson();
+                this.clearDiffOutput();
+            });
+        }
+    }
+
+    private copyLeftJson(): void {
+        const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
+        if (leftJsonEl && leftJsonEl.value.trim()) {
+            navigator.clipboard.writeText(leftJsonEl.value).then(() => {
+                console.log('Left JSON copied to clipboard');
+            }).catch(err => {
+                console.error('Failed to copy to clipboard:', err);
+            });
+        }
+    }
+
+    private clearLeftJson(): void {
+        const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
+        if (leftJsonEl) {
+            leftJsonEl.value = '';
+            this.leftJsonObject = null;
+        }
+    }
+
+    private clearDiffOutput(): void {
+        const diffOutput = document.getElementById('diff-output');
+        if (diffOutput) {
+            diffOutput.innerHTML = '';
+        }
+        this.currentDiffs = [];
+        this.diffStates.clear();
+        this.originalLeftJson = null;
+        this.hideDiffActionButtons();
+    }
+
+    private clearRightJson(): void {
+        const rightJsonEl = document.getElementById('right-json') as HTMLTextAreaElement;
+        if (rightJsonEl) {
+            rightJsonEl.value = '';
+            this.rightJsonObject = null;
+        }
+    }
+
+    private showDiffActionButtons(): void {
+        const applyAllBtn = document.getElementById('apply-all-diffs');
+        const rejectAllBtn = document.getElementById('reject-all-diffs');
+        
+        if (applyAllBtn) {
+            applyAllBtn.style.display = 'flex';
+        }
+        if (rejectAllBtn) {
+            rejectAllBtn.style.display = 'flex';
+        }
+    }
+
+    private hideDiffActionButtons(): void {
+        const applyAllBtn = document.getElementById('apply-all-diffs');
+        const rejectAllBtn = document.getElementById('reject-all-diffs');
+        
+        if (applyAllBtn) {
+            applyAllBtn.style.display = 'none';
+        }
+        if (rejectAllBtn) {
+            rejectAllBtn.style.display = 'none';
+        }
+    }
+
+    private getDiffId(diffItem: HTMLElement): string {
+        return diffItem.getAttribute('data-diff-id') || '';
+    }
+
+    private getDiffState(diffId: string): 'pending' | 'applied' | 'rejected' {
+        return this.diffStates.get(diffId) || 'pending';
+    }
+
+    private setDiffState(diffId: string, state: 'pending' | 'applied' | 'rejected'): void {
+        this.diffStates.set(diffId, state);
     }
 
     private formatJson(): void {
@@ -276,6 +395,16 @@ export class WebviewController {
             if (leftJsonEl) leftJsonEl.value = '';
             if (rightJsonEl) rightJsonEl.value = '';
             if (diffOutput) diffOutput.innerHTML = '';
+            
+            // Clear diff state
+            this.leftJsonObject = null;
+            this.rightJsonObject = null;
+            this.currentDiffs = [];
+            this.diffStates.clear();
+            this.originalLeftJson = null;
+            
+            // Hide apply/reject all buttons
+            this.hideDiffActionButtons();
         }
         
         this.currentJsonObject = null;
@@ -821,6 +950,18 @@ export class WebviewController {
             const leftParsed = this.parseFlexibleJson(leftJson);
             const rightParsed = this.parseFlexibleJson(rightJson);
             
+            // Clear all diff states when starting a new comparison
+            this.diffStates.clear();
+            this.originalLeftJson = null;
+            
+            // Store the original left JSON for undo functionality
+            this.originalLeftJson = JSON.parse(JSON.stringify(leftParsed));
+            
+            // Store the parsed objects and diffs
+            this.leftJsonObject = leftParsed;
+            this.rightJsonObject = rightParsed;
+            this.currentDiffs = JSONDiff.compareJson(leftParsed, rightParsed, [], this.strictDiffMode);
+            
             // Format both JSON inputs in their respective textareas
             const leftFormatted = JSON.stringify(leftParsed, null, 2);
             const rightFormatted = JSON.stringify(rightParsed, null, 2);
@@ -831,6 +972,13 @@ export class WebviewController {
             // Generate and display the diff
             diffOutput.style.color = 'inherit';
             diffOutput.innerHTML = JSONDiff.renderJsonDiff(leftParsed, rightParsed, this.strictDiffMode);
+            
+            // Show or hide apply/reject all buttons based on whether there are diffs
+            if (this.currentDiffs.length > 0) {
+                this.showDiffActionButtons();
+            } else {
+                this.hideDiffActionButtons();
+            }
             
             // Only send message to extension to add to history if not loading from history
             if (!this.isLoadingFromHistory) {
@@ -843,10 +991,14 @@ export class WebviewController {
             
             // Setup expandable value handlers
             this.setupExpandableValues(diffOutput);
+            
+            // Setup diff action handlers
+            this.setupDiffActionHandlers(diffOutput);
         } catch (error) {
             diffOutput.style.color = 'var(--vscode-errorForeground)';
             const errorMessage = error instanceof Error ? error.message : 'Unknown parsing error';
             diffOutput.innerHTML = `<div class="diff-error">Error parsing JSON: ${errorMessage}</div>`;
+            this.hideDiffActionButtons();
         }
     }
 
@@ -1046,6 +1198,209 @@ export class WebviewController {
                     element.removeAttribute('title');
                 }
             });
+        });
+    }
+
+    private setupDiffActionHandlers(container: HTMLElement): void {
+        // Individual diff actions only - apply/reject all are handled in setupDiffPanelControls
+        const diffItems = container.querySelectorAll('.diff-item');
+        diffItems.forEach(item => {
+            const applyBtn = item.querySelector('.apply-diff-btn');
+            const rejectBtn = item.querySelector('.reject-diff-btn');
+            const undoBtn = item.querySelector('.undo-diff-btn');
+            
+            if (applyBtn) {
+                applyBtn.addEventListener('click', () => this.applyDiff(item as HTMLElement));
+            }
+            
+            if (rejectBtn) {
+                rejectBtn.addEventListener('click', () => this.rejectDiff(item as HTMLElement));
+            }
+            
+            if (undoBtn) {
+                undoBtn.addEventListener('click', () => this.undoDiff(item as HTMLElement));
+            }
+        });
+    }
+
+    private restoreDiffStates(): void {
+        const diffOutput = document.getElementById('diff-output');
+        if (!diffOutput) {
+            return;
+        }
+
+        const diffItems = diffOutput.querySelectorAll('.diff-item');
+        diffItems.forEach(item => {
+            const diffId = this.getDiffId(item as HTMLElement);
+            const state = this.getDiffState(diffId);
+            
+            if (state === 'applied') {
+                this.updateDiffItemVisualState(item as HTMLElement, 'applied');
+            } else if (state === 'rejected') {
+                this.updateDiffItemVisualState(item as HTMLElement, 'rejected');
+            }
+        });
+    }
+
+    private updateDiffItemVisualState(diffItem: HTMLElement, state: 'pending' | 'applied' | 'rejected'): void {
+        const applyBtn = diffItem.querySelector('.apply-diff-btn') as HTMLElement;
+        const rejectBtn = diffItem.querySelector('.reject-diff-btn') as HTMLElement;
+        const undoBtn = diffItem.querySelector('.undo-diff-btn') as HTMLElement;
+        
+        // Remove all state classes
+        diffItem.classList.remove('diff-applied', 'diff-rejected');
+        
+        if (state === 'applied') {
+            diffItem.classList.add('diff-applied');
+            if (applyBtn) applyBtn.style.display = 'none';
+            if (rejectBtn) rejectBtn.style.display = 'none';
+            if (undoBtn) undoBtn.style.display = 'flex';
+        } else if (state === 'rejected') {
+            diffItem.classList.add('diff-rejected');
+            if (applyBtn) applyBtn.style.display = 'none';
+            if (rejectBtn) rejectBtn.style.display = 'none';
+            if (undoBtn) undoBtn.style.display = 'flex';
+        } else {
+            // pending state
+            if (applyBtn) applyBtn.style.display = 'flex';
+            if (rejectBtn) rejectBtn.style.display = 'flex';
+            if (undoBtn) undoBtn.style.display = 'none';
+        }
+    }
+
+    private applyDiff(diffItem: HTMLElement): void {
+        const diffId = this.getDiffId(diffItem);
+        const diffType = diffItem.getAttribute('data-diff-type');
+        const diffPath = diffItem.getAttribute('data-diff-path');
+        const diffValue = diffItem.getAttribute('data-diff-value');
+        const diffOldValue = diffItem.getAttribute('data-diff-old-value');
+
+        if (!diffPath || !this.leftJsonObject) {
+            return;
+        }
+
+        try {
+            const path = JSON.parse(diffPath);
+            const diff: any = {
+                type: diffType,
+                path: path
+            };
+
+            if (diffValue) {
+                diff.newValue = JSON.parse(diffValue);
+            }
+            if (diffOldValue) {
+                diff.oldValue = JSON.parse(diffOldValue);
+            }
+
+            // Apply the diff to the left JSON
+            this.leftJsonObject = JSONDiff.applyDiff(this.leftJsonObject, diff);
+
+            // Update the left JSON textarea
+            const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
+            if (leftJsonEl) {
+                leftJsonEl.value = JSON.stringify(this.leftJsonObject, null, 2);
+            }
+
+            // Mark as applied and update visual state
+            this.setDiffState(diffId, 'applied');
+            this.updateDiffItemVisualState(diffItem, 'applied');
+        } catch (error) {
+            console.error('Error applying diff:', error);
+        }
+    }
+
+    private rejectDiff(diffItem: HTMLElement): void {
+        const diffId = this.getDiffId(diffItem);
+        
+        // Mark as rejected
+        this.setDiffState(diffId, 'rejected');
+        this.updateDiffItemVisualState(diffItem, 'rejected');
+    }
+
+    private undoDiff(diffItem: HTMLElement): void {
+        const diffId = this.getDiffId(diffItem);
+        const state = this.getDiffState(diffId);
+        
+        if (state === 'applied') {
+            // Undo the applied diff by reverting it
+            const diffType = diffItem.getAttribute('data-diff-type');
+            const diffPath = diffItem.getAttribute('data-diff-path');
+            const diffValue = diffItem.getAttribute('data-diff-value');
+            const diffOldValue = diffItem.getAttribute('data-diff-old-value');
+
+            if (!diffPath || !this.leftJsonObject) {
+                return;
+            }
+
+            try {
+                const path = JSON.parse(diffPath);
+                const diff: any = {
+                    type: diffType,
+                    path: path
+                };
+
+                if (diffValue) {
+                    diff.newValue = JSON.parse(diffValue);
+                }
+                if (diffOldValue) {
+                    diff.oldValue = JSON.parse(diffOldValue);
+                }
+
+                // Revert the diff
+                this.leftJsonObject = JSONDiff.revertDiff(this.leftJsonObject, diff);
+
+                // Update the left JSON textarea
+                const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
+                if (leftJsonEl) {
+                    leftJsonEl.value = JSON.stringify(this.leftJsonObject, null, 2);
+                }
+
+                // Reset the state to pending
+                this.setDiffState(diffId, 'pending');
+                this.updateDiffItemVisualState(diffItem, 'pending');
+            } catch (error) {
+                console.error('Error reverting diff:', error);
+            }
+        } else if (state === 'rejected') {
+            // Simply reset the rejected state
+            this.setDiffState(diffId, 'pending');
+            this.updateDiffItemVisualState(diffItem, 'pending');
+        }
+    }
+
+    private applyAllDiffs(): void {
+        if (!this.leftJsonObject || this.currentDiffs.length === 0) {
+            return;
+        }
+
+        try {
+            // Apply all diffs at once
+            this.leftJsonObject = JSONDiff.applyDiffs(this.leftJsonObject, this.currentDiffs);
+
+            // Update the left JSON textarea
+            const leftJsonEl = document.getElementById('left-json') as HTMLTextAreaElement;
+            if (leftJsonEl) {
+                leftJsonEl.value = JSON.stringify(this.leftJsonObject, null, 2);
+            }
+
+            // Re-compare to update the diff view
+            this.compareJson();
+        } catch (error) {
+            console.error('Error applying all diffs:', error);
+        }
+    }
+
+    private rejectAllDiffs(): void {
+        const diffOutput = document.getElementById('diff-output');
+        if (!diffOutput) {
+            return;
+        }
+
+        const diffItems = diffOutput.querySelectorAll('.diff-item');
+        diffItems.forEach(item => {
+            item.classList.add('diff-rejected');
+            item.classList.remove('diff-applied');
         });
     }
 

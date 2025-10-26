@@ -1067,3 +1067,297 @@ describe('JSONDiff', () => {
         });
     });
 });
+
+describe('Diff Application', () => {
+    describe('applyDiff', () => {
+        it('should apply an added property', () => {
+            const json = { "a": 1 };
+            const diff = {
+                type: 'added' as const,
+                path: ['b'],
+                newValue: 2
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ "a": 1, "b": 2 });
+        });
+
+        it('should apply a modified property', () => {
+            const json = { "a": 1, "b": 2 };
+            const diff = {
+                type: 'modified' as const,
+                path: ['a'],
+                oldValue: 1,
+                newValue: 10
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ "a": 10, "b": 2 });
+        });
+
+        it('should apply a removed property', () => {
+            const json = { "a": 1, "b": 2 };
+            const diff = {
+                type: 'removed' as const,
+                path: ['b'],
+                oldValue: 2
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ "a": 1 });
+        });
+
+        it('should apply nested property additions', () => {
+            const json = { "user": { "name": "John" } };
+            const diff = {
+                type: 'added' as const,
+                path: ['user', 'age'],
+                newValue: 30
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ "user": { "name": "John", "age": 30 } });
+        });
+
+        it('should apply nested property modifications', () => {
+            const json = { "user": { "name": "John", "age": 30 } };
+            const diff = {
+                type: 'modified' as const,
+                path: ['user', 'age'],
+                oldValue: 30,
+                newValue: 31
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ "user": { "name": "John", "age": 31 } });
+        });
+
+        it('should apply array element modifications', () => {
+            const json = { "items": [1, 2, 3] };
+            const diff = {
+                type: 'modified' as const,
+                path: ['items', '1'],
+                oldValue: 2,
+                newValue: 20
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ "items": [1, 20, 3] });
+        });
+
+        it('should apply array element additions', () => {
+            const json = { "items": [1, 2] };
+            const diff = {
+                type: 'added' as const,
+                path: ['items', '2'],
+                newValue: 3
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ "items": [1, 2, 3] });
+        });
+
+        it('should apply array element removals', () => {
+            const json = { "items": [1, 2, 3] };
+            const diff = {
+                type: 'removed' as const,
+                path: ['items', '1'],
+                oldValue: 2
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ "items": [1, 3] });
+        });
+
+        it('should create intermediate objects when needed', () => {
+            const json = { "a": 1 };
+            const diff = {
+                type: 'added' as const,
+                path: ['user', 'profile', 'name'],
+                newValue: 'John'
+            };
+
+            const result = JSONDiff.applyDiff(json, diff);
+
+            expect(result).toEqual({ 
+                "a": 1, 
+                "user": { 
+                    "profile": { 
+                        "name": "John" 
+                    } 
+                } 
+            });
+        });
+
+        it('should not mutate the original object', () => {
+            const json = { "a": 1 };
+            const diff = {
+                type: 'added' as const,
+                path: ['b'],
+                newValue: 2
+            };
+
+            JSONDiff.applyDiff(json, diff);
+
+            expect(json).toEqual({ "a": 1 });
+        });
+    });
+
+    describe('applyDiffs', () => {
+        it('should apply multiple diffs', () => {
+            const json = { "a": 1, "b": 2 };
+            const diffs = [
+                {
+                    type: 'modified' as const,
+                    path: ['a'],
+                    oldValue: 1,
+                    newValue: 10
+                },
+                {
+                    type: 'added' as const,
+                    path: ['c'],
+                    newValue: 3
+                }
+            ];
+
+            const result = JSONDiff.applyDiffs(json, diffs);
+
+            expect(result).toEqual({ "a": 10, "b": 2, "c": 3 });
+        });
+
+        it('should handle complex diff scenarios', () => {
+            const json = { 
+                "user": { "name": "John", "age": 30 },
+                "items": [1, 2, 3]
+            };
+            const diffs = [
+                {
+                    type: 'modified' as const,
+                    path: ['user', 'age'],
+                    oldValue: 30,
+                    newValue: 31
+                },
+                {
+                    type: 'added' as const,
+                    path: ['user', 'email'],
+                    newValue: 'john@example.com'
+                },
+                {
+                    type: 'modified' as const,
+                    path: ['items', '1'],
+                    oldValue: 2,
+                    newValue: 20
+                }
+            ];
+
+            const result = JSONDiff.applyDiffs(json, diffs);
+
+            expect(result).toEqual({ 
+                "user": { 
+                    "name": "John", 
+                    "age": 31,
+                    "email": "john@example.com"
+                },
+                "items": [1, 20, 3]
+            });
+        });
+
+        it('should apply diffs in correct order to avoid array index issues', () => {
+            const json = { "items": [1, 2, 3, 4, 5] };
+            const diffs = [
+                {
+                    type: 'removed' as const,
+                    path: ['items', '1'],
+                    oldValue: 2
+                },
+                {
+                    type: 'modified' as const,
+                    path: ['items', '0'],
+                    oldValue: 1,
+                    newValue: 10
+                }
+            ];
+
+            const result = JSONDiff.applyDiffs(json, diffs);
+
+            expect(result).toEqual({ "items": [10, 3, 4, 5] });
+        });
+    });
+
+    describe('revertDiff', () => {
+        it('should revert an added property', () => {
+            const json = { "a": 1, "b": 2 };
+            const diff = {
+                type: 'added' as const,
+                path: ['b'],
+                newValue: 2
+            };
+
+            const result = JSONDiff.revertDiff(json, diff);
+
+            expect(result).toEqual({ "a": 1 });
+        });
+
+        it('should revert a modified property', () => {
+            const json = { "a": 10, "b": 2 };
+            const diff = {
+                type: 'modified' as const,
+                path: ['a'],
+                oldValue: 1,
+                newValue: 10
+            };
+
+            const result = JSONDiff.revertDiff(json, diff);
+
+            expect(result).toEqual({ "a": 1, "b": 2 });
+        });
+
+        it('should revert a removed property', () => {
+            const json = { "a": 1 };
+            const diff = {
+                type: 'removed' as const,
+                path: ['b'],
+                oldValue: 2
+            };
+
+            const result = JSONDiff.revertDiff(json, diff);
+
+            expect(result).toEqual({ "a": 1, "b": 2 });
+        });
+
+        it('should revert nested property changes', () => {
+            const json = { "user": { "name": "John", "age": 31 } };
+            const diff = {
+                type: 'modified' as const,
+                path: ['user', 'age'],
+                oldValue: 30,
+                newValue: 31
+            };
+
+            const result = JSONDiff.revertDiff(json, diff);
+
+            expect(result).toEqual({ "user": { "name": "John", "age": 30 } });
+        });
+
+        it('should not mutate the original object', () => {
+            const json = { "a": 1, "b": 2 };
+            const diff = {
+                type: 'added' as const,
+                path: ['b'],
+                newValue: 2
+            };
+
+            JSONDiff.revertDiff(json, diff);
+
+            expect(json).toEqual({ "a": 1, "b": 2 });
+        });
+    });
+});
