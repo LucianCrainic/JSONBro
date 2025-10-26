@@ -3,12 +3,25 @@
  */
 export type DiffType = 'added' | 'removed' | 'modified' | 'unchanged';
 
+/**
+ * Diff application state
+ */
+export type DiffApplicationState = 'pending' | 'applied' | 'rejected';
+
 export interface DiffResult {
     type: DiffType;
     path: string[];
     oldValue?: any;
     newValue?: any;
     children?: DiffResult[];
+}
+
+/**
+ * Extended diff result with application state
+ */
+export interface ApplicableDiffResult extends DiffResult {
+    id: string;
+    state: DiffApplicationState;
 }
 
 /**
@@ -239,10 +252,10 @@ export class JSONDiff {
             const diffs = this.compareJson(oldValue, newValue, [], strictMode);
             
             if (diffs.length === 0) {
-                return '<div class="diff-result no-changes">✅ No differences found - JSON objects are identical</div>';
+                return '<div class="diff-result no-changes">No differences found - JSON objects are identical</div>';
             }
 
-            return `<div class="diff-result"><div class="diff-items">${diffs.map(diff => this.renderDiffItem(diff)).join('')}</div></div>`;
+            return `<div class="diff-result"><div class="diff-items">${diffs.map((diff, index) => this.renderDiffItem(diff, index)).join('')}</div></div>`;
         } catch (error) {
             return `<div class="diff-error">Error generating diff: ${error instanceof Error ? error.message : 'Unknown error'}</div>`;
         }
@@ -251,24 +264,67 @@ export class JSONDiff {
     /**
      * Renders a single diff item
      */
-    private static renderDiffItem(diff: DiffResult): string {
+    private static renderDiffItem(diff: DiffResult, index: number): string {
         const pathStr = diff.path.length > 0 ? diff.path.join('.') : 'root';
         const diffClass = `diff-item diff-${diff.type}`;
+        const diffId = `diff-${index}`;
 
         switch (diff.type) {
             case this.DIFF_TYPES.ADDED:
                 const newVal = this.formatValue(diff.newValue);
                 return `
-                    <div class="${diffClass}">
-                        <span class="diff-path">+ ${pathStr}</span> = <span class="diff-value new-value">${newVal}</span>
+                    <div class="${diffClass}" data-diff-id="${diffId}" data-diff-type="${diff.type}" data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}" data-diff-value="${this.escapeHtml(JSON.stringify(diff.newValue))}">
+                        <div class="diff-item-header">
+                            <span class="diff-path">+ ${pathStr}</span> = <span class="diff-value new-value">${newVal}</span>
+                            <div class="diff-item-actions">
+                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                </button>
+                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 7v6h6"></path>
+                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 `;
 
             case this.DIFF_TYPES.REMOVED:
                 const oldVal = this.formatValue(diff.oldValue);
                 return `
-                    <div class="${diffClass}">
-                        <span class="diff-path">- ${pathStr}</span> = <span class="diff-value old-value">${oldVal}</span>
+                    <div class="${diffClass}" data-diff-id="${diffId}" data-diff-type="${diff.type}" data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}" data-diff-old-value="${this.escapeHtml(JSON.stringify(diff.oldValue))}">
+                        <div class="diff-item-header">
+                            <span class="diff-path">- ${pathStr}</span> = <span class="diff-value old-value">${oldVal}</span>
+                            <div class="diff-item-actions">
+                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON (remove this property)">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                </button>
+                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 7v6h6"></path>
+                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 `;
 
@@ -276,10 +332,31 @@ export class JSONDiff {
                 const oldModVal = this.formatValue(diff.oldValue);
                 const newModVal = this.formatValue(diff.newValue);
                 return `
-                    <div class="${diffClass}">
-                        <div class="diff-path">~ ${pathStr}</div>
-                        <div class="diff-inline-change">
-                            <span class="diff-value old-value">${oldModVal}</span> → <span class="diff-value new-value">${newModVal}</span>
+                    <div class="${diffClass}" data-diff-id="${diffId}" data-diff-type="${diff.type}" data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}" data-diff-old-value="${this.escapeHtml(JSON.stringify(diff.oldValue))}" data-diff-value="${this.escapeHtml(JSON.stringify(diff.newValue))}">
+                        <div class="diff-item-header">
+                            <div class="diff-path">~ ${pathStr}</div>
+                            <div class="diff-inline-change">
+                                <span class="diff-value old-value">${oldModVal}</span> → <span class="diff-value new-value">${newModVal}</span>
+                            </div>
+                            <div class="diff-item-actions">
+                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                </button>
+                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 7v6h6"></path>
+                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -336,5 +413,155 @@ export class JSONDiff {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    /**
+     * Applies a single diff to a JSON object
+     * @param json The JSON object to modify
+     * @param diff The diff to apply
+     * @returns The modified JSON object
+     */
+    static applyDiff(json: any, diff: DiffResult): any {
+        // Create a deep copy to avoid mutating the original
+        const result = JSON.parse(JSON.stringify(json));
+        
+        if (diff.path.length === 0) {
+            // Root level change
+            return diff.newValue !== undefined ? diff.newValue : undefined;
+        }
+
+        this.applyDiffAtPath(result, diff.path, diff);
+        return result;
+    }
+
+    /**
+     * Applies multiple diffs to a JSON object
+     * @param json The JSON object to modify
+     * @param diffs The diffs to apply
+     * @returns The modified JSON object
+     */
+    static applyDiffs(json: any, diffs: DiffResult[]): any {
+        let result = JSON.parse(JSON.stringify(json));
+        
+        // Sort diffs to apply removals last and additions/modifications first
+        // This prevents issues with array index shifts
+        const sortedDiffs = [...diffs].sort((a, b) => {
+            if (a.type === 'removed' && b.type !== 'removed') return 1;
+            if (a.type !== 'removed' && b.type === 'removed') return -1;
+            return 0;
+        });
+
+        for (const diff of sortedDiffs) {
+            result = this.applyDiff(result, diff);
+        }
+
+        return result;
+    }
+
+    /**
+     * Applies a diff at a specific path in the JSON object
+     */
+    private static applyDiffAtPath(obj: any, path: string[], diff: DiffResult): void {
+        if (path.length === 0) return;
+
+        // Navigate to the parent object
+        let current = obj;
+        for (let i = 0; i < path.length - 1; i++) {
+            const key = path[i];
+            
+            // Create intermediate objects/arrays if they don't exist
+            if (current[key] === undefined || current[key] === null) {
+                // Determine if next key is array index
+                const nextKey = path[i + 1];
+                const isArrayIndex = /^\d+$/.test(nextKey);
+                current[key] = isArrayIndex ? [] : {};
+            }
+            
+            current = current[key];
+        }
+
+        const lastKey = path[path.length - 1];
+
+        // Apply the change based on diff type
+        switch (diff.type) {
+            case 'added':
+            case 'modified':
+                if (diff.newValue !== undefined) {
+                    current[lastKey] = diff.newValue;
+                }
+                break;
+            
+            case 'removed':
+                if (Array.isArray(current)) {
+                    // For arrays, use splice to maintain indices
+                    const index = parseInt(lastKey, 10);
+                    if (!isNaN(index)) {
+                        current.splice(index, 1);
+                    }
+                } else {
+                    // For objects, delete the property
+                    delete current[lastKey];
+                }
+                break;
+        }
+    }
+
+    /**
+     * Reverts a diff from a JSON object (opposite of applyDiff)
+     * @param json The JSON object to modify
+     * @param diff The diff to revert
+     * @returns The modified JSON object
+     */
+    static revertDiff(json: any, diff: DiffResult): any {
+        const result = JSON.parse(JSON.stringify(json));
+        
+        if (diff.path.length === 0) {
+            return diff.oldValue !== undefined ? diff.oldValue : undefined;
+        }
+
+        this.revertDiffAtPath(result, diff.path, diff);
+        return result;
+    }
+
+    /**
+     * Reverts a diff at a specific path in the JSON object
+     */
+    private static revertDiffAtPath(obj: any, path: string[], diff: DiffResult): void {
+        if (path.length === 0) return;
+
+        let current = obj;
+        for (let i = 0; i < path.length - 1; i++) {
+            const key = path[i];
+            if (current[key] === undefined || current[key] === null) {
+                const nextKey = path[i + 1];
+                const isArrayIndex = /^\d+$/.test(nextKey);
+                current[key] = isArrayIndex ? [] : {};
+            }
+            current = current[key];
+        }
+
+        const lastKey = path[path.length - 1];
+
+        switch (diff.type) {
+            case 'added':
+                // Revert added: remove the property
+                if (Array.isArray(current)) {
+                    const index = parseInt(lastKey, 10);
+                    if (!isNaN(index)) {
+                        current.splice(index, 1);
+                    }
+                } else {
+                    delete current[lastKey];
+                }
+                break;
+            
+            case 'removed':
+            case 'modified':
+                // Revert removed/modified: restore old value
+                if (diff.oldValue !== undefined) {
+                    current[lastKey] = diff.oldValue;
+                }
+                break;
+        }
     }
 }
