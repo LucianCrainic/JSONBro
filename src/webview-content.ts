@@ -34,13 +34,11 @@ export class WebviewContentGenerator {
 
         const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
-        // NOTE: 'unsafe-inline' is still required for style-src because the body
-        // markup below carries `style="display: ..."` attributes. Those move to
-        // classes when mode switching becomes attribute-driven, at which point
-        // this can drop to `${webview.cspSource}` alone.
+        // No 'unsafe-inline': the markup below carries no style attributes, and
+        // mode visibility is driven by data-mode on <body> instead.
         const csp = [
             `default-src 'none'`,
-            `style-src ${webview.cspSource} 'unsafe-inline'`,
+            `style-src ${webview.cspSource}`,
             `font-src ${webview.cspSource}`,
             `img-src ${webview.cspSource} data:`,
             `script-src 'nonce-${nonce}'`
@@ -55,7 +53,7 @@ export class WebviewContentGenerator {
     <title>${title}</title>
     ${this.getStyleLinks(webview)}
 </head>
-<body data-initial-mode="${mode}">
+<body data-mode="${mode}">
     ${this.getBodyContent(mode)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
@@ -109,7 +107,7 @@ export class WebviewContentGenerator {
                         </svg>
                         <span id="action-text">${mode === 'format' ? 'Format' : 'Compare'}</span>
                     </button>
-                    <button id="strict-diff-toggle" class="toggle-btn" title="Strict diff mode: only compare keys from the left JSON, ignoring extra keys in the right JSON" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
+                    <button id="strict-diff-toggle" class="toggle-btn" data-mode-only="diff" title="Strict diff mode: only compare keys from the left JSON, ignoring extra keys in the right JSON">
                         <svg class="icon" viewBox="0 0 24 24">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                         </svg>
@@ -117,7 +115,7 @@ export class WebviewContentGenerator {
                     </button>
                 </div>
                 <div id="toolbar-center">
-                    <div id="search-container" style="display: none;">
+                    <div id="search-container" hidden>
                         <input type="text" id="search-input" placeholder="Search in JSON..." />
                         <button id="search-prev" title="Previous match">
                             <svg class="icon" viewBox="0 0 24 24">
@@ -137,21 +135,21 @@ export class WebviewContentGenerator {
                             </svg>
                         </button>
                     </div>
-                    <button id="search-toggle" title="Search in formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
+                    <button id="search-toggle" data-mode-only="format" title="Search in formatted JSON">
                         <svg class="icon" viewBox="0 0 24 24">
                             <circle cx="11" cy="11" r="8"></circle>
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
                         Search
                     </button>
-                    <button id="copy" title="Copy formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
+                    <button id="copy" title="Copy formatted JSON">
                         <svg class="icon" viewBox="0 0 24 24">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="m5,15H4a2,2 0 0,1 -2,-2V4a2,2 0 0,1 2,-2H13a2,2 0 0,1 2,2v1"></path>
                         </svg>
                         Copy
                     </button>
-                    <button id="save" title="Save formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
+                    <button id="save" data-mode-only="format" title="Save formatted JSON">
                         <svg class="icon" viewBox="0 0 24 24">
                             <path d="m19,21H5a2,2 0 0,1 -2,-2V5a2,2 0 0,1 2,-2H14l5,5v11a2,2 0 0,1 -2,2z"></path>
                             <polyline points="17,21 17,13 7,13 7,21"></polyline>
@@ -169,9 +167,9 @@ export class WebviewContentGenerator {
                 </div>
             </div>
             <!-- Format Mode Container -->
-            <div id="format-container" class="mode-container" style="display: ${mode === 'format' ? 'flex' : 'none'};">
+            <div id="format-container" class="mode-container">
                 <div id="input-panel">
-                    <button id="maximize-input" class="maximize-btn" title="Maximize panel">
+                    <button id="maximize-input" class="maximize-btn" data-maximize="input-panel" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
@@ -190,12 +188,12 @@ export class WebviewContentGenerator {
                             <line x1="10" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2"></line>
                         </svg>
                     </button>
-                    <button id="maximize-output" class="maximize-btn" title="Maximize panel">
+                    <button id="maximize-output" class="maximize-btn" data-maximize="output-panel" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
                     </button>
-                    <div id="warning-notification" class="warning-notification" style="display: none;">
+                    <div id="warning-notification" class="warning-notification" hidden>
                         <svg class="warning-icon" viewBox="0 0 24 24" width="16" height="16">
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                             <line x1="12" y1="9" x2="12" y2="13"></line>
@@ -214,7 +212,7 @@ export class WebviewContentGenerator {
             </div>
 
             <!-- Diff Mode Container -->
-            <div id="diff-container" class="mode-container" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
+            <div id="diff-container" class="mode-container">
                 <div id="left-json-panel">
                     <button id="copy-left-json" class="panel-control-btn" title="Copy left JSON to clipboard">
                         <svg viewBox="0 0 24 24" width="16" height="16">
@@ -228,7 +226,7 @@ export class WebviewContentGenerator {
                             <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2" stroke="currentColor" fill="none" stroke-width="2"></path>
                         </svg>
                     </button>
-                    <button id="maximize-left" class="maximize-btn" title="Maximize panel">
+                    <button id="maximize-left" class="maximize-btn" data-maximize="left-json-panel" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
@@ -236,18 +234,18 @@ export class WebviewContentGenerator {
                     <textarea id="left-json" placeholder="Enter original JSON here..."></textarea>
                 </div>
                 <div id="diff-result-panel">
-                    <button id="apply-all-diffs" class="panel-control-btn apply-all-btn" title="Apply all differences to the left JSON" style="display: none;">
+                    <button id="apply-all-diffs" class="panel-control-btn apply-all-btn" title="Apply all differences to the left JSON" hidden>
                         <svg viewBox="0 0 24 24" width="16" height="16">
                             <polyline points="20 6 9 17 4 12" stroke="currentColor" fill="none" stroke-width="2"></polyline>
                         </svg>
                     </button>
-                    <button id="reject-all-diffs" class="panel-control-btn reject-all-btn" title="Reject all differences" style="display: none;">
+                    <button id="reject-all-diffs" class="panel-control-btn reject-all-btn" title="Reject all differences" hidden>
                         <svg viewBox="0 0 24 24" width="16" height="16">
                             <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" fill="none" stroke-width="2"></line>
                             <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" fill="none" stroke-width="2"></line>
                         </svg>
                     </button>
-                    <button id="maximize-diff" class="maximize-btn" title="Maximize panel">
+                    <button id="maximize-diff" class="maximize-btn" data-maximize="diff-result-panel" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
@@ -261,7 +259,7 @@ export class WebviewContentGenerator {
                             <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2" stroke="currentColor" fill="none" stroke-width="2"></path>
                         </svg>
                     </button>
-                    <button id="maximize-right" class="maximize-btn" title="Maximize panel">
+                    <button id="maximize-right" class="maximize-btn" data-maximize="right-json-panel" title="Maximize panel">
                         <svg viewBox="0 0 24 24" width="18" height="18">
                             <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
