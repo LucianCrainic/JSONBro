@@ -26,6 +26,7 @@ module.exports = {
       displayName: 'dom',
       testEnvironment: 'jsdom',
       testMatch: ['**/__tests__/dom/**/*.test.ts'],
+      setupFilesAfterEnv: ['<rootDir>/src/webview/__tests__/dom/helpers/setup.ts'],
       // Lets DOM tests build fixtures from the real WebviewContentGenerator,
       // which imports 'vscode' -- a module that only exists inside the host.
       moduleNameMapper: {

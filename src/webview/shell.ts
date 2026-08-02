@@ -82,6 +82,7 @@ export class Shell {
         bind('clear', () => this.clear());
         bind('copy', () => this.copy());
         bind('save', () => this.formatView.save());
+        bind('search-toggle', () => this.formatView.find.toggle());
     }
 
     /**
@@ -109,7 +110,7 @@ export class Shell {
         actionButton?.setAttribute('title', ACTION_LABELS[mode].title);
 
         if (mode === 'diff') {
-            this.formatView.search.close();
+            this.formatView.find.close();
         }
 
         this.statusBar.render(
@@ -170,7 +171,7 @@ export class Shell {
             mod: true,
             when: inFormat,
             description: 'Find in formatted JSON',
-            run: () => this.formatView.search.open()
+            run: () => this.formatView.find.open()
         });
         this.shortcuts.register({
             key: '1',

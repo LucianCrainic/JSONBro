@@ -76,9 +76,43 @@ body[data-mode='diff'] [data-mode-only='format'] {
     font-size: 14px;
 }
 
-/* ------------------------------------------------------------ Search bar */
+/* ----------------------------------------------------------- Find widget */
 
-#search-container {
+/*
+ * Floats over the content it searches, like the editor's own find control,
+ * instead of living in the toolbar and swapping places with its trigger.
+ */
+.find-widget {
+    position: absolute;
+    top: var(--jb-sp-2);
+    right: var(--jb-sp-4);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: var(--jb-sp-2);
+    max-width: calc(100% - var(--jb-sp-6));
+    padding: var(--jb-sp-3);
+    background-color: var(--jb-bg-widget);
+    border: 1px solid var(--jb-border-widget);
+    border-radius: var(--jb-radius-md);
+    box-shadow: var(--jb-shadow);
+    animation: find-in var(--jb-dur) var(--jb-ease);
+}
+
+@keyframes find-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+}
+
+.find-widget__row {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+}
+
+.find-widget__field {
     display: flex;
     align-items: center;
     gap: var(--jb-sp-1);
@@ -89,12 +123,12 @@ body[data-mode='diff'] [data-mode-only='format'] {
     border-radius: var(--jb-radius-sm);
 }
 
-#search-container:focus-within {
+.find-widget__field:focus-within {
     border-color: var(--jb-focus);
 }
 
-#search-input {
-    width: 160px;
+#find-input {
+    width: 150px;
     padding: 0;
     border: none;
     outline: none;
@@ -104,26 +138,57 @@ body[data-mode='diff'] [data-mode-only='format'] {
     font-size: var(--jb-fs-md);
 }
 
-#search-input::placeholder {
+#find-input::placeholder {
     color: var(--jb-input-placeholder);
 }
 
-#search-info {
-    flex-shrink: 0;
-    margin: 0 var(--jb-sp-2);
+.find-widget .icon-btn {
+    width: 20px;
+    height: 20px;
+}
+
+.find-widget .codicon {
+    font-size: 14px;
+}
+
+.find-widget__count {
+    min-width: 68px;
     color: var(--jb-fg-muted);
     font-size: var(--jb-fs-sm);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
 }
 
-#search-container .icon-btn {
-    width: 20px;
-    height: 20px;
+.find-widget__count.is-error {
+    color: var(--jb-fg-error);
 }
 
-#search-container .codicon {
-    font-size: 14px;
+.find-widget__scopes {
+    display: flex;
+    gap: var(--jb-sp-1);
+}
+
+.find-scope {
+    padding: var(--jb-sp-1) var(--jb-sp-4);
+    border: 1px solid transparent;
+    border-radius: var(--jb-radius-sm);
+    background-color: transparent;
+    color: var(--jb-fg-muted);
+    font-family: inherit;
+    font-size: var(--jb-fs-sm);
+    cursor: pointer;
+    transition: background-color var(--jb-dur) var(--jb-ease);
+}
+
+.find-scope:hover {
+    background-color: var(--jb-bg-hover);
+    color: var(--jb-fg);
+}
+
+.find-scope.is-active {
+    background-color: var(--jb-neutral);
+    border-color: var(--jb-border);
+    color: var(--jb-fg);
 }
 
 /* ----------------------------------------------------------------- Layout */

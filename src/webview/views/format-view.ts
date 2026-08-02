@@ -3,10 +3,10 @@
  */
 import { JSONFormatter } from '../formatter';
 import { JSONParser } from '../json-parser';
-import { byId, delegate, on, qsa } from '../ui/dom';
+import { byId, delegate, on } from '../ui/dom';
+import { FindWidget } from '../ui/find-widget';
 import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
-import { SearchBar } from '../ui/search-bar';
 import { Splitter } from '../ui/splitter';
 import { formatBytes, plural, type StatusModel } from '../ui/status-bar';
 import type { Messenger } from '../ui/messaging';
@@ -21,7 +21,7 @@ export class FormatView {
 
     private splitter: Splitter | null = null;
     private panels: PanelGroup | null = null;
-    public readonly search: SearchBar;
+    public readonly find: FindWidget;
 
     /** Notifies the shell that the status model changed. */
     public onStatusChange: (status: StatusModel) => void = () => undefined;
@@ -29,9 +29,16 @@ export class FormatView {
     constructor(messenger: Messenger) {
         this.messenger = messenger;
 
-        this.search = new SearchBar({
+        this.find = new FindWidget({
             target: () => byId('output'),
-            canSearch: () => this.currentJson !== null
+            // Opening find used to be a silent no-op until something had been
+            // formatted. Format first instead, so the control always responds.
+            ensureSearchable: () => {
+                if (this.currentJson === null) {
+                    this.format();
+                }
+                return this.currentJson !== null;
+            }
         });
 
         this.setupLayout();
@@ -102,6 +109,8 @@ export class FormatView {
         if (output && this.currentJson !== null) {
             output.innerHTML = JSONFormatter.renderJson(this.currentJson);
             output.classList.toggle('hide-line-numbers', !next);
+            // The re-render threw away any highlights the find widget had.
+            this.find.refresh();
         }
     }
 
@@ -140,6 +149,7 @@ export class FormatView {
             }
 
             this.publishStatus(this.describe(parsed, input, wasStructurallyFixed));
+            this.find.refresh();
 
             if (!this.loadingFromHistory) {
                 this.messenger.post({ command: 'addFormatHistory', json: input });
@@ -220,7 +230,7 @@ export class FormatView {
             output.innerHTML = '';
         }
         this.currentJson = null;
-        this.search.clear();
+        this.find.reset();
         this.hideWarning();
         this.setEmpty(true);
         this.publishStatus({});
@@ -306,19 +316,22 @@ export class FormatView {
         arrow.classList.toggle('folded', folding);
 
         const lineNumbers = output.querySelector('.json-container .line-numbers');
-        const allLines = qsa('.json-line', output);
-        const content = qsa(`.foldable-content[data-fold-id="${foldId}"]`, output);
+        const content = output.querySelectorAll(`.foldable-content[data-fold-id="${foldId}"]`);
 
         for (const element of content) {
             element.classList.toggle('hidden', folding);
 
-            if (lineNumbers) {
-                const line = element.closest('.json-line');
-                const index = line ? allLines.indexOf(line as HTMLElement) : -1;
-                const lineNumber = index >= 0 ? (lineNumbers.children[index] as HTMLElement) : null;
-                if (lineNumber) {
-                    lineNumber.style.display = folding ? 'none' : '';
-                }
+            if (!lineNumbers) {
+                continue;
+            }
+            // data-line makes this a direct index. Previously each element
+            // searched the whole line list for its own position, which made
+            // folding quadratic in the size of the document.
+            const line = element.closest('.json-line') as HTMLElement | null;
+            const lineNo = Number(line?.dataset.line);
+            const lineNumber = lineNo ? (lineNumbers.children[lineNo - 1] as HTMLElement) : null;
+            if (lineNumber) {
+                lineNumber.style.display = folding ? 'none' : '';
             }
         }
 
@@ -385,7 +398,7 @@ export class FormatView {
         this.teardown.length = 0;
         this.splitter?.dispose();
         this.panels?.dispose();
-        this.search.dispose();
+        this.find.dispose();
     }
 }
 
