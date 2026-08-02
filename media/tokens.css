@@ -1,0 +1,101 @@
+/*
+ * JSONBro design tokens.
+ *
+ * Every colour, font and metric used anywhere else in the extension resolves
+ * through this file. Rules in the other stylesheets must never reference a
+ * --vscode-* variable directly, so that retheming happens in exactly one place
+ * and nothing can quietly hardcode a colour that breaks in another theme.
+ */
+
+:root {
+    /* Surfaces */
+    --jb-bg: var(--vscode-editor-background);
+    --jb-bg-chrome: var(--vscode-editorGroupHeader-tabsBackground);
+    --jb-bg-sidebar: var(--vscode-sideBar-background);
+    --jb-bg-input: var(--vscode-input-background);
+    --jb-bg-hover: var(--vscode-toolbar-hoverBackground);
+    --jb-bg-active: var(--vscode-toolbar-activeBackground);
+
+    /* Text */
+    --jb-fg: var(--vscode-editor-foreground);
+    --jb-fg-muted: var(--vscode-descriptionForeground);
+    --jb-fg-subtle: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
+    --jb-fg-error: var(--vscode-errorForeground);
+    --jb-fg-icon: var(--vscode-icon-foreground);
+
+    /* Lines */
+    --jb-border: var(--vscode-editorGroup-border);
+    --jb-focus: var(--vscode-focusBorder);
+
+    /* Accent / buttons */
+    --jb-accent: var(--vscode-button-background);
+    --jb-accent-fg: var(--vscode-button-foreground);
+    --jb-accent-hover: var(--vscode-button-hoverBackground);
+    --jb-neutral: var(--vscode-button-secondaryBackground);
+    --jb-neutral-fg: var(--vscode-button-secondaryForeground);
+    --jb-neutral-hover: var(--vscode-button-secondaryHoverBackground);
+
+    /* Tabs (mode switcher) */
+    --jb-tab-active-bg: var(--vscode-tab-activeBackground);
+    --jb-tab-active-fg: var(--vscode-tab-activeForeground);
+    --jb-tab-inactive-fg: var(--vscode-tab-inactiveForeground);
+    --jb-tab-hover-bg: var(--vscode-tab-hoverBackground);
+
+    /* Diff semantics */
+    --jb-added: var(--vscode-gitDecoration-addedResourceForeground);
+    --jb-removed: var(--vscode-gitDecoration-deletedResourceForeground);
+    --jb-modified: var(--vscode-gitDecoration-modifiedResourceForeground);
+    --jb-added-bg: var(--vscode-diffEditor-insertedTextBackground);
+    --jb-removed-bg: var(--vscode-diffEditor-removedTextBackground);
+    --jb-modified-bg: var(--vscode-diffEditor-border);
+    --jb-ok: var(--vscode-testing-iconPassed);
+
+    /* Find */
+    --jb-find-match: var(--vscode-editor-findMatchBackground);
+    --jb-find-match-border: var(--vscode-editor-findMatchBorder);
+    --jb-find-other: var(--vscode-editor-findMatchHighlightBackground);
+    --jb-find-other-border: var(--vscode-editor-findMatchHighlightBorder);
+
+    /* Validation */
+    --jb-warn-bg: var(--vscode-inputValidation-warningBackground);
+    --jb-warn-border: var(--vscode-inputValidation-warningBorder);
+    --jb-warn-fg: var(--vscode-inputValidation-warningForeground);
+
+    /* JSON syntax */
+    --jb-syntax-string: var(--vscode-debugTokenExpression-string);
+    --jb-syntax-number: var(--vscode-debugTokenExpression-number);
+    --jb-syntax-boolean: var(--vscode-debugTokenExpression-boolean);
+    --jb-syntax-null: var(--vscode-debugTokenExpression-name);
+    --jb-syntax-key: var(--vscode-debugTokenExpression-name);
+    --jb-syntax-punct: var(--vscode-editor-foreground);
+    --jb-gutter-fg: var(--vscode-editorLineNumber-foreground);
+    --jb-gutter-fg-active: var(--vscode-editorLineNumber-activeForeground);
+
+    /* Typography */
+    --jb-font: var(--vscode-font-family);
+    --jb-font-mono: var(--vscode-editor-font-family);
+    --jb-fs-xs: 10px;
+    --jb-fs-sm: 11px;
+    --jb-fs-md: 12px;
+    --jb-fs-code: var(--vscode-editor-font-size, 13px);
+    --jb-lh-code: 1.6;
+
+    /* Spacing */
+    --jb-sp-1: 2px;
+    --jb-sp-2: 4px;
+    --jb-sp-3: 6px;
+    --jb-sp-4: 8px;
+    --jb-sp-5: 12px;
+    --jb-sp-6: 16px;
+
+    /* Shape */
+    --jb-radius-sm: 3px;
+    --jb-radius-md: 6px;
+    --jb-shadow: 0 2px 8px var(--vscode-widget-shadow);
+
+    /* Chrome metrics */
+    --jb-h-toolbar: 36px;
+    --jb-h-header: 28px;
+    --jb-h-status: 22px;
+    --jb-h-control: 32px;
+}

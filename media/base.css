@@ -1,0 +1,69 @@
+/* Document shell, generic form controls and icon sizing. */
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui;
+    margin: 0;
+    padding: 0;
+    color: var(--vscode-editor-foreground);
+    background-color: var(--vscode-sideBar-background);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+button {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    box-sizing: border-box;
+}
+
+button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+button.active {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+}
+
+button.active:hover {
+    background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.icon {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+}
+
+/* Codicons default to 16px; align them optically with adjacent text. */
+.codicon {
+    font-size: 16px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.codicon-sm {
+    font-size: 14px;
+}
+
+/* Visual feedback while a splitter is being dragged. */
+body.dragging,
+body.dragging * {
+    cursor: col-resize !important;
+}

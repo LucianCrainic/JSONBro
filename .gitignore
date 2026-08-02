@@ -2,3 +2,6 @@ node_modules
 out
 *.vsix
 .vscode-test
+
+# Copied from @vscode/codicons by webpack; see webpack.config.js
+media/codicons/
