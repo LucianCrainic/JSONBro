@@ -1,3 +1,27 @@
+/** Which part of the document to search. */
+export type SearchScope = 'all' | 'keys' | 'values';
+
+export interface SearchOptions {
+    /** Case-sensitive matching. Defaults to false. */
+    matchCase?: boolean;
+    /** Treat the term as a regular expression. Defaults to false. */
+    regex?: boolean;
+    /** Restrict matching to object keys or to values. Defaults to 'all'. */
+    scope?: SearchScope;
+}
+
+/** Raised when the user's regular expression will not compile. */
+export class InvalidPatternError extends Error {}
+
+/** Token classes the formatter emits for values. */
+const VALUE_CLASSES = ['string', 'number', 'boolean', 'null'];
+
+/**
+ * Never searchable: the gutter is chrome, not content, and folding markers are
+ * decoration. Matching them meant a search for "12" lit up line numbers.
+ */
+const EXCLUDED_CLASSES = ['line-numbers', 'line-number', 'fold-arrow', 'fold-ellipsis'];
+
 /**
  * JSON search utilities
  */
@@ -5,13 +29,23 @@ export class JSONSearch {
     private searchTerm: string = '';
     private matches: HTMLElement[] = [];
     private currentMatchIndex: number = -1;
+    private options: Required<SearchOptions> = { matchCase: false, regex: false, scope: 'all' };
 
     /**
-     * Searches for a term in the output element and highlights matches
+     * Searches for a term in the output element and highlights matches.
+     *
+     * Throws InvalidPatternError when regex is enabled and the term will not
+     * compile, so the caller can surface it rather than silently finding zero.
      */
-    public search(term: string, outputElement: HTMLElement): number {
+    public search(term: string, outputElement: HTMLElement, options: SearchOptions = {}): number {
         this.clearHighlights(outputElement);
-        this.searchTerm = term.toLowerCase();
+        this.options = {
+            matchCase: options.matchCase ?? false,
+            regex: options.regex ?? false,
+            scope: options.scope ?? 'all'
+        };
+        // Stored raw: lowercasing a regular expression would turn \S into \s.
+        this.searchTerm = term;
         this.matches = [];
         this.currentMatchIndex = -1;
 
@@ -20,7 +54,7 @@ export class JSONSearch {
         }
 
         this.findMatches(outputElement);
-        
+
         // Just highlight matches without scrolling
         if (this.matches.length > 0) {
             this.currentMatchIndex = 0;
@@ -156,96 +190,149 @@ export class JSONSearch {
      * Finds all text matches in the element tree
      */
     private findMatches(element: HTMLElement): void {
-        // Get the complete text content of the element
-        const fullText = element.textContent || '';
-        const lowerFullText = fullText.toLowerCase();
-        
-        // Find all non-overlapping match positions in the full text
-        const matchPositions: Array<{start: number, end: number}> = [];
-        let startIndex = 0;
-        let matchIndex: number;
-
-        while ((matchIndex = lowerFullText.indexOf(this.searchTerm, startIndex)) !== -1) {
-            const matchStart = matchIndex;
-            const matchEnd = matchIndex + this.searchTerm.length;
-            
-            // Check if this match overlaps with any existing match
-            const overlaps = matchPositions.some(existing => 
-                (matchStart < existing.end && matchEnd > existing.start)
-            );
-            
-            if (!overlaps) {
-                matchPositions.push({
-                    start: matchStart,
-                    end: matchEnd
-                });
-            }
-            
-            // Move past this match to avoid finding the same match again
-            startIndex = matchIndex + this.searchTerm.length;
+        const nodes = this.collectSearchableNodes(element);
+        if (nodes.length === 0) {
+            return;
         }
 
-        // If no matches found, return early
+        // The haystack is the searchable text only, so offsets computed here
+        // map straight back onto the nodes that produced them.
+        const haystack = nodes.map(node => node.textContent ?? '').join('');
+        const matchPositions = this.locate(haystack);
+
         if (matchPositions.length === 0) {
             return;
         }
 
-        // Apply highlights using a more robust approach
-        this.applyHighlights(element, matchPositions);
+        this.applyHighlights(nodes, matchPositions);
     }
 
+    /** Text nodes eligible for matching under the current scope. */
+    private collectSearchableNodes(element: HTMLElement): Text[] {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+            acceptNode: node =>
+                this.isSearchable(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+        });
 
-
-    /**
-     * Applies highlights using a more robust tree-walking approach
-     */
-    private applyHighlights(element: HTMLElement, matchPositions: Array<{start: number, end: number}>): void {
-        if (matchPositions.length === 0) return;
-
-        const walker = document.createTreeWalker(
-            element,
-            NodeFilter.SHOW_TEXT,
-            null
-        );
-
-        let currentPos = 0;
+        const nodes: Text[] = [];
         let node: Node | null;
-        const nodesToProcess: Array<{node: Text, highlights: Array<{start: number, end: number, matchId: number}>}> = [];
+        while ((node = walker.nextNode())) {
+            if (node.textContent) {
+                nodes.push(node as Text);
+            }
+        }
+        return nodes;
+    }
 
-        // First pass: collect all text nodes and determine which highlights apply to each
-        while (node = walker.nextNode()) {
-            if (node.nodeType === Node.TEXT_NODE && node.textContent) {
-                const textNode = node as Text;
-                const textLength = node.textContent.length;
-                const nodeStart = currentPos;
-                const nodeEnd = currentPos + textLength;
+    private isSearchable(node: Node): boolean {
+        const parent = node.parentElement;
+        if (!parent) {
+            return false;
+        }
 
-                // Find highlights that intersect with this text node
-                const nodeHighlights: Array<{start: number, end: number, matchId: number}> = [];
-                matchPositions.forEach((match, matchId) => {
-                    if (match.start < nodeEnd && match.end > nodeStart) {
-                        // Convert global positions to local node positions
-                        const localStart = Math.max(0, match.start - nodeStart);
-                        const localEnd = Math.min(textLength, match.end - nodeStart);
-                        if (localStart < localEnd) {
-                            nodeHighlights.push({ start: localStart, end: localEnd, matchId });
-                        }
-                    }
-                });
-
-                if (nodeHighlights.length > 0) {
-                    nodesToProcess.push({ node: textNode, highlights: nodeHighlights });
-                }
-
-                currentPos += textLength;
+        for (const className of EXCLUDED_CLASSES) {
+            if (parent.closest(`.${className}`)) {
+                return false;
             }
         }
 
-        // Second pass: apply highlights to each node (in reverse order to preserve positions)
+        // A previous search may have wrapped part of a token in a highlight
+        // span; classify by the token it sits inside, not the wrapper.
+        const token = parent.classList.contains('search-highlight')
+            ? parent.parentElement ?? parent
+            : parent;
+
+        switch (this.options.scope) {
+            case 'keys':
+                return token.classList.contains('key');
+            case 'values':
+                return VALUE_CLASSES.some(className => token.classList.contains(className));
+            default:
+                return true;
+        }
+    }
+
+    /** Match offsets within the haystack, honouring the case and regex options. */
+    private locate(haystack: string): Array<{ start: number; end: number }> {
+        const positions: Array<{ start: number; end: number }> = [];
+
+        if (this.options.regex) {
+            let pattern: RegExp;
+            try {
+                pattern = new RegExp(this.searchTerm, this.options.matchCase ? 'g' : 'gi');
+            } catch (error) {
+                throw new InvalidPatternError(
+                    error instanceof Error ? error.message : 'Invalid regular expression'
+                );
+            }
+
+            let match: RegExpExecArray | null;
+            while ((match = pattern.exec(haystack)) !== null) {
+                // A zero-width match would never advance lastIndex on its own.
+                if (match[0].length === 0) {
+                    pattern.lastIndex++;
+                    continue;
+                }
+                positions.push({ start: match.index, end: match.index + match[0].length });
+            }
+            return positions;
+        }
+
+        const subject = this.options.matchCase ? haystack : haystack.toLowerCase();
+        const needle = this.options.matchCase ? this.searchTerm : this.searchTerm.toLowerCase();
+
+        let from = 0;
+        let at: number;
+        while ((at = subject.indexOf(needle, from)) !== -1) {
+            positions.push({ start: at, end: at + needle.length });
+            from = at + needle.length;
+        }
+        return positions;
+    }
+
+    /**
+     * Splits the collected text nodes so each match is wrapped in its own span.
+     */
+    private applyHighlights(
+        nodes: Text[],
+        matchPositions: Array<{ start: number; end: number }>
+    ): void {
+        let currentPos = 0;
+        const nodesToProcess: Array<{
+            node: Text;
+            highlights: Array<{ start: number; end: number; matchId: number }>;
+        }> = [];
+
+        // First pass: work out which matches land inside each node.
+        for (const textNode of nodes) {
+            const textLength = textNode.textContent?.length ?? 0;
+            const nodeStart = currentPos;
+            const nodeEnd = currentPos + textLength;
+
+            const nodeHighlights: Array<{ start: number; end: number; matchId: number }> = [];
+            matchPositions.forEach((match, matchId) => {
+                if (match.start < nodeEnd && match.end > nodeStart) {
+                    // Convert global positions to local node positions
+                    const localStart = Math.max(0, match.start - nodeStart);
+                    const localEnd = Math.min(textLength, match.end - nodeStart);
+                    if (localStart < localEnd) {
+                        nodeHighlights.push({ start: localStart, end: localEnd, matchId });
+                    }
+                }
+            });
+
+            if (nodeHighlights.length > 0) {
+                nodesToProcess.push({ node: textNode, highlights: nodeHighlights });
+            }
+
+            currentPos += textLength;
+        }
+
+        // Second pass: rewrite nodes back to front so earlier offsets stay valid.
         nodesToProcess.reverse().forEach(({ node, highlights }) => {
             this.applyHighlightsToNode(node, highlights);
         });
-        
+
         // Sort matches array to ensure they're in document order (top to bottom)
         this.matches.sort((a, b) => {
             const aId = parseInt(a.getAttribute('data-match-id') || '0');

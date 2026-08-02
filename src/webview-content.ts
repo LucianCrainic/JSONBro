@@ -100,14 +100,6 @@ export class WebviewContentGenerator {
                     })}
                 </div>
                 <div class="toolbar__group">
-                    <div id="search-container" hidden>
-                        <span class="codicon codicon-search" aria-hidden="true"></span>
-                        <input type="text" id="search-input" placeholder="Find" aria-label="Find in formatted JSON" />
-                        <span id="search-info"></span>
-                        ${this.iconButton({ id: 'search-prev', icon: 'arrow-up', label: 'Previous match', title: 'Previous match (Shift+Enter)' })}
-                        ${this.iconButton({ id: 'search-next', icon: 'arrow-down', label: 'Next match', title: 'Next match (Enter)' })}
-                        ${this.iconButton({ id: 'search-close', icon: 'close', label: 'Close find', title: 'Close (Escape)' })}
-                    </div>
                     ${this.iconButton({
                         id: 'search-toggle',
                         icon: 'search',
@@ -154,6 +146,38 @@ export class WebviewContentGenerator {
                             <span class="codicon codicon-warning" aria-hidden="true"></span>
                             <span class="notice__message"></span>
                             ${this.iconButton({ id: 'dismiss-warning', icon: 'close', label: 'Dismiss', title: 'Dismiss' })}
+                        </div>
+                        <div id="find-widget" class="find-widget" role="search" hidden>
+                            <div class="find-widget__row">
+                                <div class="find-widget__field">
+                                    <input type="text" id="find-input" placeholder="Find" spellcheck="false" aria-label="Find in formatted JSON" />
+                                    ${this.iconButton({
+                                        id: 'find-match-case',
+                                        icon: 'case-sensitive',
+                                        label: 'Match case',
+                                        title: 'Match case',
+                                        classes: 'find-option',
+                                        attrs: 'data-find-option="matchCase" aria-pressed="false"'
+                                    })}
+                                    ${this.iconButton({
+                                        id: 'find-regex',
+                                        icon: 'regex',
+                                        label: 'Use regular expression',
+                                        title: 'Use regular expression',
+                                        classes: 'find-option',
+                                        attrs: 'data-find-option="regex" aria-pressed="false"'
+                                    })}
+                                </div>
+                                <span id="find-count" class="find-widget__count" role="status"></span>
+                                ${this.iconButton({ id: 'find-prev', icon: 'arrow-up', label: 'Previous match', title: 'Previous match (Shift+Enter)' })}
+                                ${this.iconButton({ id: 'find-next', icon: 'arrow-down', label: 'Next match', title: 'Next match (Enter)' })}
+                                ${this.iconButton({ id: 'find-close', icon: 'close', label: 'Close find', title: 'Close (Escape)' })}
+                            </div>
+                            <div class="find-widget__scopes" role="group" aria-label="Search scope">
+                                <button type="button" class="find-scope is-active" data-find-scope="all" aria-pressed="true">All</button>
+                                <button type="button" class="find-scope" data-find-scope="keys" aria-pressed="false">Keys</button>
+                                <button type="button" class="find-scope" data-find-scope="values" aria-pressed="false">Values</button>
+                            </div>
                         </div>
                         <div id="output" class="pane__content"></div>
                         <div class="empty-state">

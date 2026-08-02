@@ -84,22 +84,36 @@ describe('Shell', () => {
         expect(el<HTMLTextAreaElement>('left-json').value).toBe('{"untouched":true}');
     });
 
-    it('closes the search bar when leaving format mode', () => {
+    it('closes the find widget when leaving format mode', () => {
         start('format');
         el<HTMLTextAreaElement>('input').value = '{"a":1}';
         el('action-btn').click();
 
         el('search-toggle').click();
-        expect(el('search-container').hidden).toBe(false);
+        expect(el('find-widget').hidden).toBe(false);
 
         el('diff-mode').click();
-        expect(el('search-container').hidden).toBe(true);
+        expect(el('find-widget').hidden).toBe(true);
     });
 
-    it('refuses to open search before anything has been formatted', () => {
+    /*
+     * The old search control returned early when nothing had been formatted,
+     * so the button appeared dead on a fresh panel with JSON already pasted.
+     */
+    it('formats first when opening find on unformatted input', () => {
+        start('format');
+        el<HTMLTextAreaElement>('input').value = '{"a":1}';
+
+        el('search-toggle').click();
+
+        expect(el('find-widget').hidden).toBe(false);
+        expect(el('output').querySelector('.json-line')).not.toBeNull();
+    });
+
+    it('stays closed when there is nothing at all to search', () => {
         start('format');
         el('search-toggle').click();
-        expect(el('search-container').hidden).toBe(true);
+        expect(el('find-widget').hidden).toBe(true);
     });
 
     describe('empty state', () => {
