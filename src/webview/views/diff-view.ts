@@ -4,8 +4,10 @@
 import { JSONDiff } from '../diff';
 import type { DiffResult, DiffType } from '../diff';
 import { JSONParser } from '../json-parser';
-import { byId, delegate, on } from '../ui/dom';
+import { byId, delegate, escapeHtml, on } from '../ui/dom';
+import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
+import { plural, type StatusModel } from '../ui/status-bar';
 import type { DiffState } from '../../shared/messages';
 import type { Messenger } from '../ui/messaging';
 
@@ -21,8 +23,12 @@ export class DiffView {
     private states = new Map<string, DiffState>();
     private strict = false;
     private loadingFromHistory = false;
+    private status: StatusModel = {};
 
     private panels: PanelGroup | null = null;
+
+    /** Notifies the shell that the status model changed. */
+    public onStatusChange: (status: StatusModel) => void = () => undefined;
 
     constructor(messenger: Messenger) {
         this.messenger = messenger;
@@ -74,7 +80,9 @@ export class DiffView {
 
     private toggleStrict(): void {
         this.strict = !this.strict;
-        byId('strict-diff-toggle')?.classList.toggle('active', this.strict);
+        const toggle = byId('strict-diff-toggle');
+        toggle?.classList.toggle('is-active', this.strict);
+        toggle?.setAttribute('aria-pressed', String(this.strict));
 
         const left = byId<HTMLTextAreaElement>('left-json')?.value.trim();
         const right = byId<HTMLTextAreaElement>('right-json')?.value.trim();
@@ -118,7 +126,12 @@ export class DiffView {
         const rightRaw = rightEl.value.trim();
 
         if (!leftRaw || !rightRaw) {
-            output.innerHTML = '<div class="diff-error">Please enter JSON in both panes to compare.</div>';
+            output.innerHTML = renderNotice(
+                Icons.diff,
+                'Paste JSON into both panes to compare them.'
+            );
+            this.setBulkActionsVisible(false);
+            this.publishStatus({});
             return;
         }
 
@@ -134,10 +147,10 @@ export class DiffView {
             leftEl.value = JSON.stringify(left, null, 2);
             rightEl.value = JSON.stringify(right, null, 2);
 
-            output.style.color = 'inherit';
             output.innerHTML = JSONDiff.renderJsonDiff(left, right, this.strict);
 
             this.setBulkActionsVisible(this.diffs.length > 0);
+            this.publishStatus(this.describe());
 
             if (!this.loadingFromHistory) {
                 this.messenger.post({
@@ -147,11 +160,51 @@ export class DiffView {
                 });
             }
         } catch (error) {
-            output.style.color = 'var(--vscode-errorForeground)';
             const message = error instanceof Error ? error.message : 'Unknown parsing error';
-            output.innerHTML = `<div class="diff-error">Error parsing JSON: ${message}</div>`;
+            output.innerHTML = renderNotice(Icons.error, `Could not parse JSON. ${message}`, 'diff-error');
             this.setBulkActionsVisible(false);
+            this.publishStatus({
+                left: [{ text: 'Invalid JSON', icon: Icons.error, tone: 'error', title: message }]
+            });
         }
+    }
+
+    /** Change counts for the status bar and the pane header. */
+    private describe(): StatusModel {
+        const count = (type: string) => this.diffs.filter(diff => diff.type === type).length;
+        const added = count('added');
+        const removed = count('removed');
+        const modified = count('modified');
+        const applied = [...this.states.values()].filter(state => state === 'applied').length;
+
+        const meta = byId('diff-meta');
+        if (meta) {
+            meta.textContent = this.diffs.length > 0 ? String(this.diffs.length) : '';
+        }
+
+        if (this.diffs.length === 0) {
+            return { left: [{ text: 'No differences', icon: Icons.valid, tone: 'ok' }] };
+        }
+
+        return {
+            left: [
+                { text: plural(this.diffs.length, 'difference') },
+                { text: `+${added}`, tone: 'added', title: `${added} added` },
+                { text: `−${removed}`, tone: 'removed', title: `${removed} removed` },
+                { text: `~${modified}`, tone: 'modified', title: `${modified} modified` }
+            ],
+            right: applied > 0 ? [{ text: `${applied} applied`, icon: Icons.apply }] : []
+        };
+    }
+
+    private publishStatus(status: StatusModel): void {
+        this.status = status;
+        this.onStatusChange(status);
+    }
+
+    /** The status model for this view, re-published when it becomes active. */
+    public getStatus(): StatusModel {
+        return this.status;
     }
 
     public load(leftJson: string, rightJson: string): void {
@@ -181,9 +234,14 @@ export class DiffView {
         if (output) {
             output.innerHTML = '';
         }
+        const meta = byId('diff-meta');
+        if (meta) {
+            meta.textContent = '';
+        }
         this.diffs = [];
         this.states.clear();
         this.setBulkActionsVisible(false);
+        this.publishStatus({});
     }
 
     public copyResults(): void {
@@ -359,6 +417,8 @@ export class DiffView {
         toggle('.apply-diff-btn', resolved);
         toggle('.reject-diff-btn', resolved);
         toggle('.undo-diff-btn', !resolved);
+
+        this.publishStatus(this.describe());
     }
 
     /** The resolution state of every change, for tests and future persistence. */
@@ -371,4 +431,12 @@ export class DiffView {
         this.teardown.length = 0;
         this.panels?.dispose();
     }
+}
+
+/** A centred icon-and-message placeholder shown in place of a change list. */
+function renderNotice(icon: string, message: string, className = 'diff-result no-changes'): string {
+    return `<div class="${className}">
+        <span class="codicon codicon-${icon}" aria-hidden="true"></span>
+        <span>${escapeHtml(message)}</span>
+    </div>`;
 }

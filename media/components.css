@@ -1,152 +1,10 @@
-/* Toolbar, mode switcher, panes, splitter, overlay controls, notifications. */
-
-/* ---------------------------------------------------------------- Toolbar */
-
-#toolbar {
-    padding: 12px 10px;
-    background-color: var(--vscode-editorGroupHeader-tabsBackground);
-    border-bottom: 1px solid var(--vscode-editorGroup-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    min-height: 48px;
-    box-sizing: border-box;
-}
-
-#toolbar-left,
-#toolbar-center {
-    display: flex;
-    gap: 8px;
-}
-
-#mode-switcher {
-    display: flex;
-    background-color: var(--vscode-editorGroupHeader-tabsBackground);
-    border: 1px solid var(--vscode-editorGroup-border);
-    border-radius: 3px;
-    overflow: hidden;
-    margin-right: 8px;
-}
-
-.mode-btn {
-    background-color: transparent;
-    color: var(--vscode-tab-inactiveForeground);
-    border: none;
-    border-right: 1px solid var(--vscode-editorGroup-border);
-    padding: 8px 12px;
-    cursor: pointer;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    height: 32px;
-    box-sizing: border-box;
-    transition: all 0.2s ease;
-}
-
-.mode-btn:last-child {
-    border-right: none;
-}
-
-.mode-btn:hover {
-    background-color: var(--vscode-tab-hoverBackground);
-    color: var(--vscode-tab-activeForeground);
-}
-
-.mode-btn.active {
-    background-color: var(--vscode-tab-activeBackground);
-    color: var(--vscode-tab-activeForeground);
-}
-
-/* Toggle button (strict diff mode) */
-.toggle-btn {
-    padding: 6px 12px;
-    border: 1px solid var(--vscode-editorGroup-border);
-    border-radius: 3px;
-    background-color: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-    transition: all 0.2s;
-}
-
-.toggle-btn:hover {
-    background-color: var(--vscode-button-secondaryHoverBackground);
-}
-
-.toggle-btn.active {
-    background-color: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    border-color: var(--vscode-button-background);
-}
-
-.toggle-btn.active:hover {
-    background-color: var(--vscode-button-hoverBackground);
-}
-
-/* ---------------------------------------------------------- Inline search */
-
-#search-container {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
-    background-color: var(--vscode-input-background);
-    border: 1px solid var(--vscode-editorGroup-border);
-    border-radius: 3px;
-    margin-right: 8px;
-    height: 32px;
-    box-sizing: border-box;
-}
-
-#search-container #search-input {
-    background: none;
-    border: none;
-    color: var(--vscode-input-foreground);
-    font-size: 12px;
-    outline: none;
-    width: 150px;
-    padding: 2px 4px;
-}
-
-#search-container #search-input::placeholder {
-    color: var(--vscode-input-placeholderForeground);
-}
-
-#search-container button {
-    background: none;
-    border: none;
-    padding: 2px 4px;
-    margin: 0;
-    border-radius: 2px;
-    min-width: auto;
-}
-
-#search-container button:hover {
-    background-color: var(--vscode-toolbar-hoverBackground);
-}
-
-#search-container button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-#search-container #search-info {
-    font-size: 11px;
-    color: var(--vscode-descriptionForeground);
-    margin: 0 4px;
-    white-space: nowrap;
-}
-
-#search-container .icon {
-    width: 12px;
-    height: 12px;
-}
+/* Chrome: toolbar, mode switcher, panes, sash, status bar, notices. */
 
 /* ------------------------------------------------------------------- Mode */
 
 /*
  * The active mode is a single attribute on <body>; CSS decides what each mode
- * shows. Elements that belong to one mode carry data-mode-only.
+ * shows. Elements belonging to one mode carry data-mode-only.
  */
 body[data-mode='format'] #diff-container,
 body[data-mode='diff'] #format-container,
@@ -155,50 +13,151 @@ body[data-mode='diff'] [data-mode-only='format'] {
     display: none;
 }
 
+/* ---------------------------------------------------------------- Toolbar */
+
+#toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--jb-sp-4);
+    height: var(--jb-h-toolbar);
+    flex-shrink: 0;
+    padding: 0 var(--jb-sp-4);
+    background-color: var(--jb-bg-chrome);
+    border-bottom: 1px solid var(--jb-border);
+}
+
+.toolbar__group {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    min-width: 0;
+}
+
+/*
+ * Mode switcher styled like VS Code's panel tabs (Problems / Output /
+ * Terminal): flat labels with an underline on the active one, rather than a
+ * pill or a pair of filled buttons.
+ */
+#mode-switcher {
+    display: flex;
+    align-items: stretch;
+    height: var(--jb-h-toolbar);
+    margin-right: var(--jb-sp-3);
+}
+
+.mode-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    height: 100%;
+    padding: 0 var(--jb-sp-4);
+    border: none;
+    border-bottom: 1px solid transparent;
+    background: transparent;
+    color: var(--jb-tab-inactive-fg);
+    font-family: inherit;
+    font-size: var(--jb-fs-md);
+    line-height: 1;
+    cursor: pointer;
+    transition: color var(--jb-dur) var(--jb-ease);
+}
+
+.mode-tab:hover {
+    color: var(--jb-tab-active-fg);
+}
+
+.mode-tab.active {
+    color: var(--jb-tab-active-fg);
+    border-bottom-color: var(--jb-tab-active-border);
+}
+
+.mode-tab .codicon {
+    font-size: 14px;
+}
+
+/* ------------------------------------------------------------ Search bar */
+
+#search-container {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-1);
+    height: var(--jb-h-btn);
+    padding: 0 var(--jb-sp-1) 0 var(--jb-sp-3);
+    background-color: var(--jb-bg-input);
+    border: 1px solid var(--jb-border);
+    border-radius: var(--jb-radius-sm);
+}
+
+#search-container:focus-within {
+    border-color: var(--jb-focus);
+}
+
+#search-input {
+    width: 160px;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--jb-input-fg);
+    font-family: inherit;
+    font-size: var(--jb-fs-md);
+}
+
+#search-input::placeholder {
+    color: var(--jb-input-placeholder);
+}
+
+#search-info {
+    flex-shrink: 0;
+    margin: 0 var(--jb-sp-2);
+    color: var(--jb-fg-muted);
+    font-size: var(--jb-fs-sm);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+#search-container .icon-btn {
+    width: 20px;
+    height: 20px;
+}
+
+#search-container .codicon {
+    font-size: 14px;
+}
+
 /* ----------------------------------------------------------------- Layout */
 
 .mode-container {
     display: flex;
     flex: 1;
+    min-height: 0;
     overflow: hidden;
-    position: relative;
-    padding: 16px;
 }
 
-#diff-container {
-    gap: 4px;
+/* ------------------------------------------------------------------- Pane */
+
+.pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+    min-height: 0;
+    flex: 1;
+    background-color: var(--jb-bg);
+    border-right: 1px solid var(--jb-border);
+}
+
+.pane:last-child {
+    border-right: none;
 }
 
 #input-panel {
-    min-width: 200px;
-    max-width: calc(100% - 220px);
-    width: 50%;
-    display: flex;
-    flex-direction: column;
-    position: relative;
+    flex: 0 0 50%;
+    max-width: calc(100% - 200px);
 }
 
 #input-panel.panel-maximized {
     max-width: none;
-}
-
-#output-panel {
-    flex: 1;
-    min-width: 200px;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-}
-
-#left-json-panel,
-#right-json-panel,
-#diff-result-panel {
-    flex: 1;
-    min-width: 200px;
-    display: flex;
-    flex-direction: column;
-    transition: flex 0.3s ease;
-    position: relative;
 }
 
 .panel-maximized {
@@ -209,249 +168,314 @@ body[data-mode='diff'] [data-mode-only='format'] {
     display: none !important;
 }
 
-#input,
-#output {
-    flex: 1;
-    padding: 16px;
-    padding-top: 40px;
-    border: 1px solid var(--vscode-editorGroup-border);
-    border-radius: 8px;
-    background-color: var(--vscode-editor-background);
-    color: var(--vscode-editor-foreground);
-    font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-    font-size: 13px;
-    resize: none;
-    outline: none;
-    transition: all 0.2s ease;
+/*
+ * Pane actions live in a header bar rather than floating over the content.
+ * The previous overlay buttons were absolutely positioned and spaced by
+ * hardcoded `right:` offsets keyed to nth-of-type, which broke whenever a
+ * button was added or hidden.
+ */
+.pane__header {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    height: var(--jb-h-header);
+    flex-shrink: 0;
+    padding: 0 var(--jb-sp-2) 0 var(--jb-sp-4);
+    background-color: var(--jb-bg-chrome);
+    border-bottom: 1px solid var(--jb-border);
 }
 
-#output {
-    overflow-y: auto;
+.pane__title {
+    font-size: var(--jb-fs-sm);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--jb-fg-muted);
+    white-space: nowrap;
+}
+
+.pane__meta {
+    font-size: var(--jb-fs-sm);
+    color: var(--jb-fg-subtle);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+}
+
+.pane__spacer {
+    flex: 1;
+}
+
+.pane__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-1);
+    flex-shrink: 0;
+}
+
+/* Actions stay quiet until the pane is engaged with, but never invisible to
+   keyboard users or while toggled on. */
+.pane__actions .icon-btn {
+    opacity: 0.7;
+}
+
+.pane:hover .pane__actions .icon-btn,
+.pane__actions .icon-btn:focus-visible,
+.pane__actions .icon-btn.is-active {
+    opacity: 1;
+}
+
+.pane__body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ------------------------------------------------------------ Pane content */
+
+.pane__body textarea {
+    flex: 1;
+    width: 100%;
+    padding: var(--jb-sp-4) var(--jb-sp-5);
+    border: none;
+    outline: none;
+    resize: none;
+    background-color: var(--jb-bg);
+    color: var(--jb-fg);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-code);
+    line-height: var(--jb-lh-code);
+    tab-size: 2;
+}
+
+.pane__body textarea::placeholder {
+    color: var(--jb-fg-subtle);
+}
+
+.pane__body textarea:focus {
+    outline: 1px solid var(--jb-focus);
+    outline-offset: -1px;
+}
+
+.pane__content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--jb-sp-4) var(--jb-sp-5);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-code);
+    line-height: var(--jb-lh-code);
     white-space: pre-wrap;
-}
-
-#left-json,
-#right-json {
-    flex: 1;
-    padding: 16px;
-    padding-top: 40px;
-    border: 1px solid var(--vscode-editorGroup-border);
-    border-radius: 8px;
-    background-color: var(--vscode-editor-background);
-    color: var(--vscode-editor-foreground);
-    font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-    font-size: 13px;
-    resize: none;
-    outline: none;
 }
 
 #diff-output {
-    flex: 1;
-    padding: 12px;
-    padding-top: 40px;
-    border: 1px solid var(--vscode-editorGroup-border);
-    border-radius: 8px;
-    background-color: var(--vscode-editor-background);
-    color: var(--vscode-editor-foreground);
-    font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-    font-size: 13px;
-    overflow-y: auto;
-    white-space: pre-wrap;
+    white-space: normal;
+    padding: var(--jb-sp-2) 0;
 }
 
-#diff-output > * {
-    margin-top: 0;
+.pane__content.is-error {
+    color: var(--jb-fg-error);
+    font-family: var(--jb-font);
+    white-space: pre-wrap;
 }
 
 /* --------------------------------------------------------------- Splitter */
 
 #splitter {
-    width: 8px;
-    background-color: transparent;
-    cursor: col-resize;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    flex: 0 0 var(--jb-w-sash);
     position: relative;
-    margin: 0 4px;
+    cursor: col-resize;
+    background-color: transparent;
+    margin-left: -3px;
+    margin-right: -3px;
+    z-index: 5;
 }
 
 #splitter.hidden {
     display: none;
 }
 
-#splitter::before {
+/* A 1px visual line inside a 6px pointer target, like VS Code's sashes. */
+#splitter::after {
     content: '';
-    width: 2px;
-    height: 40px;
-    background-color: var(--vscode-editorGroup-border);
-    border-radius: 1px;
-    opacity: 0.5;
-    transition: opacity 0.2s ease;
-}
-
-#splitter:hover::before,
-#splitter.dragging::before {
-    opacity: 1;
-    background-color: var(--vscode-focusBorder);
-}
-
-/* -------------------------------------------------------- Overlay buttons */
-
-.maximize-btn,
-.panel-control-btn {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    background-color: var(--vscode-editorGroupHeader-tabsBackground);
-    border: 1px solid var(--vscode-editorGroup-border);
-    color: var(--vscode-icon-foreground);
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0.6;
-    transition: all 0.2s ease;
-    z-index: 100;
-    width: 32px;
-    height: 32px;
-    pointer-events: auto;
-}
-
-.panel-control-btn {
-    right: 48px;
-}
-
-/* Multiple panel control buttons - arrange them in a row */
-#left-json-panel .panel-control-btn:nth-of-type(1) {
-    right: 88px; /* copy button */
-}
-
-#left-json-panel .panel-control-btn:nth-of-type(2) {
-    right: 48px; /* clear button */
-}
-
-#diff-result-panel .panel-control-btn:nth-of-type(1) {
-    right: 88px; /* apply all button */
-}
-
-#diff-result-panel .panel-control-btn:nth-of-type(2) {
-    right: 48px; /* reject all button */
-}
-
-#right-json-panel .panel-control-btn:nth-of-type(1) {
-    right: 48px; /* clear button */
-}
-
-.maximize-btn:hover,
-.panel-control-btn:hover {
-    background-color: var(--vscode-toolbar-hoverBackground);
-    opacity: 1;
-}
-
-.maximize-btn:active,
-.panel-control-btn:active {
-    background-color: var(--vscode-toolbar-activeBackground);
-}
-
-.panel-control-btn.active {
-    opacity: 1;
-    background-color: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-}
-
-.panel-control-btn.active:hover {
-    background-color: var(--vscode-button-secondaryHoverBackground);
-}
-
-.panel-control-btn.apply-all-btn {
-    background-color: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    opacity: 0.8;
-}
-
-.panel-control-btn.apply-all-btn:hover {
-    background-color: var(--vscode-button-hoverBackground);
-    opacity: 1;
-}
-
-.panel-control-btn.reject-all-btn {
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
     background-color: transparent;
-    opacity: 0.6;
+    transition: background-color var(--jb-dur) var(--jb-ease);
 }
 
-.panel-control-btn.reject-all-btn:hover {
-    opacity: 1;
+#splitter:hover::after,
+#splitter.dragging::after {
+    background-color: var(--jb-sash);
 }
 
-/* --------------------------------------------------- Warning notification */
+body.dragging,
+body.dragging * {
+    cursor: col-resize !important;
+}
 
-.warning-notification {
-    position: absolute;
-    top: 48px;
-    left: 8px;
-    right: 48px;
-    background-color: var(--vscode-inputValidation-warningBackground);
-    border: 1px solid var(--vscode-inputValidation-warningBorder);
-    border-radius: 4px;
-    padding: 8px 12px;
+/* ---------------------------------------------------------------- Notices */
+
+.notice {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    z-index: 10;
-    box-shadow: 0 2px 8px var(--vscode-widget-shadow);
-    animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.warning-notification .warning-icon {
+    align-items: flex-start;
+    gap: var(--jb-sp-3);
     flex-shrink: 0;
-    stroke: var(--vscode-inputValidation-warningForeground);
-    fill: none;
-    stroke-width: 2;
-}
-
-.warning-notification .warning-message {
-    flex: 1;
-    color: var(--vscode-inputValidation-warningForeground);
-    font-size: 12px;
+    padding: var(--jb-sp-3) var(--jb-sp-3) var(--jb-sp-3) var(--jb-sp-5);
+    background-color: var(--jb-warn-bg);
+    border-bottom: 1px solid var(--jb-warn-border);
+    color: var(--jb-warn-fg);
+    font-size: var(--jb-fs-sm);
     line-height: 1.4;
 }
 
-.warning-notification .dismiss-warning-btn {
-    background: none;
-    border: none;
-    padding: 4px;
-    cursor: pointer;
-    display: flex;
+.notice .codicon {
+    font-size: 14px;
+    margin-top: 1px;
+}
+
+.notice__message {
+    flex: 1;
+}
+
+.notice .icon-btn {
+    color: inherit;
+    width: 20px;
+    height: 20px;
+}
+
+/* ------------------------------------------------------------ Empty state */
+
+.empty-state {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    border-radius: 3px;
-    opacity: 0.7;
-    transition: all 0.2s;
-    min-width: auto;
-    height: auto;
+    gap: var(--jb-sp-4);
+    padding: var(--jb-sp-6);
+    text-align: center;
+    color: var(--jb-fg-muted);
+    pointer-events: none;
 }
 
-.warning-notification .dismiss-warning-btn:hover {
-    background-color: var(--vscode-toolbar-hoverBackground);
-    opacity: 1;
+.pane[data-empty='true'] .empty-state {
+    display: flex;
 }
 
-.warning-notification .dismiss-warning-btn svg {
-    stroke: var(--vscode-inputValidation-warningForeground);
-    fill: none;
-    stroke-width: 2;
+.empty-state__icon {
+    font-size: 44px;
+    opacity: 0.4;
+}
+
+.empty-state__title {
+    font-size: var(--jb-fs-md);
+}
+
+.empty-state__keys {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: var(--jb-sp-2) var(--jb-sp-4);
+    align-items: center;
+    font-size: var(--jb-fs-sm);
+    color: var(--jb-fg-subtle);
+}
+
+.empty-state__keys dt {
+    justify-self: end;
+    margin: 0;
+}
+
+.empty-state__keys dd {
+    justify-self: start;
+    margin: 0;
+}
+
+kbd {
+    display: inline-block;
+    min-width: 18px;
+    padding: 1px var(--jb-sp-2);
+    border: 1px solid var(--jb-border);
+    border-bottom-width: 2px;
+    border-radius: var(--jb-radius-sm);
+    background-color: var(--jb-bg-chrome);
+    color: var(--jb-fg-muted);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-xs);
+    line-height: 1.4;
+}
+
+/* ------------------------------------------------------------- Status bar */
+
+#status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--jb-sp-4);
+    height: var(--jb-h-status);
+    flex-shrink: 0;
+    padding: 0 var(--jb-sp-5);
+    background-color: var(--jb-bg-chrome);
+    border-top: 1px solid var(--jb-border);
+    font-size: var(--jb-fs-sm);
+    color: var(--jb-fg-muted);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.status__group {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-5);
+    min-width: 0;
+}
+
+.status__item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+}
+
+.status__item:empty {
+    display: none;
+}
+
+.status__item .codicon {
+    font-size: 14px;
+}
+
+.status__item--ok .codicon {
+    color: var(--jb-ok);
+}
+
+.status__item--warn {
+    color: var(--jb-fg-warn);
+}
+
+.status__item--error {
+    color: var(--jb-fg-error);
+}
+
+.status__item--added {
+    color: var(--jb-added);
+}
+
+.status__item--removed {
+    color: var(--jb-removed);
+}
+
+.status__item--modified {
+    color: var(--jb-modified);
 }

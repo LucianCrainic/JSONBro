@@ -15,17 +15,25 @@
     --jb-bg-input: var(--vscode-input-background);
     --jb-bg-hover: var(--vscode-toolbar-hoverBackground);
     --jb-bg-active: var(--vscode-toolbar-activeBackground);
+    --jb-bg-widget: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    --jb-border-widget: var(--vscode-editorWidget-border, var(--vscode-editorGroup-border));
+    --jb-selection: var(--vscode-editor-selectionBackground);
+    --jb-scrollbar: var(--vscode-scrollbarSlider-background);
+    --jb-scrollbar-hover: var(--vscode-scrollbarSlider-hoverBackground);
+    --jb-row-hover: var(--vscode-list-hoverBackground);
 
     /* Text */
     --jb-fg: var(--vscode-editor-foreground);
     --jb-fg-muted: var(--vscode-descriptionForeground);
     --jb-fg-subtle: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
     --jb-fg-error: var(--vscode-errorForeground);
+    --jb-fg-warn: var(--vscode-editorWarning-foreground, var(--vscode-inputValidation-warningBorder));
     --jb-fg-icon: var(--vscode-icon-foreground);
 
     /* Lines */
-    --jb-border: var(--vscode-editorGroup-border);
+    --jb-border: var(--vscode-editorGroup-border, var(--vscode-panel-border));
     --jb-focus: var(--vscode-focusBorder);
+    --jb-sash: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder));
 
     /* Accent / buttons */
     --jb-accent: var(--vscode-button-background);
@@ -35,11 +43,14 @@
     --jb-neutral-fg: var(--vscode-button-secondaryForeground);
     --jb-neutral-hover: var(--vscode-button-secondaryHoverBackground);
 
-    /* Tabs (mode switcher) */
-    --jb-tab-active-bg: var(--vscode-tab-activeBackground);
-    --jb-tab-active-fg: var(--vscode-tab-activeForeground);
-    --jb-tab-inactive-fg: var(--vscode-tab-inactiveForeground);
-    --jb-tab-hover-bg: var(--vscode-tab-hoverBackground);
+    /* Inputs */
+    --jb-input-fg: var(--vscode-input-foreground);
+    --jb-input-placeholder: var(--vscode-input-placeholderForeground);
+
+    /* Mode switcher, styled after VS Code's panel tabs */
+    --jb-tab-active-fg: var(--vscode-panelTitle-activeForeground, var(--vscode-tab-activeForeground));
+    --jb-tab-inactive-fg: var(--vscode-panelTitle-inactiveForeground, var(--vscode-tab-inactiveForeground));
+    --jb-tab-active-border: var(--vscode-panelTitle-activeBorder, var(--vscode-focusBorder));
 
     /* Diff semantics */
     --jb-added: var(--vscode-gitDecoration-addedResourceForeground);
@@ -47,7 +58,10 @@
     --jb-modified: var(--vscode-gitDecoration-modifiedResourceForeground);
     --jb-added-bg: var(--vscode-diffEditor-insertedTextBackground);
     --jb-removed-bg: var(--vscode-diffEditor-removedTextBackground);
-    --jb-modified-bg: var(--vscode-diffEditor-border);
+    /* Modified rows carry their meaning in the left rail and the old/new value
+       chips. Filling them too -- the old code reused diffEditor-border, a line
+       colour -- painted a grey band that read as a selection in light themes. */
+    --jb-modified-bg: transparent;
     --jb-ok: var(--vscode-testing-iconPassed);
 
     /* Find */
@@ -90,12 +104,32 @@
 
     /* Shape */
     --jb-radius-sm: 3px;
-    --jb-radius-md: 6px;
+    --jb-radius-md: 4px;
     --jb-shadow: 0 2px 8px var(--vscode-widget-shadow);
 
-    /* Chrome metrics */
+    /* Chrome metrics. VS Code's own chrome sits in this range; anything
+       taller reads as a web page embedded in the editor rather than part
+       of it. */
     --jb-h-toolbar: 36px;
     --jb-h-header: 28px;
     --jb-h-status: 22px;
-    --jb-h-control: 32px;
+    --jb-h-btn: 24px;
+    --jb-h-icon-btn: 24px;
+    --jb-w-sash: 6px;
+
+    /* Motion */
+    --jb-dur: 120ms;
+    --jb-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/*
+ * High-contrast themes draw structure with explicit borders and no shadows.
+ * VS Code puts the theme kind on <body>, so overriding the tokens here reaches
+ * every rule without any of them needing to know about the theme.
+ */
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+    --jb-border: var(--vscode-contrastBorder);
+    --jb-shadow: none;
+    --jb-modified-bg: transparent;
 }
