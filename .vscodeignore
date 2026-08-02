@@ -14,6 +14,9 @@ out/**/*.d.ts
 out/**/*.d.ts.map
 
 # Dependencies (bundled by webpack)
+# NOTE: this is why the codicon font is copied into media/ at build time rather
+# than referenced from node_modules -- see webpack.config.js. media/** must stay
+# packaged or the webview loads with no icons and no styles.
 node_modules/**
 
 # Development dependencies and tools

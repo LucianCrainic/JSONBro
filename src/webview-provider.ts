@@ -115,7 +115,7 @@ export class WebviewProvider {
                 retainContextWhenHidden: true,
                 localResourceRoots: [
                     vscode.Uri.joinPath(this.context.extensionUri, 'out'),
-                    vscode.Uri.joinPath(this.context.extensionUri, 'node_modules')
+                    vscode.Uri.joinPath(this.context.extensionUri, 'media')
                 ]
             }
         );
