@@ -142,6 +142,19 @@
     height: 12px;
 }
 
+/* ------------------------------------------------------------------- Mode */
+
+/*
+ * The active mode is a single attribute on <body>; CSS decides what each mode
+ * shows. Elements that belong to one mode carry data-mode-only.
+ */
+body[data-mode='format'] #diff-container,
+body[data-mode='diff'] #format-container,
+body[data-mode='format'] [data-mode-only='diff'],
+body[data-mode='diff'] [data-mode-only='format'] {
+    display: none;
+}
+
 /* ----------------------------------------------------------------- Layout */
 
 .mode-container {

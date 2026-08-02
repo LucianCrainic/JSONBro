@@ -12,6 +12,15 @@ body {
     overflow: hidden;
 }
 
+/*
+ * Flex and grid display values outrank the UA stylesheet's [hidden] rule, so
+ * `hidden` needs to win explicitly for it to be usable as the visibility
+ * mechanism throughout the webview.
+ */
+[hidden] {
+    display: none !important;
+}
+
 button {
     background-color: var(--vscode-button-background);
     color: var(--vscode-button-foreground);

@@ -288,7 +288,7 @@ export class JSONDiff {
                                         <line x1="6" y1="6" x2="18" y2="18"></line>
                                     </svg>
                                 </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
+                                <button class="diff-action-btn undo-diff-btn" title="Undo" hidden>
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M3 7v6h6"></path>
                                         <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
@@ -317,7 +317,7 @@ export class JSONDiff {
                                         <line x1="6" y1="6" x2="18" y2="18"></line>
                                     </svg>
                                 </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
+                                <button class="diff-action-btn undo-diff-btn" title="Undo" hidden>
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M3 7v6h6"></path>
                                         <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
@@ -350,7 +350,7 @@ export class JSONDiff {
                                         <line x1="6" y1="6" x2="18" y2="18"></line>
                                     </svg>
                                 </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
+                                <button class="diff-action-btn undo-diff-btn" title="Undo" hidden>
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M3 7v6h6"></path>
                                         <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>

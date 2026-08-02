@@ -5,13 +5,13 @@
     "outDir": "out/webview",
     "lib": ["es2020", "dom"],
     "sourceMap": true,
-    "rootDir": "src/webview",
+    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node"
   },
-  "include": ["src/webview/**/*"],
+  "include": ["src/webview/**/*", "src/shared/**/*"],
   "exclude": ["node_modules", ".vscode-test", "out"]
 }
