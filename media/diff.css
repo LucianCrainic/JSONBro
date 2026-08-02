@@ -1,19 +1,22 @@
 /* Diff result list: items, paths, values, per-item actions. */
 
 .diff-result {
-    font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-    font-size: 11px;
-    line-height: 1.3;
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-sm);
+    line-height: 1.4;
     margin: 0;
     padding: 0;
 }
 
 .diff-result.no-changes {
-    text-align: center;
-    padding: 16px;
-    margin: 0;
-    color: var(--vscode-testing-iconPassed);
-    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--jb-sp-3);
+    padding: var(--jb-sp-6);
+    color: var(--jb-ok);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-md);
 }
 
 .diff-items {
@@ -21,84 +24,79 @@
     padding: 0;
 }
 
-.diff-items > * {
-    margin-top: 0;
-}
-
-.diff-items > *:first-child {
-    margin-top: 0 !important;
-}
-
 /* ------------------------------------------------------------------ Items */
 
 .diff-item {
-    margin-bottom: 0;
-    padding: 1px 6px;
-    border-radius: 2px;
-    border-left: 2px solid;
     display: flex;
-    align-items: center;
     flex-wrap: wrap;
-    gap: 2px;
+    align-items: center;
+    gap: var(--jb-sp-1);
+    padding: var(--jb-sp-1) var(--jb-sp-5);
+    border-left: 2px solid transparent;
 }
 
-.diff-item:first-child {
-    margin-top: 0;
-    padding-top: 1px;
+.diff-item:hover {
+    background-color: var(--jb-row-hover);
 }
 
 .diff-item.diff-added {
-    background-color: var(--vscode-diffEditor-insertedTextBackground);
-    border-left-color: var(--vscode-gitDecoration-addedResourceForeground);
+    background-color: var(--jb-added-bg);
+    border-left-color: var(--jb-added);
 }
 
 .diff-item.diff-removed {
-    background-color: var(--vscode-diffEditor-removedTextBackground);
-    border-left-color: var(--vscode-gitDecoration-deletedResourceForeground);
+    background-color: var(--jb-removed-bg);
+    border-left-color: var(--jb-removed);
 }
 
 .diff-item.diff-modified {
-    background-color: var(--vscode-diffEditor-border);
-    border-left-color: var(--vscode-gitDecoration-modifiedResourceForeground);
+    background-color: var(--jb-modified-bg);
+    border-left-color: var(--jb-modified);
     flex-direction: column;
     align-items: flex-start;
 }
 
+/*
+ * Keep the path, separator and value together on the left and let the actions
+ * sit at the far right. space-between would spread all four apart, which left
+ * the values of neighbouring rows landing at different offsets.
+ */
 .diff-item-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     width: 100%;
-    gap: 8px;
+    gap: var(--jb-sp-2);
+}
+
+.diff-item-actions {
+    margin-left: auto;
+    padding-left: var(--jb-sp-4);
 }
 
 /* ----------------------------------------------------------- Paths/values */
 
 .diff-path {
+    font-size: var(--jb-fs-xs);
     font-weight: 600;
-    margin-bottom: 0;
-    font-size: 10px;
-    opacity: 0.9;
-    color: var(--vscode-descriptionForeground);
+    color: var(--jb-fg-muted);
 }
 
 .diff-value {
-    font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-    font-size: 10px;
-    padding: 1px 3px;
+    padding: 1px var(--jb-sp-1);
     border-radius: 2px;
-    margin: 1px 0;
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-xs);
     word-break: break-all;
 }
 
 .diff-value.old-value {
-    background-color: var(--vscode-diffEditor-removedTextBackground);
-    color: var(--vscode-gitDecoration-deletedResourceForeground);
+    background-color: var(--jb-removed-bg);
+    color: var(--jb-removed);
 }
 
 .diff-value.new-value {
-    background-color: var(--vscode-diffEditor-insertedTextBackground);
-    color: var(--vscode-gitDecoration-addedResourceForeground);
+    background-color: var(--jb-added-bg);
+    color: var(--jb-added);
 }
 
 .diff-values {
@@ -108,93 +106,98 @@
 }
 
 .diff-inline-change {
-    margin-top: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 10px;
-}
-
-.diff-inline-change .diff-value {
-    margin: 0;
+    gap: var(--jb-sp-2);
+    font-size: var(--jb-fs-xs);
 }
 
 .expandable-value {
     cursor: pointer;
-    text-decoration: underline;
-    text-decoration-style: dotted;
+    text-decoration: underline dotted;
     opacity: 0.8;
 }
 
 .expandable-value:hover {
     opacity: 1;
-    background-color: var(--vscode-toolbar-hoverBackground);
-    padding: 1px 2px;
+    background-color: var(--jb-bg-hover);
     border-radius: 2px;
 }
 
 .diff-error {
-    color: var(--vscode-errorForeground);
-    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--jb-sp-3);
+    padding: var(--jb-sp-6);
+    color: var(--jb-fg-error);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-md);
     text-align: center;
 }
 
 /* ---------------------------------------------------------------- Actions */
 
-.diff-action-btn {
-    background-color: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-    border: 1px solid var(--vscode-editorGroup-border);
-    padding: 4px;
-    cursor: pointer;
-    border-radius: 3px;
-    font-size: 11px;
+.diff-item-actions {
     display: flex;
+    gap: var(--jb-sp-1);
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--jb-dur) var(--jb-ease);
+}
+
+.diff-item:hover .diff-item-actions,
+.diff-item-actions:focus-within {
+    opacity: 1;
+}
+
+.diff-action-btn {
+    display: inline-flex;
     align-items: center;
-    gap: 4px;
-    height: 24px;
-    min-width: 24px;
-    box-sizing: border-box;
-    transition: all 0.2s ease;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--jb-radius-sm);
+    background-color: transparent;
+    color: var(--jb-fg-icon);
+    cursor: pointer;
+    transition: background-color var(--jb-dur) var(--jb-ease);
 }
 
 .diff-action-btn:hover {
-    background-color: var(--vscode-button-secondaryHoverBackground);
+    background-color: var(--jb-bg-hover);
 }
 
-.diff-action-btn:active {
-    transform: scale(0.95);
+.diff-action-btn .codicon {
+    font-size: 14px;
 }
 
-.diff-action-btn svg {
-    width: 12px;
-    height: 12px;
+.apply-diff-btn:hover {
+    color: var(--jb-added);
 }
 
-.diff-item-actions {
-    display: flex;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.diff-item:hover .diff-item-actions {
-    opacity: 1;
+.reject-diff-btn:hover {
+    color: var(--jb-removed);
 }
 
 /* -------------------------------------------------------- Resolved states */
 
 .diff-item.diff-applied {
-    opacity: 0.5;
-    background-color: var(--vscode-editor-background);
+    opacity: 0.55;
 }
 
 .diff-item.diff-rejected {
-    opacity: 0.3;
+    opacity: 0.45;
+}
+
+.diff-item.diff-rejected .diff-path {
     text-decoration: line-through;
 }
 
+/* Resolved rows keep their actions visible so the undo is discoverable. */
 .diff-item.diff-applied .diff-item-actions,
 .diff-item.diff-rejected .diff-item-actions {
-    opacity: 0.3;
+    opacity: 1;
 }

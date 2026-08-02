@@ -262,6 +262,22 @@ export class JSONDiff {
     }
 
     /**
+     * The apply/reject/undo controls attached to a change.
+     */
+    private static renderDiffActions(applyTitle: string): string {
+        const button = (cls: string, icon: string, title: string, hidden = false) =>
+            `<button class="diff-action-btn ${cls}" type="button" title="${title}" aria-label="${title}"${
+                hidden ? ' hidden' : ''
+            }><span class="codicon codicon-${icon}" aria-hidden="true"></span></button>`;
+
+        return `<div class="diff-item-actions">
+                                ${button('apply-diff-btn', 'check', applyTitle)}
+                                ${button('reject-diff-btn', 'close', 'Reject this change')}
+                                ${button('undo-diff-btn', 'discard', 'Undo', true)}
+                            </div>`;
+    }
+
+    /**
      * Renders a single diff item
      */
     private static renderDiffItem(diff: DiffResult, index: number): string {
@@ -276,25 +292,7 @@ export class JSONDiff {
                     <div class="${diffClass}" data-diff-id="${diffId}" data-diff-type="${diff.type}" data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}" data-diff-value="${this.escapeHtml(JSON.stringify(diff.newValue))}">
                         <div class="diff-item-header">
                             <span class="diff-path">+ ${pathStr}</span> = <span class="diff-value new-value">${newVal}</span>
-                            <div class="diff-item-actions">
-                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" hidden>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M3 7v6h6"></path>
-                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
-                                    </svg>
-                                </button>
-                            </div>
+                            ${this.renderDiffActions(`Apply this change to the left JSON`)}
                         </div>
                     </div>
                 `;
@@ -305,25 +303,7 @@ export class JSONDiff {
                     <div class="${diffClass}" data-diff-id="${diffId}" data-diff-type="${diff.type}" data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}" data-diff-old-value="${this.escapeHtml(JSON.stringify(diff.oldValue))}">
                         <div class="diff-item-header">
                             <span class="diff-path">- ${pathStr}</span> = <span class="diff-value old-value">${oldVal}</span>
-                            <div class="diff-item-actions">
-                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON (remove this property)">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" hidden>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M3 7v6h6"></path>
-                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
-                                    </svg>
-                                </button>
-                            </div>
+                            ${this.renderDiffActions(`Apply this change to the left JSON (remove this property)`)}
                         </div>
                     </div>
                 `;
@@ -338,25 +318,7 @@ export class JSONDiff {
                             <div class="diff-inline-change">
                                 <span class="diff-value old-value">${oldModVal}</span> → <span class="diff-value new-value">${newModVal}</span>
                             </div>
-                            <div class="diff-item-actions">
-                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" hidden>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M3 7v6h6"></path>
-                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
-                                    </svg>
-                                </button>
-                            </div>
+                            ${this.renderDiffActions(`Apply this change to the left JSON`)}
                         </div>
                     </div>
                 `;

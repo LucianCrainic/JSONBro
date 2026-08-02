@@ -128,8 +128,12 @@ export class WebviewProvider {
             }
         );
 
-        // Set JSON file icon for the panel
-        panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'images', 'json-file-icon.svg');
+        // The tab icon renders outside the webview, so it cannot pick up theme
+        // colours through CSS -- VS Code needs a variant per theme kind.
+        panel.iconPath = {
+            light: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'json-file-icon-light.svg'),
+            dark: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'json-file-icon-dark.svg')
+        };
 
         // Track the panel
         this.existingPanels.set(mode, panel);

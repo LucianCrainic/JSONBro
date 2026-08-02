@@ -1,11 +1,18 @@
-/* Document shell, generic form controls and icon sizing. */
+/* Document shell, shared primitives and focus handling. */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui;
     margin: 0;
     padding: 0;
-    color: var(--vscode-editor-foreground);
-    background-color: var(--vscode-sideBar-background);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-md);
+    color: var(--jb-fg);
+    background-color: var(--jb-bg);
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -21,43 +28,45 @@ body {
     display: none !important;
 }
 
-button {
-    background-color: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    border: none;
-    padding: 8px 12px;
-    cursor: pointer;
-    border-radius: 3px;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    height: 32px;
-    box-sizing: border-box;
+/* Keyboard focus must stay visible everywhere, including high contrast. */
+:focus-visible {
+    outline: 1px solid var(--jb-focus);
+    outline-offset: -1px;
 }
 
-button:hover {
-    background-color: var(--vscode-button-hoverBackground);
+:focus:not(:focus-visible) {
+    outline: none;
 }
 
-button.active {
-    background-color: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
+::selection {
+    background-color: var(--jb-selection);
 }
 
-button.active:hover {
-    background-color: var(--vscode-button-secondaryHoverBackground);
+/* --------------------------------------------------------------- Scrollbars */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
 }
 
-.icon {
-    width: 14px;
-    height: 14px;
-    stroke: currentColor;
-    fill: none;
-    stroke-width: 2;
+::-webkit-scrollbar-track {
+    background: transparent;
 }
 
-/* Codicons default to 16px; align them optically with adjacent text. */
+::-webkit-scrollbar-thumb {
+    background-color: var(--jb-scrollbar);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--jb-scrollbar-hover);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* -------------------------------------------------------------------- Icons */
+
 .codicon {
     font-size: 16px;
     line-height: 1;
@@ -71,8 +80,99 @@ button.active:hover {
     font-size: 14px;
 }
 
-/* Visual feedback while a splitter is being dragged. */
-body.dragging,
-body.dragging * {
-    cursor: col-resize !important;
+/* ------------------------------------------------------------------ Buttons */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    height: var(--jb-h-btn);
+    padding: 0 var(--jb-sp-4);
+    border: 1px solid transparent;
+    border-radius: var(--jb-radius-sm);
+    font-family: inherit;
+    font-size: var(--jb-fs-md);
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    background-color: var(--jb-neutral);
+    color: var(--jb-neutral-fg);
+    transition: background-color var(--jb-dur) var(--jb-ease);
+}
+
+.btn:hover {
+    background-color: var(--jb-neutral-hover);
+}
+
+.btn--primary {
+    background-color: var(--jb-accent);
+    color: var(--jb-accent-fg);
+}
+
+.btn--primary:hover {
+    background-color: var(--jb-accent-hover);
+}
+
+.btn .codicon {
+    font-size: 14px;
+}
+
+/*
+ * Icon-only action. Borderless until hovered, matching the action buttons in
+ * VS Code's own editor and panel title bars.
+ */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--jb-h-icon-btn);
+    height: var(--jb-h-icon-btn);
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--jb-radius-sm);
+    background-color: transparent;
+    color: var(--jb-fg-icon);
+    cursor: pointer;
+    transition: background-color var(--jb-dur) var(--jb-ease),
+        color var(--jb-dur) var(--jb-ease);
+}
+
+.icon-btn:hover {
+    background-color: var(--jb-bg-hover);
+    color: var(--jb-fg);
+}
+
+.icon-btn:active {
+    background-color: var(--jb-bg-active);
+}
+
+.icon-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    background-color: transparent;
+}
+
+/*
+ * Toggled-on state needs more than a tint so it survives high-contrast themes,
+ * hence the border as well as the background.
+ */
+.icon-btn.is-active {
+    background-color: var(--jb-neutral);
+    border-color: var(--jb-border);
+    color: var(--jb-fg);
+}
+
+.icon-btn.is-active:hover {
+    background-color: var(--jb-neutral-hover);
+}
+
+/* ------------------------------------------------------------------ Motion */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 1ms !important;
+        transition-duration: 1ms !important;
+    }
 }

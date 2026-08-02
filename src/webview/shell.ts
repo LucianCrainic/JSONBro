@@ -3,30 +3,23 @@
  * and the connection to the extension host, and delegates everything else to
  * the two views.
  */
-import { byId, on } from './ui/dom';
+import { byId, on, qsa } from './ui/dom';
 import { Messenger } from './ui/messaging';
 import { Shortcuts } from './ui/shortcuts';
+import { StatusBar } from './ui/status-bar';
 import { DiffView } from './views/diff-view';
 import { FormatView } from './views/format-view';
 import type { Mode } from '../shared/messages';
 
-const ACTION_ICONS: Record<Mode, string> = {
-    format:
-        '<polyline points="16,18 22,12 16,6"></polyline>' +
-        '<polyline points="8,6 2,12 8,18"></polyline>',
-    diff:
-        '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>' +
-        '<path d="M9 12h6"></path><path d="M12 9v6"></path>'
-};
-
 const ACTION_LABELS: Record<Mode, { text: string; title: string }> = {
-    format: { text: 'Format', title: 'Format JSON' },
-    diff: { text: 'Compare', title: 'Compare JSON' }
+    format: { text: 'Format', title: 'Format JSON (Ctrl/Cmd+Enter)' },
+    diff: { text: 'Compare', title: 'Compare JSON (Ctrl/Cmd+Enter)' }
 };
 
 export class Shell {
     private readonly messenger = new Messenger();
     private readonly shortcuts = new Shortcuts();
+    private readonly statusBar = new StatusBar();
     private readonly formatView: FormatView;
     private readonly diffView: DiffView;
     private mode: Mode = 'format';
@@ -34,9 +27,24 @@ export class Shell {
     constructor() {
         this.formatView = new FormatView(this.messenger);
         this.diffView = new DiffView(this.messenger);
+
+        // Only the active view's status is on screen; the other keeps its model
+        // so switching back restores it without recomputing.
+        this.formatView.onStatusChange = status => {
+            if (this.mode === 'format') {
+                this.statusBar.render(status);
+            }
+        };
+        this.diffView.onStatusChange = status => {
+            if (this.mode === 'diff') {
+                this.statusBar.render(status);
+            }
+        };
     }
 
     public start(): void {
+        this.labelModifierKeys();
+
         // The host renders <body data-mode="..."> so the first paint is already
         // correct; adopt it rather than assuming a default.
         this.setMode(document.body.dataset.mode === 'diff' ? 'diff' : 'format');
@@ -48,6 +56,14 @@ export class Shell {
         // Only now is every handler in place, so it is safe for the host to
         // send anything it queued while the panel was starting up.
         this.messenger.signalReady();
+    }
+
+    /** Shows the modifier key this platform actually uses. */
+    private labelModifierKeys(): void {
+        const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
+        for (const key of qsa<HTMLElement>('kbd[data-mod]')) {
+            key.textContent = isMac ? '⌘' : 'Ctrl';
+        }
     }
 
     // --------------------------------------------------------------- toolbar
@@ -76,24 +92,29 @@ export class Shell {
         this.mode = mode;
         document.body.dataset.mode = mode;
 
-        byId('format-mode')?.classList.toggle('active', mode === 'format');
-        byId('diff-mode')?.classList.toggle('active', mode === 'diff');
+        for (const [id, isActive] of [
+            ['format-mode', mode === 'format'],
+            ['diff-mode', mode === 'diff']
+        ] as const) {
+            const tab = byId(id);
+            tab?.classList.toggle('active', isActive);
+            tab?.setAttribute('aria-selected', String(isActive));
+        }
 
         const actionButton = byId('action-btn');
         const actionText = byId('action-text');
-        const actionIcon = actionButton?.querySelector('svg');
-
         if (actionText) {
             actionText.textContent = ACTION_LABELS[mode].text;
-        }
-        if (actionIcon) {
-            actionIcon.innerHTML = ACTION_ICONS[mode];
         }
         actionButton?.setAttribute('title', ACTION_LABELS[mode].title);
 
         if (mode === 'diff') {
             this.formatView.search.close();
         }
+
+        this.statusBar.render(
+            mode === 'format' ? this.formatView.getStatus() : this.diffView.getStatus()
+        );
     }
 
     private runAction(): void {

@@ -4,9 +4,11 @@
 import { JSONFormatter } from '../formatter';
 import { JSONParser } from '../json-parser';
 import { byId, delegate, on, qsa } from '../ui/dom';
+import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
 import { SearchBar } from '../ui/search-bar';
 import { Splitter } from '../ui/splitter';
+import { formatBytes, plural, type StatusModel } from '../ui/status-bar';
 import type { Messenger } from '../ui/messaging';
 
 export class FormatView {
@@ -15,10 +17,14 @@ export class FormatView {
 
     private currentJson: unknown = null;
     private loadingFromHistory = false;
+    private status: StatusModel = {};
 
     private splitter: Splitter | null = null;
     private panels: PanelGroup | null = null;
     public readonly search: SearchBar;
+
+    /** Notifies the shell that the status model changed. */
+    public onStatusChange: (status: StatusModel) => void = () => undefined;
 
     constructor(messenger: Messenger) {
         this.messenger = messenger;
@@ -43,7 +49,8 @@ export class FormatView {
         const after = byId('output-panel');
 
         if (container && handle && before && after) {
-            this.splitter = new Splitter({ container, handle, before, after });
+            // Panes now sit edge to edge, so no container padding to subtract.
+            this.splitter = new Splitter({ container, handle, before, after, padding: 0 });
             this.panels = new PanelGroup({
                 container,
                 panelIds: ['input-panel', 'output-panel'],
@@ -73,7 +80,7 @@ export class FormatView {
     private setupControls(): void {
         const lineNumbers = byId('line-numbers-toggle');
         if (lineNumbers) {
-            lineNumbers.classList.toggle('active', JSONFormatter.getShowLineNumbers());
+            lineNumbers.classList.toggle('is-active', JSONFormatter.getShowLineNumbers());
             this.teardown.push(on(lineNumbers, 'click', () => this.toggleLineNumbers()));
         }
 
@@ -87,7 +94,9 @@ export class FormatView {
         const next = !JSONFormatter.getShowLineNumbers();
         JSONFormatter.setShowLineNumbers(next);
 
-        byId('line-numbers-toggle')?.classList.toggle('active', next);
+        const toggle = byId('line-numbers-toggle');
+        toggle?.classList.toggle('is-active', next);
+        toggle?.setAttribute('aria-pressed', String(next));
 
         const output = byId('output');
         if (output && this.currentJson !== null) {
@@ -107,7 +116,11 @@ export class FormatView {
 
         const input = inputEl.value.trim();
         if (!input) {
-            output.textContent = 'Please enter JSON data to format.';
+            this.currentJson = null;
+            output.innerHTML = '';
+            this.setEmpty(true);
+            this.hideWarning();
+            this.publishStatus({});
             return;
         }
 
@@ -115,9 +128,10 @@ export class FormatView {
             const { parsed, wasStructurallyFixed } = JSONParser.parseWithStatus(input);
             this.currentJson = parsed;
 
-            output.style.color = 'inherit';
+            output.classList.remove('is-error');
             output.innerHTML = JSONFormatter.renderJson(parsed);
             output.classList.toggle('hide-line-numbers', !JSONFormatter.getShowLineNumbers());
+            this.setEmpty(false);
 
             if (wasStructurallyFixed) {
                 this.showWarning();
@@ -125,17 +139,59 @@ export class FormatView {
                 this.hideWarning();
             }
 
+            this.publishStatus(this.describe(parsed, input, wasStructurallyFixed));
+
             if (!this.loadingFromHistory) {
                 this.messenger.post({ command: 'addFormatHistory', json: input });
             }
         } catch (error) {
             this.currentJson = null;
-            output.style.color = 'var(--vscode-errorForeground)';
-            output.textContent =
+            const message =
                 error instanceof Error
                     ? JSONParser.getParseErrorMessage(input, error)
                     : 'Unknown parsing error';
+
+            output.classList.add('is-error');
+            output.textContent = message;
+            this.setEmpty(false);
             this.hideWarning();
+            this.publishStatus({
+                left: [{ text: 'Invalid JSON', icon: Icons.error, tone: 'error', title: message }]
+            });
+        }
+    }
+
+    /** Facts about the formatted document, for the status bar. */
+    private describe(parsed: unknown, source: string, autoCorrected: boolean): StatusModel {
+        const lines = JSON.stringify(parsed, null, 2).split('\n').length;
+        const bytes = new Blob([source]).size;
+
+        return {
+            left: [
+                { text: 'Valid JSON', icon: Icons.valid, tone: 'ok' },
+                { text: plural(lines, 'line') },
+                { text: formatBytes(bytes) }
+            ],
+            right: autoCorrected
+                ? [{ text: 'Auto-corrected', icon: Icons.warning, tone: 'warn' }]
+                : []
+        };
+    }
+
+    private publishStatus(status: StatusModel): void {
+        this.status = status;
+        this.onStatusChange(status);
+    }
+
+    /** The status model for this view, re-published when it becomes active. */
+    public getStatus(): StatusModel {
+        return this.status;
+    }
+
+    private setEmpty(empty: boolean): void {
+        const panel = byId('output-panel');
+        if (panel) {
+            panel.dataset.empty = String(empty);
         }
     }
 
@@ -166,6 +222,8 @@ export class FormatView {
         this.currentJson = null;
         this.search.clear();
         this.hideWarning();
+        this.setEmpty(true);
+        this.publishStatus({});
     }
 
     public copy(): void {
@@ -206,11 +264,11 @@ export class FormatView {
         if (!warning) {
             return;
         }
-        const message = warning.querySelector('.warning-message');
+        const message = warning.querySelector('.notice__message');
         if (message) {
             message.textContent =
-                'JSON auto-corrected! The input had errors that were automatically fixed. ' +
-                'The corrected version is displayed below.';
+                'The input had errors that were corrected automatically. ' +
+                'What you see below is the repaired JSON.';
         }
         warning.hidden = false;
     }
