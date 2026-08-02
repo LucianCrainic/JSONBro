@@ -3,6 +3,7 @@
   "displayName": "JSONBro",
   "description": "A simple VS Code extension for working with JSON.",
   "version": "0.2.9",
+  "license": "MIT",
   "publisher": "LucianDCrainic",
   "repository": {
     "type": "git",
