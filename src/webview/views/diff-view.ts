@@ -4,9 +4,10 @@
 import { JSONDiff } from '../diff';
 import type { DiffResult, DiffType } from '../diff';
 import { JSONParser } from '../json-parser';
-import { byId, delegate, escapeHtml, on } from '../ui/dom';
+import { byId, delegate, escapeHtml, on, qsa } from '../ui/dom';
 import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
+import { Splitter } from '../ui/splitter';
 import { plural, type StatusModel } from '../ui/status-bar';
 import type { DiffState } from '../../shared/messages';
 import type { Messenger } from '../ui/messaging';
@@ -26,6 +27,7 @@ export class DiffView {
     private status: StatusModel = {};
 
     private panels: PanelGroup | null = null;
+    private readonly splitters: Splitter[] = [];
 
     /** Notifies the shell that the status model changed. */
     public onStatusChange: (status: StatusModel) => void = () => undefined;
@@ -45,13 +47,42 @@ export class DiffView {
 
     private setupLayout(): void {
         const container = byId('diff-container');
-        if (container) {
-            this.panels = new PanelGroup({ container, panelIds: PANEL_IDS });
+        if (!container) {
+            return;
+        }
+
+        this.panels = new PanelGroup({
+            container,
+            panelIds: PANEL_IDS,
+            onChange: maximized => {
+                if (maximized === null) {
+                    this.splitters.forEach(splitter => splitter.reset());
+                }
+                this.splitters.forEach((splitter, i) => {
+                    const handle = byId(i === 0 ? 'diff-splitter-left' : 'diff-splitter-right');
+                    handle?.classList.toggle('hidden', maximized !== null);
+                });
+            }
+        });
+
+        // Two sashes for three panes. Each resizes only its own neighbours, so
+        // dragging one does not disturb the pane on the far side.
+        for (const [handleId, beforeId, afterId] of [
+            ['diff-splitter-left', 'left-json-panel', 'diff-result-panel'],
+            ['diff-splitter-right', 'diff-result-panel', 'right-json-panel']
+        ] as const) {
+            const handle = byId(handleId);
+            const before = byId(beforeId);
+            const after = byId(afterId);
+            if (handle && before && after) {
+                this.splitters.push(new Splitter({ handle, before, after }));
+            }
         }
     }
 
     public resetPanelSizes(): void {
         this.panels?.restore();
+        this.splitters.forEach(splitter => splitter.reset());
     }
 
     // -------------------------------------------------------------- controls
@@ -65,6 +96,15 @@ export class DiffView {
         };
 
         bind('strict-diff-toggle', () => this.toggleStrict());
+
+        const filters = byId('diff-filters');
+        if (filters) {
+            this.teardown.push(
+                delegate(filters, 'click', '[data-diff-filter]', chip => {
+                    this.setFilter(chip.dataset.diffFilter ?? 'all');
+                })
+            );
+        }
         bind('apply-all-diffs', () => this.applyAll());
         bind('reject-all-diffs', () => this.rejectAll());
         bind('copy-left-json', () => this.copyLeft());
@@ -140,6 +180,7 @@ export class DiffView {
             const right = JSONParser.parseFlexible(rightRaw);
 
             this.states.clear();
+            this.setFilter('all');
             this.leftJson = left;
             this.rightJson = right;
             this.diffs = JSONDiff.compareJson(left, right, [], this.strict);
@@ -169,7 +210,26 @@ export class DiffView {
         }
     }
 
-    /** Change counts for the status bar and the pane header. */
+    /**
+     * Narrows the list to one kind of change.
+     *
+     * The list carries the filter and every row decides for itself in CSS, so
+     * nothing here walks the DOM.
+     */
+    private setFilter(filter: string): void {
+        const output = byId('diff-output');
+        if (output) {
+            output.dataset.filter = filter;
+        }
+
+        for (const chip of qsa<HTMLElement>('[data-diff-filter]')) {
+            const active = chip.dataset.diffFilter === filter;
+            chip.classList.toggle('is-active', active);
+            chip.setAttribute('aria-pressed', String(active));
+        }
+    }
+
+    /** Change counts for the status bar, pane header and filter chips. */
     private describe(): StatusModel {
         const count = (type: string) => this.diffs.filter(diff => diff.type === type).length;
         const added = count('added');
@@ -181,6 +241,8 @@ export class DiffView {
         if (meta) {
             meta.textContent = this.diffs.length > 0 ? String(this.diffs.length) : '';
         }
+
+        this.renderFilterChips({ all: this.diffs.length, added, removed, modified });
 
         if (this.diffs.length === 0) {
             return { left: [{ text: 'No differences', icon: Icons.valid, tone: 'ok' }] };
@@ -195,6 +257,25 @@ export class DiffView {
             ],
             right: applied > 0 ? [{ text: `${applied} applied`, icon: Icons.apply }] : []
         };
+    }
+
+    /** Writes the per-kind counts onto the chips and hides the row when empty. */
+    private renderFilterChips(counts: Record<string, number>): void {
+        const filters = byId('diff-filters');
+        if (filters) {
+            filters.hidden = this.diffs.length === 0;
+        }
+
+        for (const chip of qsa<HTMLElement>('[data-diff-filter]')) {
+            const filter = chip.dataset.diffFilter ?? 'all';
+            const count = counts[filter] ?? 0;
+            chip.dataset.count = String(count);
+
+            const label = chip.querySelector('.chip__count');
+            if (label) {
+                label.textContent = String(count);
+            }
+        }
     }
 
     private publishStatus(status: StatusModel): void {
@@ -241,6 +322,8 @@ export class DiffView {
         this.diffs = [];
         this.states.clear();
         this.setBulkActionsVisible(false);
+        this.setFilter('all');
+        this.renderFilterChips({ all: 0, added: 0, removed: 0, modified: 0 });
         this.publishStatus({});
     }
 
@@ -404,8 +487,9 @@ export class DiffView {
             this.states.set(id, state);
         }
 
-        item.classList.toggle('diff-applied', state === 'applied');
-        item.classList.toggle('diff-rejected', state === 'rejected');
+        // Single source: CSS keys off the same attribute the view records, so
+        // the two cannot disagree the way parallel classes allowed.
+        item.dataset.state = state;
 
         const resolved = state !== 'pending';
         const toggle = (selector: string, hidden: boolean) => {
@@ -430,6 +514,8 @@ export class DiffView {
         this.teardown.forEach(fn => fn());
         this.teardown.length = 0;
         this.panels?.dispose();
+        this.splitters.forEach(splitter => splitter.dispose());
+        this.splitters.length = 0;
     }
 }
 
