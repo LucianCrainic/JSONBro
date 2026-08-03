@@ -56,8 +56,7 @@ export class FormatView {
         const after = byId('output-panel');
 
         if (container && handle && before && after) {
-            // Panes now sit edge to edge, so no container padding to subtract.
-            this.splitter = new Splitter({ container, handle, before, after, padding: 0 });
+            this.splitter = new Splitter({ handle, before, after });
             this.panels = new PanelGroup({
                 container,
                 panelIds: ['input-panel', 'output-panel'],

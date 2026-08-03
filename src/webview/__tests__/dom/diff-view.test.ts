@@ -1,29 +1,9 @@
 import { DiffView } from '../../views/diff-view';
 import { Messenger } from '../../ui/messaging';
+import { mountPanel } from './helpers/fixture';
 
 const LEFT = JSON.stringify({ keep: 1, changed: 'before', gone: true });
 const RIGHT = JSON.stringify({ keep: 1, changed: 'after', added: 42 });
-
-function buildLayout(): void {
-    document.body.innerHTML = `
-        <button id="strict-diff-toggle"></button>
-        <div id="diff-container">
-            <div id="left-json-panel">
-                <button id="copy-left-json"></button>
-                <button id="clear-left-json"></button>
-                <textarea id="left-json"></textarea>
-            </div>
-            <div id="diff-result-panel">
-                <button id="apply-all-diffs" hidden></button>
-                <button id="reject-all-diffs" hidden></button>
-                <div id="diff-output"></div>
-            </div>
-            <div id="right-json-panel">
-                <button id="clear-right-json"></button>
-                <textarea id="right-json"></textarea>
-            </div>
-        </div>`;
-}
 
 function setInputs(left: string, right: string): void {
     (document.getElementById('left-json') as HTMLTextAreaElement).value = left;
@@ -34,6 +14,10 @@ function items(): HTMLElement[] {
     return Array.from(document.querySelectorAll<HTMLElement>('.diff-item'));
 }
 
+function el<T extends HTMLElement = HTMLElement>(id: string): T {
+    return document.getElementById(id) as T;
+}
+
 function click(selector: string, root: ParentNode = document): void {
     root.querySelector<HTMLElement>(selector)?.click();
 }
@@ -42,7 +26,7 @@ describe('DiffView', () => {
     let view: DiffView;
 
     beforeEach(() => {
-        buildLayout();
+        mountPanel('diff');
         view = new DiffView(new Messenger());
         setInputs(LEFT, RIGHT);
     });
@@ -59,11 +43,11 @@ describe('DiffView', () => {
 
     it('reveals the bulk action buttons only when there are changes', () => {
         view.compare();
-        expect(document.getElementById('apply-all-diffs')?.hidden).toBe(false);
+        expect(el('apply-all-diffs').hidden).toBe(false);
 
         setInputs(LEFT, LEFT);
         view.compare();
-        expect(document.getElementById('apply-all-diffs')?.hidden).toBe(true);
+        expect(el('apply-all-diffs').hidden).toBe(true);
     });
 
     it('reports an error without leaving bulk actions visible', () => {
@@ -72,7 +56,67 @@ describe('DiffView', () => {
         view.compare();
 
         expect(document.querySelector('.diff-error')).not.toBeNull();
-        expect(document.getElementById('reject-all-diffs')?.hidden).toBe(true);
+        expect(el('reject-all-diffs').hidden).toBe(true);
+    });
+
+    describe('change rows', () => {
+        beforeEach(() => view.compare());
+
+        it('renders the path as segments with the leaf emphasised', () => {
+            setInputs(
+                JSON.stringify({ data: { users: [{ email: 'a@b.com' }] } }),
+                JSON.stringify({ data: { users: [{ email: 'x@y.com' }] } })
+            );
+            view.compare();
+
+            const path = document.querySelector('.diff-path') as HTMLElement;
+            const segments = Array.from(path.querySelectorAll('.diff-path__segment')).map(
+                s => s.textContent
+            );
+            const leaf = path.querySelector('.diff-path__leaf')?.textContent;
+
+            expect(segments).toEqual(['data', 'users', '[0]']);
+            expect(leaf).toBe('email');
+        });
+
+        it('marks array indices distinctly from object keys', () => {
+            setInputs(JSON.stringify({ list: ['a'] }), JSON.stringify({ list: ['b'] }));
+            view.compare();
+
+            const index = document.querySelector('.diff-path__index');
+            expect(index?.textContent).toBe('[0]');
+        });
+
+        it('shows old and new values for a modification', () => {
+            const modified = items().find(
+                item => item.dataset.diffType === 'modified'
+            ) as HTMLElement;
+
+            expect(modified.querySelector('.old-value')?.textContent).toBe('"before"');
+            expect(modified.querySelector('.new-value')?.textContent).toBe('"after"');
+        });
+
+        it('shows only the new value for an addition', () => {
+            const added = items().find(item => item.dataset.diffType === 'added') as HTMLElement;
+
+            expect(added.querySelector('.new-value')).not.toBeNull();
+            expect(added.querySelector('.old-value')).toBeNull();
+        });
+
+        it('shows only the old value for a removal', () => {
+            const removed = items().find(
+                item => item.dataset.diffType === 'removed'
+            ) as HTMLElement;
+
+            expect(removed.querySelector('.old-value')).not.toBeNull();
+            expect(removed.querySelector('.new-value')).toBeNull();
+        });
+
+        it('starts every row pending', () => {
+            for (const row of items()) {
+                expect(row.dataset.state).toBe('pending');
+            }
+        });
     });
 
     describe('per-row resolution', () => {
@@ -82,20 +126,20 @@ describe('DiffView', () => {
             const row = items()[0];
             click('.apply-diff-btn', row);
 
-            expect(row.classList.contains('diff-applied')).toBe(true);
+            expect(row.dataset.state).toBe('applied');
             expect(row.querySelector<HTMLElement>('.apply-diff-btn')?.hidden).toBe(true);
             expect(row.querySelector<HTMLElement>('.undo-diff-btn')?.hidden).toBe(false);
-            expect(view.getStates().get(row.getAttribute('data-diff-id') ?? '')).toBe('applied');
+            expect(view.getStates().get(row.dataset.diffId ?? '')).toBe('applied');
         });
 
         it('marks a row rejected without touching the left document', () => {
-            const before = (document.getElementById('left-json') as HTMLTextAreaElement).value;
+            const before = el<HTMLTextAreaElement>('left-json').value;
             const row = items()[0];
             click('.reject-diff-btn', row);
 
-            expect(row.classList.contains('diff-rejected')).toBe(true);
-            expect(view.getStates().get(row.getAttribute('data-diff-id') ?? '')).toBe('rejected');
-            expect((document.getElementById('left-json') as HTMLTextAreaElement).value).toBe(before);
+            expect(row.dataset.state).toBe('rejected');
+            expect(view.getStates().get(row.dataset.diffId ?? '')).toBe('rejected');
+            expect(el<HTMLTextAreaElement>('left-json').value).toBe(before);
         });
 
         it('returns a row to pending on undo', () => {
@@ -103,30 +147,28 @@ describe('DiffView', () => {
             click('.reject-diff-btn', row);
             click('.undo-diff-btn', row);
 
-            expect(row.classList.contains('diff-rejected')).toBe(false);
+            expect(row.dataset.state).toBe('pending');
             expect(row.querySelector<HTMLElement>('.apply-diff-btn')?.hidden).toBe(false);
             expect(row.querySelector<HTMLElement>('.undo-diff-btn')?.hidden).toBe(true);
-            expect(view.getStates().get(row.getAttribute('data-diff-id') ?? '')).toBe('pending');
+            expect(view.getStates().get(row.dataset.diffId ?? '')).toBe('pending');
         });
 
         it('rewrites the left document when a change is applied', () => {
-            const modified = items().find(item => item.getAttribute('data-diff-type') === 'modified');
+            const modified = items().find(item => item.dataset.diffType === 'modified');
             click('.apply-diff-btn', modified as HTMLElement);
 
-            const left = JSON.parse((document.getElementById('left-json') as HTMLTextAreaElement).value);
-            expect(left.changed).toBe('after');
+            expect(JSON.parse(el<HTMLTextAreaElement>('left-json').value).changed).toBe('after');
         });
 
         it('restores the previous value when an applied change is undone', () => {
             const modified = items().find(
-                item => item.getAttribute('data-diff-type') === 'modified'
+                item => item.dataset.diffType === 'modified'
             ) as HTMLElement;
 
             click('.apply-diff-btn', modified);
             click('.undo-diff-btn', modified);
 
-            const left = JSON.parse((document.getElementById('left-json') as HTMLTextAreaElement).value);
-            expect(left.changed).toBe('before');
+            expect(JSON.parse(el<HTMLTextAreaElement>('left-json').value).changed).toBe('before');
         });
     });
 
@@ -144,8 +186,8 @@ describe('DiffView', () => {
             const states = view.getStates();
             expect(states.size).toBe(items().length);
             for (const row of items()) {
-                expect(row.classList.contains('diff-rejected')).toBe(true);
-                expect(states.get(row.getAttribute('data-diff-id') ?? '')).toBe('rejected');
+                expect(row.dataset.state).toBe('rejected');
+                expect(states.get(row.dataset.diffId ?? '')).toBe('rejected');
             }
         });
 
@@ -156,8 +198,8 @@ describe('DiffView', () => {
             expect(row.querySelector<HTMLElement>('.undo-diff-btn')?.hidden).toBe(false);
 
             click('.undo-diff-btn', row);
-            expect(view.getStates().get(row.getAttribute('data-diff-id') ?? '')).toBe('pending');
-            expect(row.classList.contains('diff-rejected')).toBe(false);
+            expect(view.getStates().get(row.dataset.diffId ?? '')).toBe('pending');
+            expect(row.dataset.state).toBe('pending');
         });
     });
 
@@ -167,9 +209,56 @@ describe('DiffView', () => {
             click('#apply-all-diffs');
 
             expect(items()).toHaveLength(0);
-            const left = (document.getElementById('left-json') as HTMLTextAreaElement).value;
-            const right = (document.getElementById('right-json') as HTMLTextAreaElement).value;
-            expect(JSON.parse(left)).toEqual(JSON.parse(right));
+            expect(JSON.parse(el<HTMLTextAreaElement>('left-json').value)).toEqual(
+                JSON.parse(el<HTMLTextAreaElement>('right-json').value)
+            );
+        });
+    });
+
+    describe('filters', () => {
+        beforeEach(() => view.compare());
+
+        const chip = (filter: string) =>
+            document.querySelector<HTMLElement>(`[data-diff-filter="${filter}"]`) as HTMLElement;
+
+        it('shows the chip row only when there are changes', () => {
+            expect(el('diff-filters').hidden).toBe(false);
+
+            setInputs(LEFT, LEFT);
+            view.compare();
+            expect(el('diff-filters').hidden).toBe(true);
+        });
+
+        it('counts each kind of change', () => {
+            expect(chip('all').dataset.count).toBe('3');
+            expect(chip('added').dataset.count).toBe('1');
+            expect(chip('removed').dataset.count).toBe('1');
+            expect(chip('modified').dataset.count).toBe('1');
+            expect(chip('added').querySelector('.chip__count')?.textContent).toBe('1');
+        });
+
+        it('narrows the list through one attribute', () => {
+            chip('added').click();
+
+            expect(el('diff-output').dataset.filter).toBe('added');
+            expect(chip('added').classList.contains('is-active')).toBe(true);
+            expect(chip('all').classList.contains('is-active')).toBe(false);
+        });
+
+        it('returns to all changes', () => {
+            chip('removed').click();
+            chip('all').click();
+
+            expect(el('diff-output').dataset.filter).toBe('all');
+            expect(chip('all').classList.contains('is-active')).toBe(true);
+        });
+
+        it('resets the filter on a fresh comparison', () => {
+            chip('added').click();
+            view.compare();
+
+            expect(el('diff-output').dataset.filter).toBe('all');
+            expect(chip('all').classList.contains('is-active')).toBe(true);
         });
     });
 
@@ -182,7 +271,7 @@ describe('DiffView', () => {
 
             expect(view.strictMode).toBe(true);
             expect(items().length).toBeLessThan(loose);
-            expect(items().some(item => item.getAttribute('data-diff-type') === 'added')).toBe(false);
+            expect(items().some(item => item.dataset.diffType === 'added')).toBe(false);
         });
     });
 
@@ -191,9 +280,10 @@ describe('DiffView', () => {
             view.compare();
             click('#clear-left-json');
 
-            expect((document.getElementById('left-json') as HTMLTextAreaElement).value).toBe('');
+            expect(el<HTMLTextAreaElement>('left-json').value).toBe('');
             expect(items()).toHaveLength(0);
             expect(view.getStates().size).toBe(0);
+            expect(el('diff-filters').hidden).toBe(true);
         });
     });
 });

@@ -4,16 +4,20 @@
 import { on } from './dom';
 
 export interface SplitterOptions {
-    container: HTMLElement;
     handle: HTMLElement;
     before: HTMLElement;
     after: HTMLElement;
     /** Smallest either pane may become, in pixels. */
     minSize?: number;
-    /** Horizontal padding on the container, excluded from the usable width. */
-    padding?: number;
 }
 
+/**
+ * Resizes the two panes either side of a handle.
+ *
+ * Sizing is relative to that pair rather than to the containing row, so
+ * several splitters compose: each one redistributes only the width its own
+ * two neighbours already occupy, and leaves every other pane alone.
+ */
 export class Splitter {
     private readonly options: Required<SplitterOptions>;
     private readonly teardown: Array<() => void> = [];
@@ -23,8 +27,7 @@ export class Splitter {
 
     constructor(options: SplitterOptions) {
         this.options = {
-            minSize: 200,
-            padding: 32,
+            minSize: 160,
             ...options
         };
 
@@ -39,7 +42,7 @@ export class Splitter {
         );
     }
 
-    /** Splits the available width, `ratio` being the share given to the first pane. */
+    /** Splits the pair's width, `ratio` being the share given to the first pane. */
     public setRatio(ratio: number): void {
         const available = this.availableWidth();
         const beforeWidth = available * ratio;
@@ -61,9 +64,9 @@ export class Splitter {
         this.teardown.length = 0;
     }
 
+    /** The width the two neighbours currently share between them. */
     private availableWidth(): number {
-        const { container, handle, padding } = this.options;
-        return container.offsetWidth - handle.offsetWidth - padding;
+        return this.options.before.offsetWidth + this.options.after.offsetWidth;
     }
 
     private applyWidths(beforeWidth: number, afterWidth: number): void {

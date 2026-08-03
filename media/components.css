@@ -350,7 +350,7 @@ body[data-mode='diff'] [data-mode-only='format'] {
 
 /* --------------------------------------------------------------- Splitter */
 
-#splitter {
+.splitter {
     flex: 0 0 var(--jb-w-sash);
     position: relative;
     cursor: col-resize;
@@ -360,12 +360,12 @@ body[data-mode='diff'] [data-mode-only='format'] {
     z-index: 5;
 }
 
-#splitter.hidden {
+.splitter.hidden {
     display: none;
 }
 
 /* A 1px visual line inside a 6px pointer target, like VS Code's sashes. */
-#splitter::after {
+.splitter::after {
     content: '';
     position: absolute;
     top: 0;
@@ -377,9 +377,65 @@ body[data-mode='diff'] [data-mode-only='format'] {
     transition: background-color var(--jb-dur) var(--jb-ease);
 }
 
-#splitter:hover::after,
-#splitter.dragging::after {
+.splitter:hover::after,
+.splitter.dragging::after {
     background-color: var(--jb-sash);
+}
+
+/* ------------------------------------------------------------------ Chips */
+
+.chips {
+    display: flex;
+    align-items: center;
+    /* The pane is resizable, so chips wrap rather than getting clipped. */
+    flex-wrap: wrap;
+    gap: var(--jb-sp-2);
+    flex-shrink: 0;
+    padding: var(--jb-sp-3) var(--jb-sp-5);
+    border-bottom: 1px solid var(--jb-border);
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    padding: var(--jb-sp-1) var(--jb-sp-3);
+    border: 1px solid var(--jb-border);
+    border-radius: 10px;
+    background-color: transparent;
+    color: var(--jb-fg-muted);
+    font-family: inherit;
+    font-size: var(--jb-fs-sm);
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background-color var(--jb-dur) var(--jb-ease),
+        color var(--jb-dur) var(--jb-ease);
+}
+
+.chip:hover {
+    background-color: var(--jb-bg-hover);
+    color: var(--jb-fg);
+}
+
+.chip.is-active {
+    background-color: var(--jb-neutral);
+    border-color: var(--jb-fg-subtle);
+    color: var(--jb-fg);
+}
+
+.chip__count {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
+}
+
+.chip--added.is-active { color: var(--jb-added); }
+.chip--removed.is-active { color: var(--jb-removed); }
+.chip--modified.is-active { color: var(--jb-modified); }
+
+/* A chip with nothing to show is noise. */
+.chip[data-count='0'] {
+    opacity: 0.4;
+    pointer-events: none;
 }
 
 body.dragging,

@@ -128,7 +128,7 @@ export class WebviewContentGenerator {
                         <textarea id="input" spellcheck="false" placeholder="Paste or type JSON here"></textarea>
                     </div>
                 </section>
-                <div id="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
+                <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
                 <section id="output-panel" class="pane" data-empty="true">
                     ${this.paneHeader('Formatted', [
                         this.iconButton({
@@ -204,6 +204,7 @@ export class WebviewContentGenerator {
                         <textarea id="left-json" spellcheck="false" placeholder="Paste the original JSON here"></textarea>
                     </div>
                 </section>
+                <div id="diff-splitter-left" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
                 <section id="diff-result-panel" class="pane">
                     ${this.paneHeader('Changes', [
                         this.iconButton({ id: 'apply-all-diffs', icon: 'check-all', label: 'Apply all changes', title: 'Apply every change to the original', attrs: 'hidden' }),
@@ -211,9 +212,16 @@ export class WebviewContentGenerator {
                         this.maximizeButton('diff-result-panel')
                     ], 'diff-meta')}
                     <div class="pane__body">
+                        <div id="diff-filters" class="chips" role="group" aria-label="Filter changes" hidden>
+                            ${this.filterChip('all', 'All')}
+                            ${this.filterChip('added', 'Added', 'added')}
+                            ${this.filterChip('removed', 'Removed', 'removed')}
+                            ${this.filterChip('modified', 'Modified', 'modified')}
+                        </div>
                         <div id="diff-output" class="pane__content"></div>
                     </div>
                 </section>
+                <div id="diff-splitter-right" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
                 <section id="right-json-panel" class="pane">
                     ${this.paneHeader('Modified', [
                         this.iconButton({ id: 'clear-right-json', icon: 'clear-all', label: 'Clear modified', title: 'Clear modified' }),
@@ -252,6 +260,16 @@ export class WebviewContentGenerator {
                         <span class="pane__spacer"></span>
                         <div class="pane__actions">${actions.join('')}</div>
                     </header>`;
+    }
+
+    /** A chip that narrows the change list to one kind of change. */
+    private filterChip(filter: string, label: string, tone = ''): string {
+        const classes = ['chip', tone ? `chip--${tone}` : '', filter === 'all' ? 'is-active' : '']
+            .filter(Boolean)
+            .join(' ');
+        return `<button type="button" class="${classes}" data-diff-filter="${filter}" aria-pressed="${filter === 'all'}">
+                                <span class="chip__label">${label}</span><span class="chip__count"></span>
+                            </button>`;
     }
 
     private maximizeButton(panelId: string): string {
