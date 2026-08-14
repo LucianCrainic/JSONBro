@@ -8,19 +8,21 @@ import { byId, on, qsa } from './ui/dom';
 import { Messenger } from './ui/messaging';
 import { Shortcuts } from './ui/shortcuts';
 import { StatusBar } from './ui/status-bar';
+import { setTip, TooltipHost } from './ui/tooltip';
 import { DiffView } from './views/diff-view';
 import { FormatView } from './views/format-view';
 import type { Mode, Settings } from '../shared/messages';
 
 const ACTION_LABELS: Record<Mode, { text: string; title: string }> = {
-    format: { text: 'Format', title: 'Format JSON (Ctrl/Cmd+Enter)' },
-    diff: { text: 'Compare', title: 'Compare JSON (Ctrl/Cmd+Enter)' }
+    format: { text: 'Format', title: 'Format JSON' },
+    diff: { text: 'Compare', title: 'Compare JSON' }
 };
 
 export class Shell {
     private readonly messenger = new Messenger();
     private readonly shortcuts = new Shortcuts();
     private readonly statusBar = new StatusBar();
+    private readonly tooltips = new TooltipHost();
     private readonly formatView: FormatView;
     private readonly diffView: DiffView;
     private readonly state = new PanelStateStore();
@@ -46,6 +48,7 @@ export class Shell {
 
     public start(): void {
         this.labelModifierKeys();
+        this.tooltips.start();
 
         // The host renders <body data-mode="..."> so the first paint is already
         // correct; adopt it rather than assuming a default.
@@ -173,7 +176,9 @@ export class Shell {
         if (actionText) {
             actionText.textContent = ACTION_LABELS[mode].text;
         }
-        actionButton?.setAttribute('title', ACTION_LABELS[mode].title);
+        if (actionButton) {
+            setTip(actionButton, ACTION_LABELS[mode].title, 'mod+enter');
+        }
 
         if (mode === 'diff') {
             this.formatView.find.close();

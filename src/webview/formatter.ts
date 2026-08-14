@@ -56,7 +56,9 @@ export class JSONFormatter {
         const fold = options.foldable
             ? `<span class="fold-arrow${options.collapsed ? ' folded' : ''}" data-fold-line="${
                   options.lineNumber - 1
-              }" role="button" aria-label="${options.collapsed ? 'Expand' : 'Collapse'}"></span>`
+              }" role="button" aria-label="${
+                  options.collapsed ? 'Expand' : 'Collapse'
+              }" data-tip="${options.collapsed ? 'Expand' : 'Collapse'} this block"></span>`
             : '<span class="fold-spacer" aria-hidden="true"></span>';
 
         const content = tokenize(text, options.matches ?? []);

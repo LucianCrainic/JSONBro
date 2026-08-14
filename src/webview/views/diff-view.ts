@@ -445,7 +445,7 @@ export class DiffView {
                     element.innerHTML = full;
                     element.classList.remove('expandable-value');
                     element.removeAttribute('data-full');
-                    element.removeAttribute('title');
+                    element.removeAttribute('data-tip');
                 }
             }),
             delegate(output, 'click', '.apply-diff-btn', button => {
