@@ -133,6 +133,17 @@ export class WebviewProvider {
     }
 
     /**
+     * Opens the format panel already showing the visual view.
+     *
+     * The picture is a way of looking at a formatted document rather than a
+     * panel of its own, so this is the format panel with a starting mode.
+     */
+    public showVisualPanel(): void {
+        this.showPanel('format');
+        this.sendToPanel('format', { command: 'setMode', mode: 'visual' });
+    }
+
+    /**
      * Shows or focuses the format panel (default for activity bar)
      */
     public showOrFocusFormatPanel(): void {

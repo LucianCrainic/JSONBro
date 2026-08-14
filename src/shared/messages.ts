@@ -36,7 +36,9 @@ export type HostToWebview =
     /** Put a document into one side of the comparison. */
     | { command: 'loadDiffSide'; side: DiffSide; json: string; label: string }
     /** JSON syntax colours read from the user's active colour theme. */
-    | { command: 'themeColors'; colors: SyntaxColors };
+    | { command: 'themeColors'; colors: SyntaxColors }
+    /** Opens the panel on a particular view. */
+    | { command: 'setMode'; mode: Mode };
 
 /**
  * The colour of each part of a JSON document, as the active theme paints it.

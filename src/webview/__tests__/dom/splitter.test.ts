@@ -65,7 +65,11 @@ describe('Splitter', () => {
         splitters.length = 0;
     });
 
-    function makeSplitter(handle: HTMLElement, before: HTMLElement, after: HTMLElement): Splitter {
+    function makeSplitter(
+        handle: HTMLElement,
+        before: HTMLElement,
+        after: HTMLElement | HTMLElement[]
+    ): Splitter {
         const splitter = new Splitter({ handle, before, after });
         splitters.push(splitter);
         return splitter;
@@ -181,6 +185,54 @@ describe('Splitter', () => {
 
             expect(a.style.flexBasis).toBe('');
             expect(a.style.flexGrow).toBe('');
+        });
+    });
+
+    /*
+     * The format row shows either the formatted text or the visual view in the
+     * same slot. Sizing the hidden one made the sash work backwards: the width
+     * being redistributed was not the width the reader could see, so dragging
+     * right shrank the pane on the left until it stuck at its minimum.
+     */
+    describe('a slot that swaps panes by mode', () => {
+        beforeEach(() => {
+            // `b` is the hidden alternative; `c` is the one on screen.
+            setWidth(b, 0);
+            setWidth(a, 400);
+            setWidth(c, 500);
+        });
+
+        it('resizes whichever alternative is on screen', () => {
+            makeSplitter(handleAB, a, [b, c]);
+
+            drag(handleAB, 400, 500);
+
+            expect(shareOf(a)).toBeCloseTo((500 / ROW) * 100, 2);
+        });
+
+        it('grows the left pane when dragged right, not shrinks it', () => {
+            makeSplitter(handleAB, a, [b, c]);
+
+            drag(handleAB, 400, 500);
+
+            expect(shareOf(a)).toBeGreaterThan((400 / ROW) * 100);
+        });
+
+        it('leaves the hidden alternative with no width of its own', () => {
+            makeSplitter(handleAB, a, [b, c]);
+
+            drag(handleAB, 400, 500);
+
+            expect(b.style.cssText).toBe('');
+        });
+
+        it('clears every alternative on reset', () => {
+            const splitter = makeSplitter(handleAB, a, [b, c]);
+            drag(handleAB, 400, 500);
+
+            splitter.reset();
+
+            expect(c.style.flexBasis).toBe('');
         });
     });
 });

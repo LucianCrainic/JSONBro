@@ -14,6 +14,7 @@ import { closerLines } from '../engine/line-index';
 import { nodeAt, subtreeText, type NodeView } from '../engine/node-view';
 import { pathForLine } from '../engine/path-index';
 import { type PrettyDocument } from '../engine/pretty-sink';
+import { JSONFormatter } from '../formatter';
 import { DocumentPane, type RowContext } from '../ui/document-pane';
 import { byId, delegate, escapeHtml, on, qsa } from '../ui/dom';
 import { GraphCanvas } from '../ui/graph-canvas';
@@ -34,6 +35,8 @@ export class VisualView {
     private readonly teardown: Array<() => void> = [];
 
     private pane: DocumentPane | null = null;
+    /** The formatted source beside the picture, read-only in this mode. */
+    private source: DocumentPane | null = null;
     private graph: GraphCanvas | null = null;
     private shape: VisualShape = 'tree';
     private status: StatusModel = {};
@@ -75,6 +78,7 @@ export class VisualView {
 
         if (!doc) {
             this.pane?.setDocument(null);
+            this.source?.setDocument(null);
             this.graph?.setDocument(null, null);
             this.nodeCount = 0;
             this.setEmpty(true);
@@ -86,6 +90,10 @@ export class VisualView {
         this.setEmpty(false);
         this.graphFramed = false;
         this.ensurePane().setDocument(doc);
+        // The pane beside the picture shows the formatted document rather than
+        // the box it was pasted into: in this mode it is something to read, and
+        // editing it here would leave the picture describing older text.
+        this.ensureSource().setDocument(doc);
         // Both shapes read the one fold state, so the graph is handed the same
         // object rather than a copy that could drift out of step with it.
         this.ensureGraph().setDocument(doc, this.pane?.foldState ?? null);
@@ -170,6 +178,16 @@ export class VisualView {
             });
         }
         return this.pane;
+    }
+
+    private ensureSource(): DocumentPane {
+        if (!this.source) {
+            this.source = new DocumentPane({
+                viewport: byId('input-view') as HTMLElement,
+                showLineNumbers: () => JSONFormatter.getShowLineNumbers()
+            });
+        }
+        return this.source;
     }
 
     private ensureGraph(): GraphCanvas {
@@ -394,6 +412,9 @@ export class VisualView {
         }
         this.pane?.selectLine(line);
         this.graph?.setSelected(line);
+        // The formatted source follows the picture, so picking a node in either
+        // shape shows the text it came from.
+        this.source?.selectLine(line);
         this.setBreadcrumb(pathForLine(doc, line));
     }
 
@@ -547,6 +568,8 @@ export class VisualView {
         this.teardown.length = 0;
         this.pane?.dispose();
         this.pane = null;
+        this.source?.dispose();
+        this.source = null;
         this.graph?.dispose();
         this.graph = null;
     }

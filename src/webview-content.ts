@@ -37,7 +37,9 @@ export class WebviewContentGenerator {
             vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'worker.js')
         );
 
-        const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
+        // Both panels are the same product, and VS Code shows this as the tab
+        // name -- a mode suffix there just makes the tab harder to scan.
+        const title = 'JSON Bro';
 
         // No 'unsafe-inline': the markup below carries no style attributes, and
         // mode visibility is driven by data-mode on <body> instead.
@@ -158,11 +160,14 @@ export class WebviewContentGenerator {
 
             <div id="format-container" class="mode-container">
                 <section id="input-panel" class="pane">
-                    ${this.paneHeader('Input', [
-                        this.maximizeButton('input-panel')
-                    ])}
+                    ${this.paneHeader(
+                        'Input',
+                        [this.maximizeButton('input-panel')],
+                        'input-meta'
+                    )}
                     <div class="pane__body">
-                        <textarea id="input" spellcheck="false" aria-label="JSON to format" placeholder="Paste or type JSON here"></textarea>
+                        <textarea id="input" spellcheck="false" aria-label="JSON to format" placeholder="Paste or type JSON here" data-mode-only="format"></textarea>
+                        <div id="input-view" class="pane__content doc-view" data-mode-only="visual"></div>
                     </div>
                 </section>
                 <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
@@ -318,6 +323,12 @@ export class WebviewContentGenerator {
             <div id="diff-container" class="mode-container">
                 ${this.diffInputPane('left', 'Original', [
                     this.iconButton({ id: 'copy-left-json', icon: 'copy', label: 'Copy original', title: 'Copy original to clipboard' }),
+                    this.iconButton({
+                        id: 'save-left-json',
+                        icon: 'save',
+                        label: 'Save original',
+                        title: 'Save the original, with every applied change, to a file'
+                    }),
                     this.iconButton({ id: 'clear-left-json', icon: 'clear-all', label: 'Clear original', title: 'Clear original' })
                 ])}
                 <div id="diff-splitter-left" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
