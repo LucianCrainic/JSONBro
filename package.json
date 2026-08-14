@@ -29,6 +29,11 @@
         "title": "JSONBro: Diff JSON"
       },
       {
+        "command": "jsonbro.openFile",
+        "title": "JSONBro: Open JSON File",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "jsonbro.openFromActivityBar",
         "title": "Open JSONBro",
         "icon": "$(json)"
@@ -52,6 +57,19 @@
         "command": "jsonbro.renameDiffHistory",
         "title": "Rename Entry",
         "icon": "$(edit)"
+      },
+      {
+        "command": "jsonbro.loadFormatHistory",
+        "title": "JSONBro: Load Format History Entry"
+      },
+      {
+        "command": "jsonbro.loadDiffHistory",
+        "title": "JSONBro: Load Diff History Entry"
+      },
+      {
+        "command": "jsonbro.clearHistory",
+        "title": "Clear History",
+        "icon": "$(clear-all)"
       }
     ],
     "viewsContainers": {
@@ -78,6 +96,16 @@
           "command": "jsonbro.openFromActivityBar",
           "when": "view == jsonbro.explorer",
           "group": "navigation"
+        },
+        {
+          "command": "jsonbro.openFile",
+          "when": "view == jsonbro.explorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "jsonbro.clearHistory",
+          "when": "view == jsonbro.explorer",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -101,8 +129,110 @@
           "when": "view == jsonbro.explorer && viewItem == diffHistoryEntry",
           "group": "inline@2"
         }
+      ],
+      "commandPalette": [
+        {
+          "command": "jsonbro.loadFormatHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.loadDiffHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.removeFormatHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.removeDiffHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.renameFormatHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.renameDiffHistory",
+          "when": "false"
+        }
       ]
-    }
+    },
+    "configuration": {
+      "title": "JSONBro",
+      "properties": {
+        "jsonbro.showLineNumbers": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show line numbers beside formatted JSON."
+        },
+        "jsonbro.indentSize": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Spaces per level of indentation in formatted output."
+        },
+        "jsonbro.strictDiff": {
+          "type": "boolean",
+          "default": false,
+          "description": "Start the diff view in strict mode, where keys present only on the right are ignored."
+        },
+        "jsonbro.defaultPaneRatio": {
+          "type": "number",
+          "default": 0.5,
+          "minimum": 0.2,
+          "maximum": 0.8,
+          "description": "Share of the width given to the input pane when the panel opens."
+        },
+        "jsonbro.autoFormatOnPaste": {
+          "type": "boolean",
+          "default": false,
+          "description": "Format automatically when JSON is pasted into the input."
+        },
+        "jsonbro.search.defaultScope": {
+          "type": "string",
+          "default": "all",
+          "enum": [
+            "all",
+            "keys",
+            "values"
+          ],
+          "enumDescriptions": [
+            "Search property names and values.",
+            "Search property names only.",
+            "Search values only."
+          ],
+          "description": "Which part of the document find starts by searching."
+        },
+        "jsonbro.maxInlineSize": {
+          "type": "number",
+          "default": 2097152,
+          "description": "Characters of pasted input treated as editable. Larger documents are still formatted, but the panel stops trying to keep the input box responsive."
+        },
+        "jsonbro.diff.maxDocumentSize": {
+          "type": "number",
+          "default": 26214400,
+          "description": "Largest document, in characters, that the diff view will compare. Comparing needs both sides in memory as values, so past this it reports the limit instead of attempting it."
+        },
+        "jsonbro.diff.arrayAlignBudget": {
+          "type": "number",
+          "default": 1000000,
+          "description": "Ceiling on the array alignment pass, as old length times new length. Above it arrays are compared by position, which is faster but reports an insertion as a change to every later element."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "jsonbro.formatJson",
+        "key": "ctrl+alt+j",
+        "mac": "cmd+alt+j"
+      },
+      {
+        "command": "jsonbro.diffJson",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run clean && npm run compile",

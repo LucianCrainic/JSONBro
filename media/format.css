@@ -19,31 +19,104 @@
     color: var(--jb-syntax-punct);
 }
 
+/* ----------------------------------------------------------- Virtual list */
+
+/*
+ * Only the rows on screen exist. The spacer is as tall as the whole document
+ * so the scrollbar is honest, and the window holding the rendered rows is
+ * moved into place with a transform.
+ */
+
+.vlist {
+    position: relative;
+    overflow: auto;
+}
+
+.vlist__spacer {
+    position: relative;
+    width: 100%;
+}
+
+.vlist__window {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    will-change: transform;
+}
+
+/* -------------------------------------------------------------------- Rows */
+
+/*
+ * The gutter number lives inside its row rather than in a parallel column.
+ * Two columns had to be scrolled and folded in step; one cannot fall out of
+ * alignment with itself.
+ */
+
 .json-line {
-    display: block;
+    display: flex;
+    align-items: flex-start;
     margin: 0;
     padding: 0;
     line-height: var(--jb-lh-code);
+    white-space: pre;
+}
+
+.json-line__text {
+    flex: 1;
+    min-width: 0;
+    white-space: pre;
+}
+
+.line-number {
+    flex-shrink: 0;
+    width: 5ch;
+    padding-right: var(--jb-sp-4);
+    text-align: right;
+    color: var(--jb-gutter-fg);
+    opacity: 0.7;
+    user-select: none;
+    -webkit-user-select: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.json-line:hover .line-number {
+    opacity: 1;
+    color: var(--jb-gutter-fg-active);
+}
+
+#output.hide-line-numbers .line-number {
+    display: none;
 }
 
 /* ---------------------------------------------------------------- Folding */
 
-.fold-arrow {
-    display: inline-block;
-    width: 1em;
-    margin-right: 0.3em;
-    color: var(--jb-fg-muted);
-    font-size: 0.8em;
-    cursor: pointer;
-    opacity: 0.6;
+/*
+ * The control and its placeholder are the same width, so text does not step
+ * sideways as foldable and plain rows scroll past each other.
+ */
+
+.fold-arrow,
+.fold-spacer {
+    flex-shrink: 0;
+    width: 1.1em;
     user-select: none;
     -webkit-user-select: none;
-    transition: opacity var(--jb-dur) var(--jb-ease),
-        transform var(--jb-dur) var(--jb-ease);
+}
+
+.fold-arrow {
+    color: var(--jb-fg-muted);
+    cursor: pointer;
+    opacity: 0.6;
+    text-align: center;
+    transition: opacity var(--jb-dur) var(--jb-ease);
 }
 
 .fold-arrow::before {
-    content: attr(data-arrow);
+    content: '\25be'; /* down-pointing triangle */
+    display: inline-block;
+    font-size: 0.85em;
+    transition: transform var(--jb-dur) var(--jb-ease);
 }
 
 .fold-arrow:hover {
@@ -51,74 +124,27 @@
     color: var(--jb-fg);
 }
 
-.fold-arrow.folded {
+.fold-arrow.folded::before {
     transform: rotate(-90deg);
 }
 
-.foldable-content {
-    display: inline;
-}
-
-.foldable-content.hidden {
-    display: none;
-}
-
 .fold-ellipsis {
-    margin-left: 0.3em;
+    margin-left: 0.4em;
+    padding: 0 0.3em;
+    border-radius: var(--jb-radius-sm);
+    background-color: var(--jb-neutral);
     color: var(--jb-fg-subtle);
-}
-
-/* ----------------------------------------------------------- Line numbers */
-
-.json-container {
-    display: flex;
-    width: 100%;
-}
-
-.line-numbers {
-    flex-shrink: 0;
-    text-align: right;
-    color: var(--jb-gutter-fg);
-    user-select: none;
-    border-right: 1px solid var(--jb-border);
-}
-
-.line-numbers .line-number {
-    display: block;
-    padding: 0 var(--jb-sp-4) 0 0;
-    line-height: var(--jb-lh-code);
-    opacity: 0.7;
-}
-
-.line-numbers .line-number:hover {
-    opacity: 1;
-    color: var(--jb-gutter-fg-active);
-}
-
-.json-content {
-    flex: 1;
-    min-width: 0;
-    padding-left: var(--jb-sp-4);
-    overflow-x: auto;
-}
-
-#output.hide-line-numbers .line-numbers {
-    display: none;
-}
-
-#output.hide-line-numbers .json-content {
-    padding-left: 0;
 }
 
 /* ---------------------------------------------------- Search highlighting */
 
 .search-highlight {
     background-color: var(--jb-find-other);
-    border: 1px solid var(--jb-find-other-border);
     border-radius: 2px;
+    box-shadow: 0 0 0 1px var(--jb-find-other-border);
 }
 
 .search-highlight.current {
     background-color: var(--jb-find-match);
-    border-color: var(--jb-find-match-border);
+    box-shadow: 0 0 0 1px var(--jb-find-match-border);
 }

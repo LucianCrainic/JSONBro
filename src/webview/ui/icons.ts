@@ -51,7 +51,9 @@ export const Icons = {
 
     // Folding
     chevronDown: 'chevron-down',
-    chevronRight: 'chevron-right'
+    chevronRight: 'chevron-right',
+    /** Shown while the document worker is reading or formatting. */
+    sync: 'sync'
 } as const;
 
 export type IconName = typeof Icons[keyof typeof Icons];

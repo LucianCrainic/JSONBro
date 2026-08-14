@@ -31,17 +31,25 @@ export class WebviewContentGenerator {
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'main.js')
         );
+        const workerUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'worker.js')
+        );
 
         const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
         // No 'unsafe-inline': the markup below carries no style attributes, and
         // mode visibility is driven by data-mode on <body> instead.
+        // worker-src and connect-src let the document worker load and read a
+        // file the host has made available. Neither allows blob:, which is why
+        // the worker is a real bundle rather than an inlined script.
         const csp = [
             `default-src 'none'`,
             `style-src ${webview.cspSource}`,
             `font-src ${webview.cspSource}`,
             `img-src ${webview.cspSource} data:`,
-            `script-src 'nonce-${nonce}'`
+            `script-src 'nonce-${nonce}' ${webview.cspSource}`,
+            `worker-src ${webview.cspSource}`,
+            `connect-src ${webview.cspSource}`
         ].join('; ');
 
         return `<!DOCTYPE html>
@@ -53,7 +61,7 @@ export class WebviewContentGenerator {
     <title>${title}</title>
     ${this.getStyleLinks(webview)}
 </head>
-<body data-mode="${mode}">
+<body data-mode="${mode}" data-worker-src="${workerUri}">
     ${this.getBodyContent(mode)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
@@ -142,11 +150,14 @@ export class WebviewContentGenerator {
                         this.maximizeButton('output-panel')
                     ], 'output-meta')}
                     <div class="pane__body">
-                        <div id="warning-notification" class="notice" role="status" hidden>
-                            <span class="codicon codicon-warning" aria-hidden="true"></span>
-                            <span class="notice__message"></span>
-                            ${this.iconButton({ id: 'dismiss-warning', icon: 'close', label: 'Dismiss', title: 'Dismiss' })}
-                        </div>
+                        <section id="problems" class="problems" role="status" hidden>
+                            <button type="button" id="problems-toggle" class="problems__summary" aria-expanded="false" aria-controls="problems-list">
+                                <span class="codicon codicon-chevron-right problems__chevron" aria-hidden="true"></span>
+                                <span class="codicon problems__icon" aria-hidden="true"></span>
+                                <span id="problems-title" class="problems__title"></span>
+                            </button>
+                            <ol id="problems-list" class="problems__list" hidden></ol>
+                        </section>
                         <div id="find-widget" class="find-widget" role="search" hidden>
                             <div class="find-widget__row">
                                 <div class="find-widget__field">
