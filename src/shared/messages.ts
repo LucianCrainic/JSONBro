@@ -56,13 +56,13 @@ export interface SyntaxColors {
 /**
  * The kinds of panel the host can open.
  *
- * Narrower than `Mode`: the tree is a way of looking at a document rather than
- * a panel of its own, so it is reached from inside a format panel.
+ * Narrower than `Mode`: the visual view is a way of looking at a document
+ * rather than a panel of its own, so it is reached from inside a format panel.
  */
 export type PanelKind = 'format' | 'diff';
 
 /** The three things a panel can be showing. */
-export type Mode = PanelKind | 'tree';
+export type Mode = PanelKind | 'visual';
 
 /** Resolution state of a single diff entry. */
 export type DiffState = 'pending' | 'applied' | 'rejected';

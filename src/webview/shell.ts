@@ -11,7 +11,7 @@ import { StatusBar, type StatusModel } from './ui/status-bar';
 import { setTip, TooltipHost } from './ui/tooltip';
 import { DiffView } from './views/diff-view';
 import { FormatView } from './views/format-view';
-import { TreeView } from './views/tree-view';
+import { VisualView } from './views/visual-view';
 import type { Mode, Settings, SyntaxColors } from '../shared/messages';
 
 /** Every part of a JSON document the theme can colour. */
@@ -27,13 +27,13 @@ const SYNTAX_ROLES: Array<keyof SyntaxColors> = [
 const ACTION_LABELS: Record<Mode, { text: string; title: string }> = {
     format: { text: 'Format', title: 'Format JSON' },
     diff: { text: 'Compare', title: 'Compare JSON' },
-    tree: { text: 'Build', title: 'Rebuild the tree from the input' }
+    visual: { text: 'Build', title: 'Rebuild the picture from the input' }
 };
 
 /** The mode each tab selects, in the order they appear. */
 const MODE_TABS: Array<[id: string, mode: Mode]> = [
     ['format-mode', 'format'],
-    ['tree-mode', 'tree'],
+    ['visual-mode', 'visual'],
     ['diff-mode', 'diff']
 ];
 
@@ -50,14 +50,14 @@ export class Shell {
     private readonly tooltips = new TooltipHost();
     private readonly formatView: FormatView;
     private readonly diffView: DiffView;
-    private readonly treeView: TreeView;
+    private readonly visualView: VisualView;
     private readonly state = new PanelStateStore();
     private mode: Mode = 'format';
 
     constructor() {
         this.formatView = new FormatView(this.messenger);
         this.diffView = new DiffView(this.messenger);
-        this.treeView = new TreeView(this.messenger);
+        this.visualView = new VisualView(this.messenger);
 
         // Only the active view's status is on screen; the other keeps its model
         // so switching back restores it without recomputing.
@@ -71,15 +71,15 @@ export class Shell {
                 this.statusBar.render(status);
             }
         };
-        this.treeView.onStatusChange = status => {
-            if (this.mode === 'tree') {
+        this.visualView.onStatusChange = status => {
+            if (this.mode === 'visual') {
                 this.statusBar.render(status);
             }
         };
         // One document, two renderers: the tree is handed what the format view
         // produced rather than parsing the same input again.
         this.formatView.onDocumentChange = (doc, diagnostics) =>
-            this.treeView.setDocument(doc, diagnostics);
+            this.visualView.setDocument(doc, diagnostics);
     }
 
     public start(): void {
@@ -162,7 +162,7 @@ export class Shell {
     private applySettings(settings: Settings): void {
         this.formatView.applySettings(settings);
         this.diffView.applySettings(settings);
-        this.treeView.applySettings(settings);
+        this.visualView.applySettings(settings);
     }
 
     /**
@@ -242,12 +242,15 @@ export class Shell {
             this.formatView.find.close();
         }
 
-        // The tree shows the same document the format view does, so switching
-        // to it formats first when nothing has been formatted yet -- rather
-        // than showing an empty pane until the user presses a button they have
-        // not seen.
-        if (mode === 'tree' && this.treeView.document === null) {
-            this.formatView.format();
+        // The visual view shows the same document the format view does, so
+        // switching to it formats first when nothing has been formatted yet --
+        // rather than showing an empty pane until the user presses a button
+        // they have not seen.
+        if (mode === 'visual') {
+            if (this.visualView.document === null) {
+                this.formatView.format();
+            }
+            this.visualView.activate();
         }
 
         this.statusBar.render(this.activeView().getStatus());
@@ -258,13 +261,13 @@ export class Shell {
         if (this.mode === 'diff') {
             return this.diffView;
         }
-        return this.mode === 'tree' ? this.treeView : this.formatView;
+        return this.mode === 'visual' ? this.visualView : this.formatView;
     }
 
     private runAction(): void {
         if (this.mode === 'format') {
             this.formatView.format();
-        } else if (this.mode === 'tree') {
+        } else if (this.mode === 'visual') {
             // Same action as Format: one parse feeds both renderers.
             this.formatView.format();
         } else {
@@ -285,8 +288,8 @@ export class Shell {
     private copy(): void {
         if (this.mode === 'format') {
             this.formatView.copy();
-        } else if (this.mode === 'tree') {
-            this.treeView.copySubtree();
+        } else if (this.mode === 'visual') {
+            this.visualView.copySubtree();
         } else {
             this.diffView.copyResults();
         }
@@ -379,45 +382,45 @@ export class Shell {
         });
 
         // Walking the tree. No modifier, so they defer to the input box.
-        const inTree = () => this.mode === 'tree' && !isTyping();
+        const inTree = () => this.mode === 'visual' && !isTyping();
 
         this.shortcuts.register({
             key: 'arrowdown',
             when: inTree,
             description: 'Next node',
-            run: () => this.treeView.step(1)
+            run: () => this.visualView.step(1)
         });
         this.shortcuts.register({
             key: 'arrowup',
             when: inTree,
             description: 'Previous node',
-            run: () => this.treeView.step(-1)
+            run: () => this.visualView.step(-1)
         });
         this.shortcuts.register({
             key: 'arrowright',
             when: inTree,
             description: 'Expand, or move into the node',
-            run: () => this.treeView.stepAcross(1)
+            run: () => this.visualView.stepAcross(1)
         });
         this.shortcuts.register({
             key: 'arrowleft',
             when: inTree,
             description: 'Collapse, or move out to the parent',
-            run: () => this.treeView.stepAcross(-1)
+            run: () => this.visualView.stepAcross(-1)
         });
         this.shortcuts.register({
             key: 'enter',
             when: inTree,
             description: 'Open or close the selected node',
-            run: () => this.treeView.toggleSelected()
+            run: () => this.visualView.toggleSelected()
         });
         this.shortcuts.register({
             key: 'c',
             mod: true,
             shift: true,
-            when: () => this.mode === 'tree',
+            when: () => this.mode === 'visual',
             description: 'Copy the path of the selected node',
-            run: () => this.treeView.copyPath()
+            run: () => this.visualView.copyPath()
         });
 
         this.shortcuts.start();

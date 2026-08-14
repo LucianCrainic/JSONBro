@@ -55,25 +55,26 @@ describe('Shell', () => {
     });
 
     /*
-     * The tree is a third way of looking at the same document, so it shares
-     * the input box with Format rather than living in a container of its own.
+     * The visual view is a third way of looking at the same document, so it
+     * shares the input box with Format rather than living in a container of
+     * its own.
      */
-    describe('tree mode', () => {
+    describe('visual mode', () => {
         it('shows the tree beside the input, in place of the formatted text', () => {
             start('format');
             type('input', '{"a":1,"b":[1,2]}');
             el('action-btn').click();
-            el('tree-mode').click();
+            el('visual-mode').click();
 
-            expect(document.body.dataset.mode).toBe('tree');
+            expect(document.body.dataset.mode).toBe('visual');
             expect(document.querySelectorAll('.tree-row').length).toBeGreaterThan(1);
-            expect(el('tree-mode').classList.contains('active')).toBe(true);
+            expect(el('visual-mode').classList.contains('active')).toBe(true);
         });
 
         it('builds from the input when nothing has been formatted yet', () => {
             start('format');
             type('input', '{"a":1}');
-            el('tree-mode').click();
+            el('visual-mode').click();
 
             expect(document.querySelectorAll('.tree-row').length).toBeGreaterThan(0);
         });
@@ -83,22 +84,22 @@ describe('Shell', () => {
             start('format');
             type('input', '{"a":1}');
             el('action-btn').click();
-            el('tree-mode').click();
+            el('visual-mode').click();
             const before = document.querySelectorAll('.tree-row').length;
 
             el('format-mode').click();
             type('input', '{"a":1,"b":2,"c":3}');
             el('action-btn').click();
-            el('tree-mode').click();
+            el('visual-mode').click();
 
             expect(document.querySelectorAll('.tree-row').length).toBeGreaterThan(before);
         });
 
-        it('empties the tree when the input is cleared', () => {
+        it('empties the picture when the input is cleared', () => {
             start('format');
             type('input', '{"a":1}');
             el('action-btn').click();
-            el('tree-mode').click();
+            el('visual-mode').click();
             el('clear').click();
 
             expect(document.querySelectorAll('.tree-row')).toHaveLength(0);

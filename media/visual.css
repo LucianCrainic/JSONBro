@@ -1,4 +1,10 @@
-/* The tree view: nodes, guide rails and the breadcrumb above them. */
+/*
+ * The visual view: the document drawn rather than written.
+ *
+ * Two shapes of the same thing -- an indented tree, or boxes and links. Which
+ * one is showing is a single attribute on the panel, so nothing in script has
+ * to touch element visibility.
+ */
 
 #tree-output {
     padding: var(--jb-sp-2) 0;
@@ -6,13 +12,27 @@
     outline: none;
 }
 
-#tree-panel[data-empty] #tree-output,
-#tree-panel[data-empty] #tree-breadcrumb {
+#visual-panel[data-shape='graph'] #tree-output,
+#visual-panel[data-shape='tree'] #graph-output,
+#visual-panel[data-shape='tree'] [data-shape-only='graph'] {
     display: none;
 }
 
-#tree-panel:not([data-empty]) .empty-state {
+#visual-panel[data-empty] #tree-output,
+#visual-panel[data-empty] #graph-output,
+#visual-panel[data-empty] #visual-breadcrumb,
+#visual-panel[data-empty] .pane__actions .icon-btn {
     display: none;
+}
+
+#visual-panel:not([data-empty]) .empty-state {
+    display: none;
+}
+
+/* The shape switch reads as one control, so its two halves sit together. */
+.shape-btn.is-active {
+    background-color: var(--jb-neutral);
+    color: var(--jb-fg);
 }
 
 /* ------------------------------------------------------------------- Row */
@@ -198,4 +218,110 @@
 
 .breadcrumb__sep {
     color: var(--jb-fg-subtle);
+}
+
+/* ----------------------------------------------------------------- Graph */
+
+.graph-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    cursor: grab;
+    outline: none;
+}
+
+.graph-viewport.is-panning {
+    cursor: grabbing;
+}
+
+.graph {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/*
+ * Links run behind the boxes and are quieter than them: they carry the shape
+ * of the document, while the boxes carry its content. Drawn from the muted
+ * foreground rather than the border colour -- a border is meant to be almost
+ * invisible against its own background, which is the wrong job here.
+ */
+.graph__edge {
+    fill: none;
+    stroke: var(--jb-fg-subtle);
+    stroke-width: 1.5;
+    opacity: 0.5;
+}
+
+/*
+ * A box has to read as a raised object against the pane behind it, so it takes
+ * the chrome background rather than the editor's own.
+ */
+.graph__node rect {
+    fill: var(--jb-bg-chrome);
+    stroke: var(--jb-fg-subtle);
+    stroke-width: 1;
+    opacity: 1;
+}
+
+.graph__node {
+    cursor: pointer;
+}
+
+.graph__node:hover rect {
+    stroke: var(--jb-fg);
+}
+
+.graph__node.is-selected rect {
+    stroke: var(--jb-focus);
+    stroke-width: 2;
+}
+
+.graph__label {
+    fill: var(--jb-syntax-key);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-md);
+    font-weight: 600;
+}
+
+.graph__value {
+    fill: var(--jb-fg-muted);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-sm);
+}
+
+.graph__node--string .graph__value {
+    fill: var(--jb-syntax-string);
+}
+.graph__node--number .graph__value {
+    fill: var(--jb-syntax-number);
+}
+.graph__node--boolean .graph__value {
+    fill: var(--jb-syntax-boolean);
+}
+.graph__node--null .graph__value {
+    fill: var(--jb-syntax-null);
+}
+
+/* Sits on the box's right edge, where its children come out of. */
+.graph__twisty {
+    cursor: pointer;
+}
+
+.graph__twisty circle {
+    fill: var(--jb-bg);
+    stroke: var(--jb-fg-subtle);
+    stroke-width: 1;
+}
+
+.graph__twisty:hover circle {
+    stroke: var(--jb-focus);
+}
+
+.graph__twisty text {
+    fill: var(--jb-fg-muted);
+    font-family: var(--jb-font);
+    font-size: 12px;
+    pointer-events: none;
 }
