@@ -9,7 +9,7 @@ import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
 import { Splitter } from '../ui/splitter';
 import { plural, type StatusModel } from '../ui/status-bar';
-import type { DiffState } from '../../shared/messages';
+import type { DiffState, Settings } from '../../shared/messages';
 import type { Messenger } from '../ui/messaging';
 
 const PANEL_IDS = ['left-json-panel', 'diff-result-panel', 'right-json-panel'];
@@ -34,6 +34,8 @@ export class DiffView {
     private strict = false;
     /** How many repairs the two inputs needed before they could be compared. */
     private repairs = 0;
+    private alignBudget = 1_000_000;
+    private maxDocumentSize = 25 * 1024 * 1024;
     private loadingFromHistory = false;
     private status: StatusModel = {};
 
@@ -52,6 +54,34 @@ export class DiffView {
 
     public get strictMode(): boolean {
         return this.strict;
+    }
+
+    /** Applies the user's configuration. */
+    public applySettings(settings: Settings): void {
+        this.alignBudget = settings.diffArrayAlignBudget;
+        this.maxDocumentSize = settings.diffMaxDocumentSize;
+
+        if (settings.strictDiff !== this.strict) {
+            this.toggleStrict();
+        }
+    }
+
+    /**
+     * Puts back input carried through a reload. Comparing again is left to the
+     * user, since it is the expensive half and they may only want the text.
+     */
+    public restore(leftJson: string, rightJson: string, strict?: boolean): void {
+        const leftEl = byId<HTMLTextAreaElement>('left-json');
+        const rightEl = byId<HTMLTextAreaElement>('right-json');
+        if (leftEl) {
+            leftEl.value = leftJson;
+        }
+        if (rightEl) {
+            rightEl.value = rightJson;
+        }
+        if (strict !== undefined && strict !== this.strict) {
+            this.toggleStrict();
+        }
     }
 
     // ---------------------------------------------------------------- layout
@@ -186,6 +216,24 @@ export class DiffView {
             return;
         }
 
+        // Comparing needs both documents as values, and two very large ones
+        // will not fit. Saying so beats freezing the panel and then failing.
+        const largest = Math.max(leftRaw.length, rightRaw.length);
+        if (largest > this.maxDocumentSize) {
+            output.innerHTML = renderNotice(
+                Icons.warning,
+                `These documents are ${formatMb(largest)} -- past the ${formatMb(
+                    this.maxDocumentSize
+                )} limit for comparing. Raise jsonbro.diff.maxDocumentSize to try anyway.`,
+                'diff-result no-changes'
+            );
+            this.setBulkActionsVisible(false);
+            this.publishStatus({
+                left: [{ text: 'Too large to compare', icon: Icons.warning, tone: 'warn' }]
+            });
+            return;
+        }
+
         try {
             const leftParse = JSONParser.parseWithStatus(leftRaw);
             const rightParse = JSONParser.parseWithStatus(rightRaw);
@@ -202,7 +250,9 @@ export class DiffView {
             this.leftJson = left;
             this.originalLeft = left;
             this.rightJson = right;
-            this.diffs = JSONDiff.compareJson(left, right, [], this.strict);
+            this.diffs = JSONDiff.compareJson(left, right, [], this.strict, {
+                alignBudget: this.alignBudget
+            });
 
             leftEl.value = JSON.stringify(left, null, 2);
             rightEl.value = JSON.stringify(right, null, 2);
@@ -527,6 +577,10 @@ export class DiffView {
         this.splitters.forEach(splitter => splitter.dispose());
         this.splitters.length = 0;
     }
+}
+
+function formatMb(chars: number): string {
+    return `${(chars / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** A centred icon-and-message placeholder shown in place of a change list. */

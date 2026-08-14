@@ -163,6 +163,12 @@ export class FindWidget {
         }
     }
 
+    /** Sets the scope new searches start with, from configuration. */
+    public setDefaultScope(scope: SearchScope): void {
+        this.state.scope = scope;
+        this.syncScopeButtons();
+    }
+
     /** Re-runs the current search, e.g. after the document was re-rendered. */
     public refresh(): void {
         if (this.isOpen) {

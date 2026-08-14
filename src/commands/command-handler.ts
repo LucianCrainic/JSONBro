@@ -66,6 +66,11 @@ export class CommandHandler {
             (item: any) => this.renameDiffHistory(item)
         );
 
+        const clearHistoryCommand = vscode.commands.registerCommand(
+            'jsonbro.clearHistory',
+            () => this.clearHistory()
+        );
+
         context.subscriptions.push(
             formatJsonCommand, 
             diffJsonCommand, 
@@ -75,8 +80,30 @@ export class CommandHandler {
             removeFormatHistoryCommand,
             removeDiffHistoryCommand,
             renameFormatHistoryCommand,
-            renameDiffHistoryCommand
+            renameDiffHistoryCommand,
+            clearHistoryCommand
         );
+    }
+
+    /** Restores panels after a window reload. */
+    public registerSerializer(): vscode.Disposable {
+        return this.webviewProvider.registerSerializer();
+    }
+
+    /** Pushes changed configuration to every open panel. */
+    public broadcastSettings(): void {
+        this.webviewProvider.broadcastSettings();
+    }
+
+    private async clearHistory(): Promise<void> {
+        const result = await vscode.window.showWarningMessage(
+            'Clear all JSONBro history?',
+            { modal: true },
+            'Clear'
+        );
+        if (result === 'Clear') {
+            await this.activityBarProvider.clearHistory();
+        }
     }
 
     private formatJson(): void {
