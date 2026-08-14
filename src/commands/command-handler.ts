@@ -225,7 +225,7 @@ export class CommandHandler {
             vscode.window.showInformationMessage('The clipboard is empty.');
             return;
         }
-        this.webviewProvider.loadFormatHistory(text);
+        this.webviewProvider.loadNewJson(text);
     }
 
     /**

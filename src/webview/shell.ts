@@ -428,7 +428,7 @@ export class Shell {
     private wireHostMessages(): void {
         this.messenger.on('loadJson', message => {
             this.setMode('format');
-            this.formatView.load(message.json);
+            this.formatView.load(message.json, message.remember);
         });
         this.messenger.on('loadDiff', message => {
             this.setMode('diff');
