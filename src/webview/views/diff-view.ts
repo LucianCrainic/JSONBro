@@ -3,16 +3,26 @@
  */
 import { JSONDiff } from '../diff';
 import type { DiffResult } from '../diff';
+import { PrettySink } from '../engine/pretty-sink';
+import { parseInto } from '../engine/recovering-parser';
 import { JSONParser } from '../json-parser';
+import { JSONFormatter } from '../formatter';
+import { DocumentPane } from '../ui/document-pane';
 import { byId, delegate, escapeHtml, on, qsa } from '../ui/dom';
 import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
 import { Splitter } from '../ui/splitter';
+import { setTip } from '../ui/tooltip';
 import { plural, type StatusModel } from '../ui/status-bar';
 import type { DiffState, Settings } from '../../shared/messages';
 import type { Messenger } from '../ui/messaging';
 
 const PANEL_IDS = ['left-json-panel', 'diff-result-panel', 'right-json-panel'];
+
+/** Which side of the comparison a control belongs to. */
+type Side = 'left' | 'right';
+
+const SIDES: Side[] = ['left', 'right'];
 
 export class DiffView {
     private readonly messenger: Messenger;
@@ -36,8 +46,12 @@ export class DiffView {
     private repairs = 0;
     private alignBudget = 1_000_000;
     private maxDocumentSize = 25 * 1024 * 1024;
+    private indentSize = 2;
     private loadingFromHistory = false;
     private status: StatusModel = {};
+
+    /** The rendered view of each side, built the first time it is shown. */
+    private readonly panes = new Map<Side, DocumentPane>();
 
     private panels: PanelGroup | null = null;
     private readonly splitters: Splitter[] = [];
@@ -60,6 +74,7 @@ export class DiffView {
     public applySettings(settings: Settings): void {
         this.alignBudget = settings.diffArrayAlignBudget;
         this.maxDocumentSize = settings.diffMaxDocumentSize;
+        this.indentSize = settings.indentSize;
 
         if (settings.strictDiff !== this.strict) {
             this.toggleStrict();
@@ -148,15 +163,144 @@ export class DiffView {
         }
         bind('apply-all-diffs', () => this.applyAll());
         bind('reject-all-diffs', () => this.rejectAll());
-        bind('copy-left-json', () => this.copyLeft());
-        bind('clear-left-json', () => {
-            this.clearSide('left-json');
-            this.clearResults();
+
+        for (const side of SIDES) {
+            bind(`format-${side}-json`, () => this.formatSide(side));
+            bind(`edit-${side}-json`, () => this.toggleSideView(side));
+            bind(`open-${side}-json`, () =>
+                this.messenger.post({ command: 'pickDiffFile', side })
+            );
+            bind(`copy-${side}-json`, () => this.copySide(side));
+            bind(`clear-${side}-json`, () => {
+                this.clearSide(side);
+                this.clearResults();
+            });
+            // Editing a side invalidates the rendered copy of it, so going
+            // back to the view has to reformat rather than show stale text.
+            const field = byId<HTMLTextAreaElement>(`${side}-json`);
+            if (field) {
+                this.teardown.push(on(field, 'input', () => this.markSideStale(side)));
+            }
+        }
+    }
+
+    /**
+     * Puts a document the host read into one side.
+     *
+     * Comparing is left to the user: the other side may not be filled in yet,
+     * and comparing is the expensive half.
+     */
+    public loadSide(side: Side, json: string, label: string): void {
+        const field = byId<HTMLTextAreaElement>(`${side}-json`);
+        if (!field) {
+            return;
+        }
+
+        field.value = json;
+        this.clearResults();
+        this.formatSide(side);
+
+        const title = byId(`${side}-json-panel`)?.querySelector('.pane__title');
+        if (title) {
+            title.textContent = `${side === 'left' ? 'Original' : 'Modified'} — ${label}`;
+        }
+    }
+
+    // ------------------------------------------------------------ input panes
+
+    /**
+     * Formats one side and shows the rendered view of it.
+     *
+     * Repairs are reported per pane: a change can be an artefact of a repair
+     * rather than a real difference, and the reader should be able to see
+     * which side needed fixing.
+     */
+    private formatSide(side: Side): boolean {
+        const field = byId<HTMLTextAreaElement>(`${side}-json`);
+        const raw = field?.value.trim();
+        if (!field || !raw) {
+            return false;
+        }
+
+        const { value, diagnostics } = parseInto(raw, new PrettySink({ indent: this.indentSize }));
+        this.ensurePane(side).setDocument(value);
+        this.setSideView(side, 'view');
+        this.describeSide(side, diagnostics.length);
+        return true;
+    }
+
+    /** Swaps one pane between the editable text and the rendered view. */
+    private toggleSideView(side: Side): void {
+        const showing = byId(`${side}-json-panel`)?.dataset.view ?? 'edit';
+        if (showing === 'view') {
+            this.setSideView(side, 'edit');
+        } else if (!this.formatSide(side)) {
+            // Nothing to render, so stay where we are rather than showing an
+            // empty pane with no way back to the box the user types in.
+            this.setSideView(side, 'edit');
+        }
+    }
+
+    private setSideView(side: Side, view: 'edit' | 'view'): void {
+        const panel = byId(`${side}-json-panel`);
+        if (!panel) {
+            return;
+        }
+        panel.dataset.view = view;
+
+        const toggle = byId(`edit-${side}-json`);
+        if (toggle) {
+            const editing = view === 'edit';
+            toggle.classList.toggle('is-active', editing);
+            toggle.querySelector('.codicon')?.classList.toggle('codicon-edit', !editing);
+            toggle.querySelector('.codicon')?.classList.toggle('codicon-eye', editing);
+            const label = editing ? 'Show the formatted document' : 'Edit this document';
+            setTip(toggle, label);
+            toggle.setAttribute('aria-label', label);
+        }
+
+        if (view === 'edit') {
+            byId<HTMLTextAreaElement>(`${side}-json`)?.focus();
+        }
+    }
+
+    /** Drops the rendered copy of a side whose text has been edited. */
+    private markSideStale(side: Side): void {
+        if (byId(`${side}-json-panel`)?.dataset.view === 'view') {
+            this.setSideView(side, 'edit');
+        }
+        this.panes.get(side)?.setDocument(null);
+        this.describeSide(side, 0);
+    }
+
+    private ensurePane(side: Side): DocumentPane {
+        const existing = this.panes.get(side);
+        if (existing) {
+            return existing;
+        }
+
+        const pane = new DocumentPane({
+            viewport: byId(`${side}-json-view`) as HTMLElement,
+            showLineNumbers: () => JSONFormatter.getShowLineNumbers()
         });
-        bind('clear-right-json', () => {
-            this.clearSide('right-json');
-            this.clearResults();
-        });
+        this.panes.set(side, pane);
+        return pane;
+    }
+
+    private describeSide(side: Side, repairs: number): void {
+        const meta = byId(`${side}-json-meta`);
+        if (!meta) {
+            return;
+        }
+        const lines = this.panes.get(side)?.lineCount ?? 0;
+        const parts: string[] = [];
+        if (lines > 0) {
+            parts.push(plural(lines, 'line'));
+        }
+        if (repairs > 0) {
+            parts.push(plural(repairs, 'repair'));
+        }
+        meta.textContent = parts.join(' · ');
     }
 
     private toggleStrict(): void {
@@ -172,8 +316,8 @@ export class DiffView {
         }
     }
 
-    private copyLeft(): void {
-        const value = byId<HTMLTextAreaElement>('left-json')?.value;
+    private copySide(side: Side): void {
+        const value = byId<HTMLTextAreaElement>(`${side}-json`)?.value;
         if (value?.trim()) {
             void navigator.clipboard
                 .writeText(value)
@@ -181,16 +325,17 @@ export class DiffView {
         }
     }
 
-    private clearSide(id: 'left-json' | 'right-json'): void {
-        const element = byId<HTMLTextAreaElement>(id);
+    private clearSide(side: Side): void {
+        const element = byId<HTMLTextAreaElement>(`${side}-json`);
         if (element) {
             element.value = '';
         }
-        if (id === 'left-json') {
+        if (side === 'left') {
             this.leftJson = null;
         } else {
             this.rightJson = null;
         }
+        this.markSideStale(side);
     }
 
     // --------------------------------------------------------------- compare
@@ -254,8 +399,17 @@ export class DiffView {
                 alignBudget: this.alignBudget
             });
 
-            leftEl.value = JSON.stringify(left, null, 2);
-            rightEl.value = JSON.stringify(right, null, 2);
+            // Comparing formats both sides and shows the rendered view of
+            // them, so the documents being compared are legible rather than
+            // whatever single line they were pasted as. The indent follows
+            // the setting; it used to be hard-coded to two spaces here while
+            // the format view honoured the preference.
+            leftEl.value = JSON.stringify(left, null, this.indentSize);
+            rightEl.value = JSON.stringify(right, null, this.indentSize);
+            this.formatSide('left');
+            this.formatSide('right');
+            this.describeSide('left', leftParse.diagnostics.length);
+            this.describeSide('right', rightParse.diagnostics.length);
 
             // Renders the comparison already in hand; it used to be computed a
             // second time here, doubling the cost on large documents.
@@ -390,8 +544,9 @@ export class DiffView {
     }
 
     public clear(): void {
-        this.clearSide('left-json');
-        this.clearSide('right-json');
+        for (const side of SIDES) {
+            this.clearSide(side);
+        }
         this.clearResults();
     }
 

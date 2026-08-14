@@ -327,5 +327,9 @@ export class Shell {
             this.setMode('format');
             this.formatView.openUrl(message.url, message.label);
         });
+        this.messenger.on('loadDiffSide', message => {
+            this.setMode('diff');
+            this.diffView.loadSide(message.side, message.json, message.label);
+        });
     }
 }

@@ -225,16 +225,10 @@ export class WebviewContentGenerator {
             </div>
 
             <div id="diff-container" class="mode-container">
-                <section id="left-json-panel" class="pane">
-                    ${this.paneHeader('Original', [
-                        this.iconButton({ id: 'copy-left-json', icon: 'copy', label: 'Copy original', title: 'Copy original to clipboard' }),
-                        this.iconButton({ id: 'clear-left-json', icon: 'clear-all', label: 'Clear original', title: 'Clear original' }),
-                        this.maximizeButton('left-json-panel')
-                    ])}
-                    <div class="pane__body">
-                        <textarea id="left-json" spellcheck="false" aria-label="Original JSON" placeholder="Paste the original JSON here"></textarea>
-                    </div>
-                </section>
+                ${this.diffInputPane('left', 'Original', [
+                    this.iconButton({ id: 'copy-left-json', icon: 'copy', label: 'Copy original', title: 'Copy original to clipboard' }),
+                    this.iconButton({ id: 'clear-left-json', icon: 'clear-all', label: 'Clear original', title: 'Clear original' })
+                ])}
                 <div id="diff-splitter-left" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
                 <section id="diff-result-panel" class="pane">
                     ${this.paneHeader('Changes', [
@@ -253,15 +247,10 @@ export class WebviewContentGenerator {
                     </div>
                 </section>
                 <div id="diff-splitter-right" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
-                <section id="right-json-panel" class="pane">
-                    ${this.paneHeader('Modified', [
-                        this.iconButton({ id: 'clear-right-json', icon: 'clear-all', label: 'Clear modified', title: 'Clear modified' }),
-                        this.maximizeButton('right-json-panel')
-                    ])}
-                    <div class="pane__body">
-                        <textarea id="right-json" spellcheck="false" aria-label="Modified JSON" placeholder="Paste the modified JSON here"></textarea>
-                    </div>
-                </section>
+                ${this.diffInputPane('right', 'Modified', [
+                    this.iconButton({ id: 'copy-right-json', icon: 'copy', label: 'Copy modified', title: 'Copy modified to clipboard' }),
+                    this.iconButton({ id: 'clear-right-json', icon: 'clear-all', label: 'Clear modified', title: 'Clear modified' })
+                ])}
             </div>
 
             <footer id="status-bar">
@@ -269,6 +258,53 @@ export class WebviewContentGenerator {
                 <div class="status__group" id="status-right"></div>
             </footer>
         `;
+    }
+
+    /**
+     * One side of the comparison.
+     *
+     * The pane holds both a textarea and a rendered view of the same document
+     * and shows one at a time, chosen by `data-view` on the section. Comparing
+     * switches both sides to the rendered view, which is where the syntax
+     * colouring, the gutter and folding come from -- the panes used to be bare
+     * textareas with none of it.
+     */
+    private diffInputPane(side: 'left' | 'right', title: string, actions: string[]): string {
+        const label = title.toLowerCase();
+        const header = this.paneHeader(
+            title,
+            [
+                this.iconButton({
+                    id: `format-${side}-json`,
+                    icon: 'json',
+                    label: `Format ${label}`,
+                    title: `Format the ${label} document`
+                }),
+                this.iconButton({
+                    id: `open-${side}-json`,
+                    icon: 'go-to-file',
+                    label: `Open a file as the ${label}`,
+                    title: `Open a file as the ${label}`
+                }),
+                this.iconButton({
+                    id: `edit-${side}-json`,
+                    icon: 'edit',
+                    label: `Edit ${label}`,
+                    title: `Edit the ${label} document`
+                }),
+                ...actions,
+                this.maximizeButton(`${side}-json-panel`)
+            ],
+            `${side}-json-meta`
+        );
+
+        return `<section id="${side}-json-panel" class="pane" data-view="edit">
+                    ${header}
+                    <div class="pane__body">
+                        <textarea id="${side}-json" spellcheck="false" aria-label="${title} JSON" placeholder="Paste the ${label} JSON here"></textarea>
+                        <div id="${side}-json-view" class="pane__content doc-view"></div>
+                    </div>
+                </section>`;
     }
 
     /** A tab in the Format/Diff switcher. */

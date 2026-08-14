@@ -1,9 +1,24 @@
 import { DiffView } from '../../views/diff-view';
 import { Messenger } from '../../ui/messaging';
 import { mountPanel } from './helpers/fixture';
+import type { Settings } from '../../../shared/messages';
 
 const LEFT = JSON.stringify({ keep: 1, changed: 'before', gone: true });
 const RIGHT = JSON.stringify({ keep: 1, changed: 'after', added: 42 });
+
+/** The defaults, for tests that need to vary one of them. */
+const SETTINGS: Settings = {
+    showLineNumbers: true,
+    indentSize: 2,
+    strictDiff: false,
+    defaultPaneRatio: 0.5,
+    autoFormatOnPaste: false,
+    searchScope: 'all',
+    matchEditorTheme: true,
+    maxInlineSize: 2 * 1024 * 1024,
+    diffMaxDocumentSize: 25 * 1024 * 1024,
+    diffArrayAlignBudget: 1_000_000
+};
 
 function setInputs(left: string, right: string): void {
     (document.getElementById('left-json') as HTMLTextAreaElement).value = left;
@@ -62,6 +77,89 @@ describe('DiffView', () => {
         expect(document.querySelector('.diff-error')).toBeNull();
         expect(items().length).toBeGreaterThan(0);
         expect(view.getStatus().right?.map(segment => segment.text).join(' ')).toContain('repair');
+    });
+
+    /*
+     * The input panes were bare textareas: no colouring, no gutter, no folding,
+     * and comparing normalised them with a hard-coded two-space indent while
+     * the format view honoured the user's setting.
+     */
+    describe('the input panes', () => {
+        const shows = (side: 'left' | 'right') => el(`${side}-json-panel`).dataset.view;
+        const rows = (side: 'left' | 'right') =>
+            document.querySelectorAll(`#${side}-json-view .json-line`);
+
+        it('switches both panes to the rendered view when comparing', () => {
+            view.compare();
+
+            expect(shows('left')).toBe('view');
+            expect(shows('right')).toBe('view');
+            expect(rows('left').length).toBeGreaterThan(1);
+            expect(rows('right').length).toBeGreaterThan(1);
+        });
+
+        it('colours the rendered output', () => {
+            view.compare();
+
+            expect(document.querySelectorAll('#left-json-view .key').length).toBeGreaterThan(0);
+            expect(document.querySelectorAll('#left-json-view .string').length).toBeGreaterThan(0);
+        });
+
+        it('goes back to the editable text and returns', () => {
+            view.compare();
+
+            el('edit-left-json').click();
+            expect(shows('left')).toBe('edit');
+
+            el('edit-left-json').click();
+            expect(shows('left')).toBe('view');
+        });
+
+        it('drops the rendered copy once the text is edited', () => {
+            view.compare();
+
+            const field = el<HTMLTextAreaElement>('left-json');
+            field.value = '{"other":1}';
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+
+            // Showing the previous render beside newly typed text would lie
+            // about what the pane holds.
+            expect(shows('left')).toBe('edit');
+            expect(rows('left')).toHaveLength(0);
+        });
+
+        it('formats one side on its own, leaving the other alone', () => {
+            el<HTMLTextAreaElement>('left-json').value = '{"a":{"b":1}}';
+            el('format-left-json').click();
+
+            expect(shows('left')).toBe('view');
+            // `{`, `"a": {`, `"b": 1`, `}`, `}`
+            expect(rows('left')).toHaveLength(5);
+            expect(shows('right')).toBe('edit');
+        });
+
+        it('formats a broken document and says what it repaired', () => {
+            el<HTMLTextAreaElement>('left-json').value = "{'a': True,}";
+            el('format-left-json').click();
+
+            expect(shows('left')).toBe('view');
+            expect(el('left-json-meta').textContent).toMatch(/repair/);
+        });
+
+        it('stays editable when there is nothing to format', () => {
+            el<HTMLTextAreaElement>('left-json').value = '';
+            el('edit-left-json').click();
+
+            expect(shows('left')).toBe('edit');
+        });
+
+        it('honours the indent setting rather than a hard-coded two spaces', () => {
+            view.applySettings({ ...SETTINGS, indentSize: 4 });
+            setInputs(JSON.stringify({ a: { b: 1 } }), JSON.stringify({ a: { b: 2 } }));
+            view.compare();
+
+            expect(el<HTMLTextAreaElement>('left-json').value).toContain('\n    "a"');
+        });
     });
 
     describe('change rows', () => {

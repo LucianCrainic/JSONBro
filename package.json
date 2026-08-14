@@ -80,6 +80,18 @@
         "command": "jsonbro.clearDiffHistory",
         "title": "Clear Diff History",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "jsonbro.setDiffOriginal",
+        "title": "JSONBro: Use as Diff Original"
+      },
+      {
+        "command": "jsonbro.setDiffModified",
+        "title": "JSONBro: Use as Diff Modified"
+      },
+      {
+        "command": "jsonbro.compareSelectedFiles",
+        "title": "JSONBro: Compare Selected Files"
       }
     ],
     "viewsContainers": {
@@ -182,6 +194,49 @@
         {
           "command": "jsonbro.clearDiffHistory",
           "when": "false"
+        },
+        {
+          "command": "jsonbro.compareSelectedFiles",
+          "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "jsonbro.openFile",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@1"
+        },
+        {
+          "command": "jsonbro.setDiffOriginal",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@2"
+        },
+        {
+          "command": "jsonbro.setDiffModified",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@3"
+        },
+        {
+          "command": "jsonbro.compareSelectedFiles",
+          "when": "listMultiSelection && resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@4"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "jsonbro.openFile",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@1"
+        },
+        {
+          "command": "jsonbro.setDiffOriginal",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@2"
+        },
+        {
+          "command": "jsonbro.setDiffModified",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@3"
         }
       ]
     },
@@ -372,6 +427,11 @@
         "command": "jsonbro.diffJson",
         "key": "ctrl+alt+d",
         "mac": "cmd+alt+d"
+      },
+      {
+        "command": "jsonbro.openFile",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o"
       }
     ]
   },

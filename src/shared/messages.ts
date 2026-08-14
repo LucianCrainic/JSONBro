@@ -12,8 +12,13 @@ export type WebviewToHost =
     | { command: 'addFormatHistory'; json: string }
     | { command: 'addDiffHistory'; leftJson: string; rightJson: string }
     | { command: 'saveFormattedJson'; content: string }
+    /** Asks the host to choose a file to load into one side of the diff. */
+    | { command: 'pickDiffFile'; side: DiffSide }
     | { command: 'showError'; text: string }
     | { command: 'showInfo'; text: string };
+
+/** Which document of a comparison something refers to. */
+export type DiffSide = 'left' | 'right';
 
 /** Messages the extension host sends to the webview. */
 export type HostToWebview =
@@ -22,6 +27,8 @@ export type HostToWebview =
     | { command: 'settings'; settings: Settings }
     /** Format a file the panel's worker should read for itself. */
     | { command: 'openUrl'; url: string; label: string }
+    /** Put a document into one side of the comparison. */
+    | { command: 'loadDiffSide'; side: DiffSide; json: string; label: string }
     /** JSON syntax colours read from the user's active colour theme. */
     | { command: 'themeColors'; colors: SyntaxColors };
 
