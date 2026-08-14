@@ -69,14 +69,65 @@ export class Splitter {
         return this.options.before.offsetWidth + this.options.after.offsetWidth;
     }
 
+    /**
+     * Sizes the pair.
+     *
+     * Written as a share of the row rather than a pixel width. Pixel widths do
+     * not survive the window being resized: every pane kept the size it was
+     * dragged to and the extra width was simply left empty on the right, until
+     * a reload started the layout over. A percentage costs no resize listener
+     * and no recalculation -- the panes scale because the row does.
+     *
+     * The last pane in the row is never pinned, so whatever is left after the
+     * sashes have taken their fixed few pixels always has somewhere to go.
+     */
     private applyWidths(beforeWidth: number, afterWidth: number): void {
-        const { before, after } = this.options;
-        for (const [pane, width] of [[before, beforeWidth], [after, afterWidth]] as const) {
-            pane.style.width = `${width}px`;
-            pane.style.flexBasis = `${width}px`;
-            pane.style.flexGrow = '0';
-            pane.style.flexShrink = '0';
+        const row = this.rowWidth();
+        if (row <= 0) {
+            return;
         }
+
+        this.pin(this.options.before, (beforeWidth / row) * 100);
+
+        if (this.isLastPane(this.options.after)) {
+            this.fill(this.options.after);
+        } else {
+            this.pin(this.options.after, (afterWidth / row) * 100);
+        }
+    }
+
+    private pin(pane: HTMLElement, share: number): void {
+        pane.style.width = '';
+        pane.style.flexBasis = `${share.toFixed(4)}%`;
+        pane.style.flexGrow = '0';
+        pane.style.flexShrink = '0';
+    }
+
+    /** Lets a pane absorb whatever the pinned ones leave over. */
+    private fill(pane: HTMLElement): void {
+        pane.style.width = '';
+        pane.style.flexBasis = '0';
+        pane.style.flexGrow = '1';
+        pane.style.flexShrink = '1';
+    }
+
+    private rowWidth(): number {
+        return this.options.before.parentElement?.clientWidth ?? 0;
+    }
+
+    /**
+     * Whether nothing visible follows this pane in the row.
+     *
+     * Hidden panes are skipped rather than counted: the format row also holds
+     * the tree, which is displayed only in the other mode, and treating it as
+     * the last pane would leave the formatted output pinned with nothing able
+     * to absorb the few pixels the sash takes.
+     */
+    private isLastPane(pane: HTMLElement): boolean {
+        const visible = Array.from(pane.parentElement?.children ?? []).filter(
+            child => child.classList.contains('pane') && (child as HTMLElement).offsetWidth > 0
+        );
+        return visible.length === 0 || visible[visible.length - 1] === pane;
     }
 
     private onDown(event: MouseEvent): void {

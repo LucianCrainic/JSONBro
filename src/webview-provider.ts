@@ -239,11 +239,20 @@ export class WebviewProvider {
         }
     }
 
-    /**
-     * Loads JSON from format history into the format panel
-     */
+    /** Replays a saved document. Already in history, so it is not re-recorded. */
     public loadFormatHistory(json: string): void {
         this.sendToPanel('format', { command: 'loadJson', json });
+    }
+
+    /**
+     * Formats a document the panel has not seen before.
+     *
+     * Recorded in history, unlike a replay: text arriving from the clipboard
+     * exists nowhere else, so not recording it loses it the moment something
+     * replaces it.
+     */
+    public loadNewJson(json: string): void {
+        this.sendToPanel('format', { command: 'loadJson', json, remember: true });
     }
 
     /**

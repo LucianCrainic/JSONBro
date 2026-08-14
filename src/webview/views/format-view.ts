@@ -467,13 +467,20 @@ export class FormatView {
         this.load(json);
     }
 
-    /** Loads JSON from history without echoing it back as a new history entry. */
-    public load(json: string): void {
+    /**
+     * Loads JSON into the panel and formats it.
+     *
+     * `remember` says whether this is a document the panel has not seen before.
+     * Replaying a history entry must not record a second copy of it, but
+     * anything arriving for the first time -- from the clipboard, say -- has to
+     * be recorded or it is gone as soon as it is replaced.
+     */
+    public load(json: string, remember = false): void {
         const inputEl = byId<HTMLTextAreaElement>('input');
         if (!inputEl) {
             return;
         }
-        this.loadingFromHistory = true;
+        this.loadingFromHistory = !remember;
         try {
             inputEl.value = json;
             this.format();

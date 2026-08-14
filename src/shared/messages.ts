@@ -22,7 +22,13 @@ export type DiffSide = 'left' | 'right';
 
 /** Messages the extension host sends to the webview. */
 export type HostToWebview =
-    | { command: 'loadJson'; json: string }
+    /**
+     * `remember` distinguishes a document arriving for the first time from one
+     * being replayed out of history: replaying must not record a second copy,
+     * but anything new must be recorded or it is lost the moment it is
+     * replaced.
+     */
+    | { command: 'loadJson'; json: string; remember?: boolean }
     | { command: 'loadDiff'; leftJson: string; rightJson: string }
     | { command: 'settings'; settings: Settings }
     /** Format a file the panel's worker should read for itself. */

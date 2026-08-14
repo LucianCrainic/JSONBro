@@ -1,8 +1,12 @@
 import { Splitter } from '../../ui/splitter';
 
-/** jsdom has no layout, so pane widths have to be declared. */
+/** jsdom has no layout, so widths have to be declared. */
 function setWidth(element: HTMLElement, width: number): void {
     Object.defineProperty(element, 'offsetWidth', { value: width, configurable: true });
+}
+
+function setRowWidth(element: HTMLElement, width: number): void {
+    Object.defineProperty(element, 'clientWidth', { value: width, configurable: true });
 }
 
 function drag(handle: HTMLElement, fromX: number, toX: number): void {
@@ -11,11 +15,26 @@ function drag(handle: HTMLElement, fromX: number, toX: number): void {
     document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 }
 
-function widthOf(element: HTMLElement): number {
-    return parseFloat(element.style.width);
+/**
+ * A pane's share of the row.
+ *
+ * Sizes are shares rather than pixel widths so that they survive the window
+ * being resized; the pixels a share works out to are the browser's business.
+ */
+function shareOf(element: HTMLElement): number {
+    return parseFloat(element.style.flexBasis);
 }
 
+/** True when a pane is set to absorb whatever the pinned ones leave over. */
+function fills(element: HTMLElement): boolean {
+    // jsdom normalises a bare `0` basis to `0px`.
+    return element.style.flexGrow === '1' && parseFloat(element.style.flexBasis) === 0;
+}
+
+const ROW = 900;
+
 describe('Splitter', () => {
+    let row: HTMLElement;
     let a: HTMLElement;
     let b: HTMLElement;
     let c: HTMLElement;
@@ -26,16 +45,18 @@ describe('Splitter', () => {
     beforeEach(() => {
         document.body.innerHTML = `
             <div id="row">
-                <div id="a"></div><div id="h1"></div>
-                <div id="b"></div><div id="h2"></div>
-                <div id="c"></div>
+                <div id="a" class="pane"></div><div id="h1"></div>
+                <div id="b" class="pane"></div><div id="h2"></div>
+                <div id="c" class="pane"></div>
             </div>`;
+        row = document.getElementById('row') as HTMLElement;
         a = document.getElementById('a') as HTMLElement;
         b = document.getElementById('b') as HTMLElement;
         c = document.getElementById('c') as HTMLElement;
         handleAB = document.getElementById('h1') as HTMLElement;
         handleBC = document.getElementById('h2') as HTMLElement;
 
+        setRowWidth(row, ROW);
         [a, b, c].forEach(pane => setWidth(pane, 300));
     });
 
@@ -55,31 +76,24 @@ describe('Splitter', () => {
 
         drag(handleAB, 300, 350);
 
-        expect(widthOf(a)).toBe(350);
-        expect(widthOf(b)).toBe(250);
+        expect(shareOf(a)).toBeCloseTo((350 / ROW) * 100, 2);
+        expect(shareOf(b)).toBeCloseTo((250 / ROW) * 100, 2);
     });
 
     it('keeps the pair total constant', () => {
         makeSplitter(handleAB, a, b);
 
-        drag(handleAB, 300, 180);
+        drag(handleAB, 300, 420);
 
-        expect(widthOf(a) + widthOf(b)).toBe(600);
+        expect(shareOf(a) + shareOf(b)).toBeCloseTo((600 / ROW) * 100, 2);
     });
 
-    /*
-     * Sizing is relative to the pair, not the row, so a second splitter can
-     * exist without the two fighting over the same total.
-     */
     it('leaves panes outside the pair untouched', () => {
         makeSplitter(handleAB, a, b);
-        makeSplitter(handleBC, b, c);
 
-        drag(handleAB, 300, 400);
+        drag(handleAB, 300, 350);
 
-        expect(c.style.width).toBe('');
-        expect(widthOf(a)).toBe(400);
-        expect(widthOf(b)).toBe(200);
+        expect(c.style.flexBasis).toBe('');
     });
 
     it('lets two splitters resize independently', () => {
@@ -87,22 +101,19 @@ describe('Splitter', () => {
         makeSplitter(handleBC, b, c);
 
         drag(handleAB, 300, 400);
-        // b is now 200 wide; the second sash redistributes b and c only.
-        setWidth(a, 400);
-        setWidth(b, 200);
-        drag(handleBC, 600, 650);
+        const afterFirst = shareOf(a);
 
-        expect(widthOf(a)).toBe(400);
-        expect(widthOf(b) + widthOf(c)).toBe(500);
+        drag(handleBC, 600, 700);
+
+        expect(shareOf(a)).toBeCloseTo(afterFirst, 4);
     });
 
     it('refuses to shrink a pane below the minimum', () => {
         makeSplitter(handleAB, a, b);
 
-        drag(handleAB, 300, -1000);
+        drag(handleAB, 300, -500);
 
-        expect(widthOf(a)).toBe(160);
-        expect(widthOf(b)).toBe(440);
+        expect(shareOf(a)).toBeCloseTo((160 / ROW) * 100, 2);
     });
 
     it('refuses to grow a pane past the pair minus the minimum', () => {
@@ -110,65 +121,66 @@ describe('Splitter', () => {
 
         drag(handleAB, 300, 5000);
 
-        expect(widthOf(a)).toBe(440);
-        expect(widthOf(b)).toBe(160);
+        expect(shareOf(a)).toBeCloseTo((440 / ROW) * 100, 2);
     });
 
     it('splits evenly on double-click', () => {
         makeSplitter(handleAB, a, b);
-        setWidth(a, 450);
-        setWidth(b, 150);
 
         handleAB.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 
-        expect(widthOf(a)).toBe(300);
-        expect(widthOf(b)).toBe(300);
+        expect(shareOf(a)).toBeCloseTo((300 / ROW) * 100, 2);
     });
 
     it('applies an explicit ratio', () => {
-        makeSplitter(handleAB, a, b).setRatio(0.25);
-
-        expect(widthOf(a)).toBe(150);
-        expect(widthOf(b)).toBe(450);
-    });
-
-    it('drops explicit sizing on reset', () => {
         const splitter = makeSplitter(handleAB, a, b);
-        drag(handleAB, 300, 350);
 
-        splitter.reset();
+        splitter.setRatio(0.75);
 
-        expect(a.style.width).toBe('');
-        expect(a.style.flexGrow).toBe('');
-        expect(b.style.width).toBe('');
+        expect(shareOf(a)).toBeCloseTo((450 / ROW) * 100, 2);
     });
 
-    it('marks the handle and body while dragging', () => {
-        makeSplitter(handleAB, a, b);
+    /*
+     * Panes used to be pinned to the pixel width they were dragged to. Making
+     * the window wider then left the extra space empty on the right until the
+     * window was reloaded, because nothing in the row was allowed to grow.
+     */
+    describe('surviving a resize', () => {
+        it('sizes panes as a share of the row, not in pixels', () => {
+            makeSplitter(handleAB, a, b);
 
-        handleAB.dispatchEvent(new MouseEvent('mousedown', { clientX: 300, bubbles: true }));
-        expect(handleAB.classList.contains('dragging')).toBe(true);
-        expect(document.body.classList.contains('dragging')).toBe(true);
+            drag(handleAB, 300, 350);
 
-        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-        expect(handleAB.classList.contains('dragging')).toBe(false);
-        expect(document.body.classList.contains('dragging')).toBe(false);
-    });
+            expect(a.style.width).toBe('');
+            expect(a.style.flexBasis).toMatch(/%$/);
+        });
 
-    it('ignores movement that did not start on the handle', () => {
-        makeSplitter(handleAB, a, b);
+        it('leaves the last pane free to absorb what the others do not take', () => {
+            makeSplitter(handleBC, b, c);
 
-        document.dispatchEvent(new MouseEvent('mousemove', { clientX: 500, bubbles: true }));
+            drag(handleBC, 600, 650);
 
-        expect(a.style.width).toBe('');
-    });
+            expect(fills(c)).toBe(true);
+        });
 
-    it('stops responding after dispose', () => {
-        const splitter = makeSplitter(handleAB, a, b);
-        splitter.dispose();
+        it('treats a hidden pane as absent when deciding which is last', () => {
+            // The format row also holds the tree, shown only in the other mode.
+            setWidth(c, 0);
+            makeSplitter(handleAB, a, b);
 
-        drag(handleAB, 300, 400);
+            drag(handleAB, 300, 350);
 
-        expect(a.style.width).toBe('');
+            expect(fills(b)).toBe(true);
+        });
+
+        it('gives everything back to the CSS on reset', () => {
+            const splitter = makeSplitter(handleAB, a, b);
+            drag(handleAB, 300, 350);
+
+            splitter.reset();
+
+            expect(a.style.flexBasis).toBe('');
+            expect(a.style.flexGrow).toBe('');
+        });
     });
 });
