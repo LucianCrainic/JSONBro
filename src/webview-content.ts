@@ -15,7 +15,7 @@ const STYLESHEETS = [
     'components.css',
     'format.css',
     'diff.css',
-    'tree.css'
+    'visual.css'
 ];
 
 export class WebviewContentGenerator {
@@ -100,11 +100,11 @@ export class WebviewContentGenerator {
                             'Format and inspect one document'
                         )}
                         ${this.modeTab(
-                            'tree-mode',
-                            'list-tree',
-                            'Tree',
+                            'visual-mode',
+                            'type-hierarchy',
+                            'Visual',
                             false,
-                            'Explore the same document as a collapsible tree'
+                            'Draw the same document as a tree or a graph'
                         )}
                         ${this.modeTab(
                             'diff-mode',
@@ -231,60 +231,84 @@ export class WebviewContentGenerator {
                         </div>
                     </div>
                 </section>
-                <section id="tree-panel" class="pane" data-empty data-mode-only="tree">
+                <section id="visual-panel" class="pane" data-empty data-shape="tree" data-mode-only="visual">
                     ${this.paneHeader(
-                        'Tree',
+                        'Visual',
                         [
+                            this.shapeButton('tree', 'list-tree', 'Tree', 'Show an indented tree'),
+                            this.shapeButton('graph', 'type-hierarchy', 'Graph', 'Show boxes and links'),
                             this.iconButton({
-                                id: 'tree-expand-depth',
+                                id: 'visual-expand-depth',
                                 icon: 'list-selection',
                                 label: 'Expand two levels',
                                 title: 'Collapse everything below the second level'
                             }),
                             this.iconButton({
-                                id: 'tree-expand-all',
+                                id: 'visual-expand-all',
                                 icon: 'expand-all',
                                 label: 'Expand all',
                                 title: 'Expand every node'
                             }),
                             this.iconButton({
-                                id: 'tree-collapse-all',
+                                id: 'visual-collapse-all',
                                 icon: 'collapse-all',
                                 label: 'Collapse all',
                                 title: 'Collapse every node'
                             }),
                             this.iconButton({
-                                id: 'tree-copy-path',
+                                id: 'graph-zoom-out',
+                                icon: 'zoom-out',
+                                label: 'Zoom out',
+                                title: 'Zoom out',
+                                attrs: 'data-shape-only="graph"'
+                            }),
+                            this.iconButton({
+                                id: 'graph-zoom-reset',
+                                icon: 'screen-normal',
+                                label: 'Reset the view',
+                                title: 'Back to the starting zoom and position',
+                                attrs: 'data-shape-only="graph"'
+                            }),
+                            this.iconButton({
+                                id: 'graph-zoom-in',
+                                icon: 'zoom-in',
+                                label: 'Zoom in',
+                                title: 'Zoom in',
+                                attrs: 'data-shape-only="graph"'
+                            }),
+                            this.iconButton({
+                                id: 'visual-copy-path',
                                 icon: 'symbol-key',
                                 label: 'Copy path',
                                 title: 'Copy the path of the selected node'
                             }),
                             this.iconButton({
-                                id: 'tree-copy-value',
+                                id: 'visual-copy-value',
                                 icon: 'copy',
                                 label: 'Copy value',
                                 title: 'Copy the value of the selected node'
                             }),
                             this.iconButton({
-                                id: 'tree-copy-subtree',
+                                id: 'visual-copy-subtree',
                                 icon: 'list-tree',
                                 label: 'Copy subtree',
                                 title: 'Copy the selected node and everything under it'
                             }),
-                            this.maximizeButton('tree-panel')
+                            this.maximizeButton('visual-panel')
                         ],
-                        'tree-meta'
+                        'visual-meta'
                     )}
                     <div class="pane__body">
-                        <nav id="tree-breadcrumb" class="breadcrumb" aria-label="Selected node"></nav>
+                        <nav id="visual-breadcrumb" class="breadcrumb" aria-label="Selected node"></nav>
                         <div id="tree-output" class="pane__content" role="tree" tabindex="0"></div>
+                        <div id="graph-output" class="graph-viewport" tabindex="0"></div>
                         <div class="empty-state">
-                            <span class="codicon codicon-list-tree empty-state__icon" aria-hidden="true"></span>
-                            <span class="empty-state__title">Paste JSON in the Format tab, then come back</span>
+                            <span class="codicon codicon-type-hierarchy empty-state__icon" aria-hidden="true"></span>
+                            <span class="empty-state__title">Paste JSON on the left to draw it</span>
                             <dl class="empty-state__keys">
-                                <dt><kbd data-mod></kbd> <kbd>&#9166;</kbd></dt><dd>Build the tree</dd>
-                                <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Move between nodes</dd>
-                                <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Collapse and expand</dd>
+                                <dt><kbd data-mod></kbd> <kbd>&#9166;</kbd></dt><dd>Build</dd>
+                                <dt><kbd>&#8593;</kbd> <kbd>&#8595;</kbd></dt><dd>Move between nodes</dd>
+                                <dt><kbd>&#8592;</kbd> <kbd>&#8594;</kbd></dt><dd>Collapse and expand</dd>
                             </dl>
                         </div>
                     </div>
@@ -372,6 +396,17 @@ export class WebviewContentGenerator {
                         <div id="${side}-json-view" class="pane__content doc-view"></div>
                     </div>
                 </section>`;
+    }
+
+    /** Picks how the visual view draws the document. */
+    private shapeButton(shape: string, icon: string, label: string, title: string): string {
+        return this.iconButton({
+            icon,
+            label,
+            title,
+            classes: `shape-btn${shape === 'tree' ? ' is-active' : ''}`,
+            attrs: `data-visual-shape="${shape}" aria-pressed="${shape === 'tree'}"`
+        });
     }
 
     /** A tab in the Format/Diff switcher. */

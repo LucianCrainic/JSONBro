@@ -7,7 +7,7 @@
 import { Messenger } from '../../ui/messaging';
 import { PrettySink } from '../../engine/pretty-sink';
 import { parseInto } from '../../engine/recovering-parser';
-import { formatPath, TreeView } from '../../views/tree-view';
+import { formatPath, VisualView } from '../../views/visual-view';
 import { mountPanel } from './helpers/fixture';
 
 const SAMPLE = JSON.stringify({
@@ -18,7 +18,7 @@ const SAMPLE = JSON.stringify({
     empty: {}
 });
 
-function show(view: TreeView, json = SAMPLE): void {
+function show(view: VisualView, json = SAMPLE): void {
     const { value, diagnostics } = parseInto(json, new PrettySink({ indent: 2 }));
     view.setDocument(value, diagnostics);
 }
@@ -30,14 +30,14 @@ const rowFor = (start: string) => rows().find(row => row.textContent?.startsWith
 const rowWith = (text: string) =>
     rows().find(row => row.textContent?.includes(text)) as HTMLElement;
 const selected = () => document.querySelector<HTMLElement>('.tree-row.is-selected');
-const breadcrumb = () => document.getElementById('tree-breadcrumb')?.textContent ?? '';
+const breadcrumb = () => document.getElementById('visual-breadcrumb')?.textContent ?? '';
 
-describe('TreeView', () => {
-    let view: TreeView;
+describe('VisualView', () => {
+    let view: VisualView;
 
     beforeEach(() => {
         mountPanel('format');
-        view = new TreeView(new Messenger());
+        view = new VisualView(new Messenger());
     });
 
     afterEach(() => {
@@ -90,7 +90,7 @@ describe('TreeView', () => {
         view.setDocument(null);
 
         expect(rows()).toHaveLength(0);
-        expect(document.getElementById('tree-panel')?.hasAttribute('data-empty')).toBe(true);
+        expect(document.getElementById('visual-panel')?.hasAttribute('data-empty')).toBe(true);
     });
 
     describe('folding', () => {
@@ -128,7 +128,7 @@ describe('TreeView', () => {
 
         it('leaves only the root after collapsing everything', () => {
             show(view);
-            document.getElementById('tree-collapse-all')?.click();
+            document.getElementById('visual-collapse-all')?.click();
 
             expect(rows()).toHaveLength(1);
             expect(rows()[0].textContent).toContain('root');
@@ -273,6 +273,111 @@ describe('TreeView', () => {
 
             expect(written).toEqual([]);
         });
+    });
+});
+
+/*
+ * The two shapes draw the same document and read the same fold state, so what
+ * matters is that neither can drift away from the other.
+ */
+describe('VisualView shapes', () => {
+    let view: VisualView;
+
+    const gnodes = () =>
+        Array.from(document.querySelectorAll<SVGGElement>('.graph__node'));
+    const gnodeFor = (text: string) =>
+        gnodes().find(node => node.textContent?.includes(text)) as SVGGElement;
+    const panel = () => document.getElementById('visual-panel') as HTMLElement;
+
+    beforeEach(() => {
+        mountPanel('format');
+        view = new VisualView(new Messenger());
+        show(view);
+    });
+
+    afterEach(() => {
+        view.dispose();
+    });
+
+    it('starts as a tree', () => {
+        expect(view.currentShape).toBe('tree');
+        expect(panel().dataset.shape).toBe('tree');
+    });
+
+    it('draws a box per node and a link per parent when switched to graph', () => {
+        view.setShape('graph');
+
+        expect(panel().dataset.shape).toBe('graph');
+        expect(gnodes()).toHaveLength(rows().length);
+        expect(document.querySelectorAll('.graph__edge')).toHaveLength(rows().length - 1);
+    });
+
+    it('gives a container a twisty and a leaf none', () => {
+        view.setShape('graph');
+
+        const tagsLine = gnodeFor('tags').dataset.graphLine;
+        const nameLine = gnodeFor('JSONBro').dataset.graphLine;
+
+        expect(document.querySelector(`[data-graph-toggle="${tagsLine}"]`)).not.toBeNull();
+        expect(document.querySelector(`[data-graph-toggle="${nameLine}"]`)).toBeNull();
+    });
+
+    it('folds from the graph, and the tree agrees', () => {
+        view.setShape('graph');
+        const line = gnodeFor('tags').dataset.graphLine;
+
+        document
+            .querySelector(`[data-graph-toggle="${line}"]`)
+            ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        expect(gnodes().some(node => node.textContent?.includes('"fast"'))).toBe(false);
+
+        view.setShape('tree');
+        expect(texts().some(text => text.includes('"fast"'))).toBe(false);
+    });
+
+    it('folds from the tree, and the graph agrees', () => {
+        rowFor('author').querySelector<HTMLElement>('.tree-row__twisty')?.click();
+        view.setShape('graph');
+
+        expect(gnodes().some(node => node.textContent?.includes('first'))).toBe(false);
+    });
+
+    it('selects from the graph, and the tree and breadcrumb agree', () => {
+        view.setShape('graph');
+        gnodeFor('first').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        expect(breadcrumb()).toBe('root›author›first');
+        expect(document.querySelector('.graph__node.is-selected')).not.toBeNull();
+
+        view.setShape('tree');
+        expect(selected()?.textContent).toContain('first');
+    });
+
+    it('copies from whichever shape is showing', () => {
+        const written: string[] = [];
+        Object.defineProperty(navigator, 'clipboard', {
+            value: {
+                writeText: (text: string) => {
+                    written.push(text);
+                    return Promise.resolve();
+                }
+            },
+            configurable: true
+        });
+
+        view.setShape('graph');
+        gnodeFor('first').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        view.copyPath();
+
+        expect(written).toEqual(['$.author.first']);
+    });
+
+    it('shows nothing at all once the document goes away', () => {
+        view.setShape('graph');
+        view.setDocument(null);
+
+        expect(gnodes()).toHaveLength(0);
     });
 });
 

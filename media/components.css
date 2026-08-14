@@ -7,8 +7,8 @@
  * shows. Elements belonging to one mode carry data-mode-only, so adding a mode
  * is one more pair of rules rather than a rule per pair of modes.
  *
- * Format and tree share a container: the tree sits beside the same input box
- * the formatted output does, so pasting and exploring are not in different
+ * Format and Visual share a container: the picture sits beside the same input
+ * box the formatted output does, so pasting and exploring are not in different
  * tabs.
  */
 body[data-mode='diff'] #format-container,
@@ -17,7 +17,7 @@ body:not([data-mode='diff']) #diff-container {
 }
 
 body:not([data-mode='format']) [data-mode-only='format'],
-body:not([data-mode='tree']) [data-mode-only='tree'],
+body:not([data-mode='visual']) [data-mode-only='visual'],
 body:not([data-mode='diff']) [data-mode-only='diff'] {
     display: none;
 }

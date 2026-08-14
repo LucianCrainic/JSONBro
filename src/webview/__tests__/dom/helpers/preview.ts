@@ -156,7 +156,7 @@ export function buildPreview(mode: 'format' | 'diff', theme: string, seed: strin
 
     html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '');
 
-    const styles = ['tokens.css', 'base.css', 'components.css', 'format.css', 'diff.css', 'tree.css']
+    const styles = ['tokens.css', 'base.css', 'components.css', 'format.css', 'diff.css', 'visual.css']
         .map(name => fs.readFileSync(path.join(ROOT, 'media', name), 'utf8'))
         .join('\n');
 
