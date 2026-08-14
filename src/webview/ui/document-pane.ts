@@ -11,7 +11,7 @@
  * answers questions about what is on screen; deciding what to show is the
  * caller's business.
  */
-import { FoldState } from '../engine/line-index';
+import { FoldState, type FoldStateOptions } from '../engine/line-index';
 import { JSONFormatter } from '../formatter';
 import { delegate } from './dom';
 import { VirtualList } from './virtual-list';
@@ -24,6 +24,15 @@ export interface LineMark {
     current?: boolean;
 }
 
+/** What the pane knows about a row while rendering it. */
+export interface RowContext {
+    line: number;
+    foldable: boolean;
+    collapsed: boolean;
+    selected: boolean;
+    marks?: LineMark[];
+}
+
 export interface DocumentPaneOptions {
     /** The scrolling element the rows are rendered into. */
     viewport: HTMLElement;
@@ -33,6 +42,13 @@ export interface DocumentPaneOptions {
     marksOn?: (line: number) => LineMark[] | undefined;
     /** Called after the user folds or unfolds something. */
     onFoldChange?: () => void;
+    /**
+     * Markup for one row. Defaults to a line of formatted JSON; the tree view
+     * supplies its own so it can render the same document as nodes.
+     */
+    renderRow?: (context: RowContext) => string;
+    /** Lines the fold state should never show, e.g. closing brackets. */
+    alwaysHidden?: FoldStateOptions['alwaysHidden'];
 }
 
 export class DocumentPane {
@@ -52,7 +68,9 @@ export class DocumentPane {
         // Delegated, so it survives every re-render of the viewport -- the
         // window's markup is replaced wholesale on each scroll.
         this.teardown.push(
-            delegate(options.viewport, 'click', '.fold-arrow', (arrow, event) => {
+            // Matched on the attribute rather than a class, so the text view's
+            // fold arrow and the tree's twisty are the same control here.
+            delegate(options.viewport, 'click', '[data-fold-line]', (arrow, event) => {
                 event.stopPropagation();
                 const line = Number(arrow.dataset.foldLine);
                 if (Number.isInteger(line)) {
@@ -77,7 +95,9 @@ export class DocumentPane {
     /** Replaces what the pane shows. Passing null empties it. */
     public setDocument(doc: PrettyDocument | null): void {
         this.doc = doc;
-        this.folds = doc ? new FoldState(doc.lines) : null;
+        this.folds = doc
+            ? new FoldState(doc.lines, { alwaysHidden: this.options.alwaysHidden })
+            : null;
         this.highlighted = -1;
         this.ensureList().refresh();
     }
@@ -133,10 +153,8 @@ export class DocumentPane {
             return;
         }
 
-        let hiding = this.folds.foldHiding(line);
-        while (hiding !== -1) {
-            this.folds.toggle(hiding);
-            hiding = this.folds.foldHiding(line);
+        if (this.openFoldsHiding(line)) {
+            this.refresh();
         }
 
         const row = this.folds.rowAt(line);
@@ -145,17 +163,65 @@ export class DocumentPane {
         }
     }
 
-    /** Marks a line as the selected one and brings it into view. */
+    /**
+     * Opens every fold hiding a line. Reports whether anything changed.
+     *
+     * Folds nest, so opening the innermost one can reveal that another still
+     * hides the line; this repeats until nothing does.
+     */
+    private openFoldsHiding(line: number): boolean {
+        let opened = false;
+        let hiding = this.folds?.foldHiding(line) ?? -1;
+        while (hiding !== -1) {
+            this.folds?.toggle(hiding);
+            opened = true;
+            hiding = this.folds?.foldHiding(line) ?? -1;
+        }
+        return opened;
+    }
+
+    /**
+     * Marks a line as the selected one and brings it into view.
+     *
+     * The two affected rows are repainted rather than the whole window being
+     * rebuilt. Rebuilding replaces the element the click came from, which left
+     * any delegated handler running after this one -- the fold twisty, say --
+     * looking at a node no longer in the document, and silently doing nothing.
+     */
     public selectLine(line: number): void {
+        const previous = this.highlighted;
         this.highlighted = line;
-        this.revealLine(line);
-        this.refresh();
+
+        if (this.openFoldsHiding(line)) {
+            this.refresh();
+        } else {
+            this.repaintSelection(previous, line);
+        }
+
+        const row = this.folds?.rowAt(line) ?? -1;
+        if (row >= 0) {
+            this.list?.revealRow(row);
+        }
     }
 
     public clearSelection(): void {
         if (this.highlighted !== -1) {
+            const previous = this.highlighted;
             this.highlighted = -1;
-            this.refresh();
+            this.repaintSelection(previous, -1);
+        }
+    }
+
+    /** Moves the selected styling between two rows without re-rendering. */
+    private repaintSelection(from: number, to: number): void {
+        for (const [line, selected] of [
+            [from, false],
+            [to, true]
+        ] as const) {
+            const row = line >= 0 ? (this.folds?.rowAt(line) ?? -1) : -1;
+            if (row >= 0) {
+                this.list?.elementFor(row)?.classList.toggle('is-selected', selected);
+            }
         }
     }
 
@@ -194,18 +260,28 @@ export class DocumentPane {
                 break;
             }
 
+            const context: RowContext = {
+                line,
+                foldable: doc.lines.isFoldable(line),
+                collapsed: folds.isCollapsed(line),
+                selected: line === this.highlighted,
+                marks: this.options.marksOn?.(line)
+            };
+
             out.push(
-                JSONFormatter.renderLine(
-                    doc.text.slice(doc.lines.start(line), doc.lines.end(line, total)),
-                    {
-                        lineNumber: line + 1,
-                        foldable: doc.lines.isFoldable(line),
-                        collapsed: folds.isCollapsed(line),
-                        showLineNumbers,
-                        highlighted: line === this.highlighted,
-                        matches: this.options.marksOn?.(line)
-                    }
-                )
+                this.options.renderRow
+                    ? this.options.renderRow(context)
+                    : JSONFormatter.renderLine(
+                          doc.text.slice(doc.lines.start(line), doc.lines.end(line, total)),
+                          {
+                              lineNumber: line + 1,
+                              foldable: context.foldable,
+                              collapsed: context.collapsed,
+                              showLineNumbers,
+                              highlighted: context.selected,
+                              matches: context.marks
+                          }
+                      )
             );
         }
 

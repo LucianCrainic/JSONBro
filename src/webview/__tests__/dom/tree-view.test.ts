@@ -1,0 +1,296 @@
+/**
+ * The tree view.
+ *
+ * It parses nothing of its own -- it renders the document the format view
+ * produced -- so these drive it through the shell the way a user would.
+ */
+import { Messenger } from '../../ui/messaging';
+import { PrettySink } from '../../engine/pretty-sink';
+import { parseInto } from '../../engine/recovering-parser';
+import { formatPath, TreeView } from '../../views/tree-view';
+import { mountPanel } from './helpers/fixture';
+
+const SAMPLE = JSON.stringify({
+    name: 'JSONBro',
+    count: 2,
+    tags: ['fast', 'safe'],
+    author: { first: 'Ada', roles: ['admin'] },
+    empty: {}
+});
+
+function show(view: TreeView, json = SAMPLE): void {
+    const { value, diagnostics } = parseInto(json, new PrettySink({ indent: 2 }));
+    view.setDocument(value, diagnostics);
+}
+
+const rows = () => Array.from(document.querySelectorAll<HTMLElement>('.tree-row'));
+const texts = () => rows().map(row => row.textContent ?? '');
+const rowFor = (start: string) => rows().find(row => row.textContent?.startsWith(start)) as HTMLElement;
+/** An array element has no key, so its row text starts with the type badge. */
+const rowWith = (text: string) =>
+    rows().find(row => row.textContent?.includes(text)) as HTMLElement;
+const selected = () => document.querySelector<HTMLElement>('.tree-row.is-selected');
+const breadcrumb = () => document.getElementById('tree-breadcrumb')?.textContent ?? '';
+
+describe('TreeView', () => {
+    let view: TreeView;
+
+    beforeEach(() => {
+        mountPanel('format');
+        view = new TreeView(new Messenger());
+    });
+
+    afterEach(() => {
+        view.dispose();
+    });
+
+    it('renders one row per node and none for a closing bracket', () => {
+        show(view);
+
+        // 8 objects/scalars at the top plus 2 tags, 2 author members, 1 role.
+        expect(texts()).toEqual([
+            expect.stringContaining('root'),
+            expect.stringContaining('name'),
+            expect.stringContaining('count'),
+            expect.stringContaining('tags'),
+            expect.stringContaining('"fast"'),
+            expect.stringContaining('"safe"'),
+            expect.stringContaining('author'),
+            expect.stringContaining('first'),
+            expect.stringContaining('roles'),
+            expect.stringContaining('"admin"'),
+            expect.stringContaining('empty')
+        ]);
+        expect(texts().some(text => text.trim() === '}')).toBe(false);
+    });
+
+    it('summarises a container rather than dumping it', () => {
+        show(view);
+
+        expect(rowFor('tags').textContent).toContain('2 items');
+        expect(rowFor('author').textContent).toContain('2 properties');
+    });
+
+    it('gives every node a type badge', () => {
+        show(view);
+
+        expect(document.querySelectorAll('.tree-row__badge--string').length).toBeGreaterThan(0);
+        expect(document.querySelectorAll('.tree-row__badge--number')).toHaveLength(1);
+    });
+
+    it('draws one guide rail per level of depth', () => {
+        show(view);
+
+        expect(rowFor('name').querySelectorAll('.tree-row__indent i')).toHaveLength(1);
+        expect(rowFor('first').querySelectorAll('.tree-row__indent i')).toHaveLength(2);
+    });
+
+    it('empties when the document goes away', () => {
+        show(view);
+        view.setDocument(null);
+
+        expect(rows()).toHaveLength(0);
+        expect(document.getElementById('tree-panel')?.hasAttribute('data-empty')).toBe(true);
+    });
+
+    describe('folding', () => {
+        it('collapses a container from its twisty', () => {
+            show(view);
+            rowFor('author').querySelector<HTMLElement>('.tree-row__twisty')?.click();
+
+            expect(texts().some(text => text.startsWith('first'))).toBe(false);
+            expect(rowFor('author')).toBeTruthy();
+        });
+
+        /*
+         * Selecting used to rebuild the whole viewport, which replaced the
+         * element the click came from -- so the fold handler that ran next
+         * looked at a detached node and did nothing at all.
+         */
+        it('still folds when the click also selects the row', () => {
+            show(view);
+            const before = rows().length;
+            rowFor('tags').querySelector<HTMLElement>('.tree-row__twisty')?.click();
+
+            expect(rows().length).toBe(before - 2);
+            expect(selected()?.textContent).toContain('tags');
+        });
+
+        it('reopens what it closed', () => {
+            show(view);
+            const before = rows().length;
+
+            rowFor('tags').querySelector<HTMLElement>('.tree-row__twisty')?.click();
+            rowFor('tags').querySelector<HTMLElement>('.tree-row__twisty')?.click();
+
+            expect(rows()).toHaveLength(before);
+        });
+
+        it('leaves only the root after collapsing everything', () => {
+            show(view);
+            document.getElementById('tree-collapse-all')?.click();
+
+            expect(rows()).toHaveLength(1);
+            expect(rows()[0].textContent).toContain('root');
+        });
+
+        it('opens to a given depth and no further', () => {
+            show(view);
+            view.expandToDepth(2);
+
+            // `author` is open, but `roles` inside it is not.
+            expect(texts().some(text => text.startsWith('first'))).toBe(true);
+            expect(texts().some(text => text.includes('"admin"'))).toBe(false);
+        });
+    });
+
+    describe('selection', () => {
+        it('marks the clicked node and shows its path', () => {
+            show(view);
+            rowFor('first').click();
+
+            expect(selected()?.textContent).toContain('first');
+            expect(breadcrumb()).toBe('root›author›first');
+        });
+
+        it('moves the mark rather than adding another', () => {
+            show(view);
+            rowFor('first').click();
+            rowFor('name').click();
+
+            expect(document.querySelectorAll('.tree-row.is-selected')).toHaveLength(1);
+        });
+
+        it('numbers an array element in the breadcrumb', () => {
+            show(view);
+            rowWith('"safe"').click();
+
+            expect(breadcrumb()).toBe('root›tags›1');
+        });
+
+        it('steps down and up', () => {
+            show(view);
+            view.step(1);
+            expect(selected()?.textContent).toContain('root');
+
+            view.step(1);
+            expect(selected()?.textContent).toContain('name');
+
+            view.step(-1);
+            expect(selected()?.textContent).toContain('root');
+        });
+
+        it('stops at the ends rather than wrapping', () => {
+            show(view);
+            view.step(-1);
+            view.step(-1);
+
+            expect(selected()?.textContent).toContain('root');
+        });
+
+        it('closes an open node, then steps out to its parent', () => {
+            show(view);
+            rowFor('roles').click();
+
+            view.stepAcross(-1);
+            expect(texts().some(text => text.includes('"admin"'))).toBe(false);
+
+            view.stepAcross(-1);
+            expect(selected()?.textContent).toContain('author');
+        });
+
+        it('opens a closed node, then steps into it', () => {
+            show(view);
+            rowFor('tags').querySelector<HTMLElement>('.tree-row__twisty')?.click();
+
+            view.stepAcross(1);
+            expect(texts().some(text => text.includes('"fast"'))).toBe(true);
+
+            view.stepAcross(1);
+            expect(selected()?.textContent).toContain('"fast"');
+        });
+
+        it('does nothing sideways on a leaf', () => {
+            show(view);
+            rowFor('name').click();
+            view.stepAcross(1);
+
+            expect(selected()?.textContent).toContain('name');
+        });
+    });
+
+    describe('copying', () => {
+        let written: string[];
+
+        beforeEach(() => {
+            written = [];
+            Object.defineProperty(navigator, 'clipboard', {
+                value: {
+                    writeText: (text: string) => {
+                        written.push(text);
+                        return Promise.resolve();
+                    }
+                },
+                configurable: true
+            });
+        });
+
+        it('copies the path of the selected node', () => {
+            show(view);
+            rowFor('first').click();
+            view.copyPath();
+
+            expect(written).toEqual(['$.author.first']);
+        });
+
+        it('copies a scalar value as written', () => {
+            show(view);
+            rowFor('name').click();
+            view.copyValue();
+
+            expect(written).toEqual(['"JSONBro"']);
+        });
+
+        it('copies a container value as valid JSON', () => {
+            show(view);
+            rowFor('tags').click();
+            view.copyValue();
+
+            expect(JSON.parse(written[0])).toEqual(['fast', 'safe']);
+        });
+
+        it('copies a subtree with its property name', () => {
+            show(view);
+            rowFor('tags').click();
+            view.copySubtree();
+
+            expect(written[0]).toBe('"tags": [\n  "fast",\n  "safe"\n]');
+        });
+
+        it('copies nothing when no node is selected', () => {
+            show(view);
+            view.copyPath();
+
+            expect(written).toEqual([]);
+        });
+    });
+});
+
+describe('formatPath', () => {
+    it('uses dots for names that need no quoting', () => {
+        expect(formatPath(['author', 'first'])).toBe('$.author.first');
+    });
+
+    it('uses brackets for array positions', () => {
+        expect(formatPath(['rows', '3', 'id'])).toBe('$.rows[3].id');
+    });
+
+    it('quotes a name that is not an identifier', () => {
+        expect(formatPath(['a b'])).toBe('$["a b"]');
+        expect(formatPath(['with.dot'])).toBe('$["with.dot"]');
+    });
+
+    it('describes the root as itself', () => {
+        expect(formatPath([])).toBe('$');
+    });
+});

@@ -53,6 +53,17 @@ export class FormatView {
     /** Notifies the shell that the status model changed. */
     public onStatusChange: (status: StatusModel) => void = () => undefined;
 
+    /**
+     * Notifies the shell that a new document has been formatted.
+     *
+     * The tree view renders the same document, so it is handed the result
+     * rather than parsing the input a second time.
+     */
+    public onDocumentChange: (
+        doc: PrettyDocument | null,
+        diagnostics: readonly Diagnostic[]
+    ) => void = () => undefined;
+
     constructor(messenger: Messenger) {
         this.messenger = messenger;
         this.worker = new DocumentWorkerClient(document.body.dataset.workerSrc ?? null);
@@ -174,7 +185,9 @@ export class FormatView {
             this.splitter = new Splitter({ handle, before, after });
             this.panels = new PanelGroup({
                 container,
-                panelIds: ['input-panel', 'output-panel'],
+                // The tree shares this container and this sash, so it takes
+                // part in maximising alongside the formatted output.
+                panelIds: ['input-panel', 'output-panel', 'tree-panel'],
                 collapsible: handle,
                 // A maximized pane owns the full width, so any splitter sizing
                 // is stale; drop it so restoring returns to the CSS default.
@@ -317,6 +330,7 @@ export class FormatView {
         this.problems.show(outcome.diagnostics);
         this.publishStatus(this.describeDocument(sourceLength, outcome.diagnostics));
         this.find.refresh();
+        this.onDocumentChange(outcome.doc, outcome.diagnostics);
     }
 
     private reportProgress(stage: string, bytes: number, token: number): void {
@@ -361,6 +375,7 @@ export class FormatView {
 
     private reset(): void {
         this.pane?.setDocument(null);
+        this.onDocumentChange(null, []);
         this.diagnostics = [];
         this.matches = [];
         this.matchIndex = -1;

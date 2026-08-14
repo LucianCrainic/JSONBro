@@ -6,6 +6,7 @@
  */
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import type { PanelKind } from './shared/messages';
 
 /** Stylesheets, in cascade order. tokens must come first. */
 const STYLESHEETS = [
@@ -13,7 +14,8 @@ const STYLESHEETS = [
     'base.css',
     'components.css',
     'format.css',
-    'diff.css'
+    'diff.css',
+    'tree.css'
 ];
 
 export class WebviewContentGenerator {
@@ -26,7 +28,7 @@ export class WebviewContentGenerator {
     /**
      * Generates the complete HTML content for the webview
      */
-    public getWebviewContent(webview: vscode.Webview, mode: 'format' | 'diff' = 'format'): string {
+    public getWebviewContent(webview: vscode.Webview, mode: PanelKind = 'format'): string {
         const nonce = this.getNonce();
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'main.js')
@@ -85,7 +87,7 @@ export class WebviewContentGenerator {
         return links.join('\n    ');
     }
 
-    private getBodyContent(mode: 'format' | 'diff' = 'format'): string {
+    private getBodyContent(mode: PanelKind = 'format'): string {
         return `
             <div id="toolbar">
                 <div class="toolbar__group">
@@ -96,6 +98,13 @@ export class WebviewContentGenerator {
                             'Format',
                             mode === 'format',
                             'Format and inspect one document'
+                        )}
+                        ${this.modeTab(
+                            'tree-mode',
+                            'list-tree',
+                            'Tree',
+                            false,
+                            'Explore the same document as a collapsible tree'
                         )}
                         ${this.modeTab(
                             'diff-mode',
@@ -157,7 +166,7 @@ export class WebviewContentGenerator {
                     </div>
                 </section>
                 <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
-                <section id="output-panel" class="pane" data-empty="true">
+                <section id="output-panel" class="pane" data-empty="true" data-mode-only="format">
                     ${this.paneHeader('Formatted', [
                         this.iconButton({
                             id: 'line-numbers-toggle',
@@ -218,6 +227,64 @@ export class WebviewContentGenerator {
                                 <dt><kbd data-mod></kbd> <kbd>&#9166;</kbd></dt><dd>Format</dd>
                                 <dt><kbd data-mod></kbd> <kbd>F</kbd></dt><dd>Find</dd>
                                 <dt><kbd data-mod></kbd> <kbd>M</kbd></dt><dd>Switch to Diff</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </section>
+                <section id="tree-panel" class="pane" data-empty data-mode-only="tree">
+                    ${this.paneHeader(
+                        'Tree',
+                        [
+                            this.iconButton({
+                                id: 'tree-expand-depth',
+                                icon: 'list-selection',
+                                label: 'Expand two levels',
+                                title: 'Collapse everything below the second level'
+                            }),
+                            this.iconButton({
+                                id: 'tree-expand-all',
+                                icon: 'expand-all',
+                                label: 'Expand all',
+                                title: 'Expand every node'
+                            }),
+                            this.iconButton({
+                                id: 'tree-collapse-all',
+                                icon: 'collapse-all',
+                                label: 'Collapse all',
+                                title: 'Collapse every node'
+                            }),
+                            this.iconButton({
+                                id: 'tree-copy-path',
+                                icon: 'symbol-key',
+                                label: 'Copy path',
+                                title: 'Copy the path of the selected node'
+                            }),
+                            this.iconButton({
+                                id: 'tree-copy-value',
+                                icon: 'copy',
+                                label: 'Copy value',
+                                title: 'Copy the value of the selected node'
+                            }),
+                            this.iconButton({
+                                id: 'tree-copy-subtree',
+                                icon: 'list-tree',
+                                label: 'Copy subtree',
+                                title: 'Copy the selected node and everything under it'
+                            }),
+                            this.maximizeButton('tree-panel')
+                        ],
+                        'tree-meta'
+                    )}
+                    <div class="pane__body">
+                        <nav id="tree-breadcrumb" class="breadcrumb" aria-label="Selected node"></nav>
+                        <div id="tree-output" class="pane__content" role="tree" tabindex="0"></div>
+                        <div class="empty-state">
+                            <span class="codicon codicon-list-tree empty-state__icon" aria-hidden="true"></span>
+                            <span class="empty-state__title">Paste JSON in the Format tab, then come back</span>
+                            <dl class="empty-state__keys">
+                                <dt><kbd data-mod></kbd> <kbd>&#9166;</kbd></dt><dd>Build the tree</dd>
+                                <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Move between nodes</dd>
+                                <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Collapse and expand</dd>
                             </dl>
                         </div>
                     </div>

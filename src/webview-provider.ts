@@ -9,7 +9,7 @@ import { JSONBroActivityBarProvider } from './activity-bar-provider';
 import { readSettings } from './settings';
 import { resolveSyntaxColors } from './theme/token-colors';
 import { vscodeThemeSource } from './theme/vscode-theme-source';
-import type { DiffSide, HostToWebview, Mode } from './shared/messages';
+import type { DiffSide, HostToWebview, PanelKind } from './shared/messages';
 
 /** The file dialog both the format and the diff paths open. */
 async function pickJsonFile(openLabel: string): Promise<vscode.Uri | undefined> {
@@ -55,7 +55,7 @@ export class WebviewProvider {
     public registerSerializer(): vscode.Disposable {
         const provider = this;
 
-        const register = (mode: Mode, viewType: string) =>
+        const register = (mode: PanelKind, viewType: string) =>
             vscode.window.registerWebviewPanelSerializer(viewType, {
                 async deserializeWebviewPanel(panel: vscode.WebviewPanel): Promise<void> {
                     provider.adopt(mode, panel);
@@ -69,7 +69,7 @@ export class WebviewProvider {
     }
 
     /** Takes over a panel VS Code restored, wiring it up as if new. */
-    private adopt(mode: Mode, panel: vscode.WebviewPanel): void {
+    private adopt(mode: PanelKind, panel: vscode.WebviewPanel): void {
         panel.webview.options = this.webviewOptions();
         this.existingPanels.set(mode, panel);
         this.attach(mode, panel);
@@ -80,7 +80,7 @@ export class WebviewProvider {
     public broadcastSettings(): void {
         const settings = readSettings();
         for (const mode of this.existingPanels.keys()) {
-            this.sendToPanel(mode as Mode, { command: 'settings', settings });
+            this.sendToPanel(mode as PanelKind, { command: 'settings', settings });
         }
         void this.broadcastThemeColors();
     }
@@ -98,7 +98,7 @@ export class WebviewProvider {
             : {};
 
         for (const mode of this.existingPanels.keys()) {
-            this.sendToPanel(mode as Mode, { command: 'themeColors', colors });
+            this.sendToPanel(mode as PanelKind, { command: 'themeColors', colors });
         }
     }
 
@@ -257,7 +257,7 @@ export class WebviewProvider {
      * reports ready. Previously this was a fixed 100ms delay, which dropped the
      * message on a slow load and delayed it needlessly on a fast one.
      */
-    private sendToPanel(mode: 'format' | 'diff', message: HostToWebview): void {
+    private sendToPanel(mode: PanelKind, message: HostToWebview): void {
         const existingPanel = this.existingPanels.get(mode);
 
         if (existingPanel && this.readyPanels.has(mode)) {
@@ -278,7 +278,7 @@ export class WebviewProvider {
     }
 
     /** Delivers anything queued for a panel that has just become ready. */
-    private flushPendingMessages(mode: 'format' | 'diff'): void {
+    private flushPendingMessages(mode: PanelKind): void {
         const panel = this.existingPanels.get(mode);
         const queue = this.pendingMessages.get(mode);
         if (!panel || !queue) {
@@ -293,7 +293,7 @@ export class WebviewProvider {
     /**
      * Shows the webview panel with the specified mode
      */
-    private showPanel(mode: 'format' | 'diff'): void {
+    private showPanel(mode: PanelKind): void {
         const panelId = mode === 'format' ? 'jsonbro.formatJson' : 'jsonbro.diffJson';
         const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
@@ -319,7 +319,7 @@ export class WebviewProvider {
     }
 
     /** Wires the lifecycle and message handling shared by new and restored panels. */
-    private attach(mode: 'format' | 'diff', panel: vscode.WebviewPanel): void {
+    private attach(mode: PanelKind, panel: vscode.WebviewPanel): void {
         // Remove from tracking when disposed
         panel.onDidDispose(() => {
             this.existingPanels.delete(mode);

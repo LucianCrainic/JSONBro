@@ -1,6 +1,6 @@
 import { MAX_PERSISTED_INPUT, MAX_PERSISTED_TOTAL } from '../../state';
 import { mountPanel } from './helpers/fixture';
-import type { Mode, PanelState } from '../../../shared/messages';
+import type { PanelKind, PanelState } from '../../../shared/messages';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
     return document.getElementById(id) as T;
@@ -27,7 +27,7 @@ function installVsCodeApi(initial: PanelState | undefined) {
  * caches its result -- which would otherwise leak the first test's stub into
  * every later one.
  */
-function boot(mode: Mode): void {
+function boot(mode: PanelKind): void {
     jest.isolateModules(() => {
         mountPanel(mode);
         // eslint-disable-next-line @typescript-eslint/no-var-requires
