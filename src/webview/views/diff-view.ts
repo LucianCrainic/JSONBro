@@ -32,6 +32,8 @@ export class DiffView {
     private diffs: DiffResult[] = [];
     private states = new Map<string, DiffState>();
     private strict = false;
+    /** How many repairs the two inputs needed before they could be compared. */
+    private repairs = 0;
     private loadingFromHistory = false;
     private status: StatusModel = {};
 
@@ -185,8 +187,15 @@ export class DiffView {
         }
 
         try {
-            const left = JSONParser.parseFlexible(leftRaw);
-            const right = JSONParser.parseFlexible(rightRaw);
+            const leftParse = JSONParser.parseWithStatus(leftRaw);
+            const rightParse = JSONParser.parseWithStatus(rightRaw);
+            const left = leftParse.parsed;
+            const right = rightParse.parsed;
+
+            // Both sides are repaired before comparing, so say so -- otherwise
+            // a change could be an artefact of a repair rather than a real
+            // difference, with nothing on screen to suggest it.
+            this.repairs = leftParse.diagnostics.length + rightParse.diagnostics.length;
 
             this.states.clear();
             this.setFilter('all');
@@ -256,8 +265,22 @@ export class DiffView {
 
         this.renderFilterChips({ all: this.diffs.length, added, removed, modified });
 
+        const right = [
+            ...(applied > 0 ? [{ text: `${applied} applied`, icon: Icons.apply }] : []),
+            ...(this.repairs > 0
+                ? [
+                      {
+                          text: plural(this.repairs, 'repair'),
+                          icon: Icons.warning,
+                          tone: 'warn' as const,
+                          title: 'The inputs were repaired before comparing.'
+                      }
+                  ]
+                : [])
+        ];
+
         if (this.diffs.length === 0) {
-            return { left: [{ text: 'No differences', icon: Icons.valid, tone: 'ok' }] };
+            return { left: [{ text: 'No differences', icon: Icons.valid, tone: 'ok' }], right };
         }
 
         return {
@@ -267,7 +290,7 @@ export class DiffView {
                 { text: `−${removed}`, tone: 'removed', title: `${removed} removed` },
                 { text: `~${modified}`, tone: 'modified', title: `${modified} modified` }
             ],
-            right: applied > 0 ? [{ text: `${applied} applied`, icon: Icons.apply }] : []
+            right
         };
     }
 

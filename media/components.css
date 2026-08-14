@@ -473,6 +473,117 @@ body.dragging * {
     height: 20px;
 }
 
+/* --------------------------------------------------------------- Problems */
+
+/*
+ * What the parser repaired. Replaces a banner that reported only that
+ * something had been corrected, without saying what or where.
+ */
+
+.problems {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--jb-border);
+    background-color: var(--jb-bg-chrome);
+    font-size: var(--jb-fs-sm);
+    max-height: 40%;
+    display: flex;
+    flex-direction: column;
+}
+
+.problems__summary {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    width: 100%;
+    padding: var(--jb-sp-2) var(--jb-sp-3);
+    background: none;
+    border: none;
+    color: var(--jb-fg);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.problems__summary:hover {
+    background-color: var(--jb-bg-hover);
+}
+
+.problems__chevron {
+    font-size: 14px;
+    color: var(--jb-fg-muted);
+}
+
+.problems__icon {
+    font-size: 14px;
+}
+
+/* The severity of the worst repair colours the icon only, so the panel
+   stays quiet when all it did was tidy up quoting. */
+.problems[data-severity='info'] .problems__icon {
+    color: var(--jb-marker-info);
+}
+
+.problems[data-severity='warning'] .problems__icon {
+    color: var(--jb-marker-warn);
+}
+
+.problems[data-severity='error'] .problems__icon {
+    color: var(--jb-marker-error);
+}
+
+.problems__title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.problems__list {
+    margin: 0;
+    padding: 0 0 var(--jb-sp-2);
+    list-style: none;
+    overflow-y: auto;
+}
+
+.problems__link {
+    display: flex;
+    align-items: baseline;
+    gap: var(--jb-sp-3);
+    width: 100%;
+    padding: var(--jb-sp-1) var(--jb-sp-3) var(--jb-sp-1) var(--jb-sp-6);
+    background: none;
+    border: none;
+    color: var(--jb-fg-muted);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.problems__link:hover {
+    background-color: var(--jb-bg-hover);
+    color: var(--jb-fg);
+}
+
+.problems__where {
+    flex-shrink: 0;
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-xs);
+    color: var(--jb-fg-subtle);
+}
+
+.problems__what {
+    min-width: 0;
+}
+
+.problems__row[data-severity='warning'] .problems__where {
+    color: var(--jb-marker-warn);
+}
+
+.problems__row[data-severity='error'] .problems__where {
+    color: var(--jb-marker-error);
+}
+
 /* ------------------------------------------------------------ Empty state */
 
 .empty-state {

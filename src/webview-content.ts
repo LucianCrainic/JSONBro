@@ -142,11 +142,14 @@ export class WebviewContentGenerator {
                         this.maximizeButton('output-panel')
                     ], 'output-meta')}
                     <div class="pane__body">
-                        <div id="warning-notification" class="notice" role="status" hidden>
-                            <span class="codicon codicon-warning" aria-hidden="true"></span>
-                            <span class="notice__message"></span>
-                            ${this.iconButton({ id: 'dismiss-warning', icon: 'close', label: 'Dismiss', title: 'Dismiss' })}
-                        </div>
+                        <section id="problems" class="problems" role="status" hidden>
+                            <button type="button" id="problems-toggle" class="problems__summary" aria-expanded="false" aria-controls="problems-list">
+                                <span class="codicon codicon-chevron-right problems__chevron" aria-hidden="true"></span>
+                                <span class="codicon problems__icon" aria-hidden="true"></span>
+                                <span id="problems-title" class="problems__title"></span>
+                            </button>
+                            <ol id="problems-list" class="problems__list" hidden></ol>
+                        </section>
                         <div id="find-widget" class="find-widget" role="search" hidden>
                             <div class="find-widget__row">
                                 <div class="find-widget__field">
