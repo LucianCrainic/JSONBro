@@ -8,6 +8,7 @@
  */
 import { delegate, qsa } from './dom';
 import { Icons } from './icons';
+import { setTip } from './tooltip';
 
 export interface PanelGroupOptions {
     /** Element containing the panes; the delegated listener lives here. */
@@ -97,7 +98,7 @@ export class PanelGroup {
             icon?.classList.toggle(`codicon-${Icons.restore}`, isMaximized);
 
             const label = isMaximized ? 'Restore panel' : 'Maximize panel';
-            button.setAttribute('title', label);
+            setTip(button, label);
             button.setAttribute('aria-label', label);
         }
     }

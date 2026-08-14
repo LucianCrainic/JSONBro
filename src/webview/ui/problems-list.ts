@@ -123,7 +123,7 @@ export class ProblemsList {
         list.innerHTML = this.diagnostics
             .map(
                 (diagnostic, index) => `<li class="problems__row" data-severity="${diagnostic.severity}">
-                    <button type="button" class="problems__link" data-problem-index="${index}">
+                    <button type="button" class="problems__link" data-problem-index="${index}" data-tip="Go to line ${diagnostic.line}">
                         <span class="problems__where">Line ${diagnostic.line}:${diagnostic.column}</span>
                         <span class="problems__what">${escapeHtml(diagnostic.message)}</span>
                     </button>
