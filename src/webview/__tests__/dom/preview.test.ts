@@ -60,9 +60,9 @@ describeOrSkip('preview pages', () => {
                 'dark',
                 `
                     document.getElementById('input').value = ${JSON.stringify(big)};
-                    const t0 = performance.now();
+                    window.__t0 = performance.now();
                     document.getElementById('action-btn').click();
-                    window.__formatMs = performance.now() - t0;
+                    window.__clickReturnedMs = performance.now() - window.__t0;
                 `
             )
         );

@@ -71,6 +71,11 @@ export class CommandHandler {
             () => this.clearHistory()
         );
 
+        const openFileCommand = vscode.commands.registerCommand(
+            'jsonbro.openFile',
+            () => this.webviewProvider.openJsonFile()
+        );
+
         context.subscriptions.push(
             formatJsonCommand, 
             diffJsonCommand, 
@@ -81,7 +86,8 @@ export class CommandHandler {
             removeDiffHistoryCommand,
             renameFormatHistoryCommand,
             renameDiffHistoryCommand,
-            clearHistoryCommand
+            clearHistoryCommand,
+            openFileCommand
         );
     }
 

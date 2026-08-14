@@ -31,17 +31,25 @@ export class WebviewContentGenerator {
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'main.js')
         );
+        const workerUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'worker.js')
+        );
 
         const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
         // No 'unsafe-inline': the markup below carries no style attributes, and
         // mode visibility is driven by data-mode on <body> instead.
+        // worker-src and connect-src let the document worker load and read a
+        // file the host has made available. Neither allows blob:, which is why
+        // the worker is a real bundle rather than an inlined script.
         const csp = [
             `default-src 'none'`,
             `style-src ${webview.cspSource}`,
             `font-src ${webview.cspSource}`,
             `img-src ${webview.cspSource} data:`,
-            `script-src 'nonce-${nonce}'`
+            `script-src 'nonce-${nonce}' ${webview.cspSource}`,
+            `worker-src ${webview.cspSource}`,
+            `connect-src ${webview.cspSource}`
         ].join('; ');
 
         return `<!DOCTYPE html>
@@ -53,7 +61,7 @@ export class WebviewContentGenerator {
     <title>${title}</title>
     ${this.getStyleLinks(webview)}
 </head>
-<body data-mode="${mode}">
+<body data-mode="${mode}" data-worker-src="${workerUri}">
     ${this.getBodyContent(mode)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>

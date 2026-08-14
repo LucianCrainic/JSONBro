@@ -19,7 +19,9 @@ export type WebviewToHost =
 export type HostToWebview =
     | { command: 'loadJson'; json: string }
     | { command: 'loadDiff'; leftJson: string; rightJson: string }
-    | { command: 'settings'; settings: Settings };
+    | { command: 'settings'; settings: Settings }
+    /** Format a file the panel's worker should read for itself. */
+    | { command: 'openUrl'; url: string; label: string };
 
 /** The two things the panel can be doing. */
 export type Mode = 'format' | 'diff';

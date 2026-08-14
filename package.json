@@ -29,6 +29,11 @@
         "title": "JSONBro: Diff JSON"
       },
       {
+        "command": "jsonbro.openFile",
+        "title": "JSONBro: Open JSON File",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "jsonbro.openFromActivityBar",
         "title": "Open JSONBro",
         "icon": "$(json)"
@@ -91,6 +96,11 @@
           "command": "jsonbro.openFromActivityBar",
           "when": "view == jsonbro.explorer",
           "group": "navigation"
+        },
+        {
+          "command": "jsonbro.openFile",
+          "when": "view == jsonbro.explorer",
+          "group": "navigation@1"
         },
         {
           "command": "jsonbro.clearHistory",

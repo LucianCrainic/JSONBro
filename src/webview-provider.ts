@@ -21,6 +21,9 @@ export class WebviewProvider {
     /** Messages waiting for a panel that has not signalled ready yet. */
     private pendingMessages: Map<string, HostToWebview[]> = new Map();
 
+    /** A folder a panel must be able to read, set when opening a file from it. */
+    private extraResourceRoot: vscode.Uri | undefined;
+
     constructor(context: vscode.ExtensionContext, activityBarProvider: JSONBroActivityBarProvider) {
         this.context = context;
         this.contentGenerator = new WebviewContentGenerator(context);
@@ -66,13 +69,18 @@ export class WebviewProvider {
     }
 
     private webviewOptions(): vscode.WebviewOptions & vscode.WebviewPanelOptions {
+        const roots = [
+            vscode.Uri.joinPath(this.context.extensionUri, 'out'),
+            vscode.Uri.joinPath(this.context.extensionUri, 'media')
+        ];
+        if (this.extraResourceRoot) {
+            roots.push(this.extraResourceRoot);
+        }
+
         return {
             enableScripts: true,
             retainContextWhenHidden: true,
-            localResourceRoots: [
-                vscode.Uri.joinPath(this.context.extensionUri, 'out'),
-                vscode.Uri.joinPath(this.context.extensionUri, 'media')
-            ]
+            localResourceRoots: roots
         };
     }
 
@@ -100,6 +108,48 @@ export class WebviewProvider {
         } else {
             this.showFormatPanel();
         }
+    }
+
+    /**
+     * Opens a JSON file in the format panel without reading it here.
+     *
+     * The panel's worker streams the file itself from a webview resource URI,
+     * so a very large document never crosses postMessage and never has to fit
+     * in a textarea.
+     */
+    public async openJsonFile(): Promise<void> {
+        const picked = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            openLabel: 'Open in JSONBro',
+            filters: { 'JSON Files': ['json', 'jsonl', 'ndjson', 'txt'], 'All Files': ['*'] }
+        });
+
+        const file = picked?.[0];
+        if (!file) {
+            return;
+        }
+
+        // A file can only be handed to the webview as a URI if its folder is a
+        // permitted resource root, so widen the roots before asking for one.
+        this.extraResourceRoot = vscode.Uri.joinPath(file, '..');
+
+        let panel = this.existingPanels.get('format');
+        if (panel) {
+            panel.webview.options = this.webviewOptions();
+        } else {
+            this.showPanel('format');
+            panel = this.existingPanels.get('format');
+        }
+
+        if (!panel) {
+            return;
+        }
+
+        this.sendToPanel('format', {
+            command: 'openUrl',
+            url: panel.webview.asWebviewUri(file).toString(),
+            label: file.path.split('/').pop() ?? 'file'
+        });
     }
 
     /**

@@ -19,6 +19,7 @@ import { PanelGroup } from '../ui/panels';
 import { ProblemsList } from '../ui/problems-list';
 import { Splitter } from '../ui/splitter';
 import { VirtualList } from '../ui/virtual-list';
+import { DocumentWorkerClient, formatHere } from '../worker/client';
 import { formatBytes, plural, type StatusModel } from '../ui/status-bar';
 import type { Messenger } from '../ui/messaging';
 import type { Settings } from '../../shared/messages';
@@ -41,6 +42,10 @@ export class FormatView {
 
     private loadingFromHistory = false;
     private indentSize = 2;
+    private maxInlineSize = 2 * 1024 * 1024;
+    private readonly worker: DocumentWorkerClient;
+    /** Rejects the result of a format that a newer one has overtaken. */
+    private formatToken = 0;
     private status: StatusModel = {};
 
     private splitter: Splitter | null = null;
@@ -53,6 +58,7 @@ export class FormatView {
 
     constructor(messenger: Messenger) {
         this.messenger = messenger;
+        this.worker = new DocumentWorkerClient(document.body.dataset.workerSrc ?? null);
 
         this.problems = new ProblemsList({
             onReveal: diagnostic => this.revealSourceLine(diagnostic.line)
@@ -251,24 +257,104 @@ export class FormatView {
         // Formatting goes straight from the parse to text, never building a
         // value for the document -- which is what lets a very large file be
         // formatted at all.
-        const { value, diagnostics } = parseInto(input, new PrettySink({ indent: this.indentSize }));
+        const token = ++this.formatToken;
 
-        this.doc = value;
-        this.folds = new FoldState(value.lines);
-        this.diagnostics = diagnostics;
+        if (input.length <= this.maxInlineSize || !this.worker.available) {
+            // Small documents finish in a few milliseconds; going through the
+            // worker would cost more in round trip than it saves.
+            this.present(formatHere(input, this.indentSize), input.length, token);
+            if (!this.loadingFromHistory) {
+                this.messenger.post({ command: 'addFormatHistory', json: input });
+            }
+            return;
+        }
+
+        this.setBusy('Formatting…');
+        this.worker
+            .formatText(input, {
+                indent: this.indentSize,
+                onProgress: (stage, bytes) => this.reportProgress(stage, bytes, token)
+            })
+            .then(outcome => {
+                this.present(outcome, input.length, token);
+                if (!this.loadingFromHistory) {
+                    this.messenger.post({ command: 'addFormatHistory', json: input });
+                }
+            })
+            .catch(error => this.reportFailure(error, token));
+    }
+
+    /**
+     * Formats a file the host has made readable, without its text ever passing
+     * through the input box.
+     */
+    public openUrl(url: string, label: string): void {
+        const token = ++this.formatToken;
+        this.setBusy(`Reading ${label}…`);
+
+        const inputEl = byId<HTMLTextAreaElement>('input');
+        if (inputEl) {
+            inputEl.value = '';
+            inputEl.placeholder = `Showing ${label}`;
+        }
+
+        this.worker
+            .formatUrl(url, {
+                indent: this.indentSize,
+                onProgress: (stage, bytes) => this.reportProgress(stage, bytes, token)
+            })
+            .then(outcome => this.present(outcome, outcome.sourceLength, token))
+            .catch(error => this.reportFailure(error, token));
+    }
+
+    /** Shows a finished format, unless a newer one has started since. */
+    private present(
+        outcome: { doc: PrettyDocument; diagnostics: Diagnostic[] },
+        sourceLength: number,
+        token: number
+    ): void {
+        if (token !== this.formatToken) {
+            return;
+        }
+
+        const output = byId('output');
+        if (!output) {
+            return;
+        }
+
+        this.doc = outcome.doc;
+        this.folds = new FoldState(outcome.doc.lines);
+        this.diagnostics = outcome.diagnostics;
 
         output.classList.remove('is-error');
         output.classList.toggle('hide-line-numbers', !JSONFormatter.getShowLineNumbers());
         this.setEmpty(false);
         this.ensureList().refresh();
 
-        this.problems.show(diagnostics);
-        this.publishStatus(this.describe(input, diagnostics));
+        this.problems.show(outcome.diagnostics);
+        this.publishStatus(this.describeDocument(sourceLength, outcome.diagnostics));
         this.find.refresh();
+    }
 
-        if (!this.loadingFromHistory) {
-            this.messenger.post({ command: 'addFormatHistory', json: input });
+    private reportProgress(stage: string, bytes: number, token: number): void {
+        if (token !== this.formatToken) {
+            return;
         }
+        this.setBusy(`${stage === 'reading' ? 'Reading' : 'Formatting'} ${formatBytes(bytes)}…`);
+    }
+
+    private reportFailure(error: unknown, token: number): void {
+        if (token !== this.formatToken) {
+            return;
+        }
+        const message = error instanceof Error ? error.message : 'Could not format the document';
+        this.publishStatus({
+            left: [{ text: message, icon: Icons.error, tone: 'error' }]
+        });
+    }
+
+    private setBusy(text: string): void {
+        this.publishStatus({ left: [{ text, icon: Icons.sync }] });
     }
 
     // ------------------------------------------------------------- rendering
@@ -333,12 +419,12 @@ export class FormatView {
     }
 
     /** Facts about the formatted document, for the status bar. */
-    private describe(source: string, diagnostics: Diagnostic[]): StatusModel {
+    private describeDocument(sourceLength: number, diagnostics: Diagnostic[]): StatusModel {
         // The line count comes from the index for free. It used to be found by
         // re-serialising the whole document and splitting on newlines, on
         // every format.
         const lines = this.doc?.lines.lineCount ?? 0;
-        const bytes = new Blob([source]).size;
+        const bytes = sourceLength;
         const repairs = diagnostics.filter(diagnostic => diagnostic.severity !== 'info').length;
 
         return {
@@ -400,6 +486,7 @@ export class FormatView {
         this.indentSize = settings.indentSize;
         this.setSplitRatio(settings.defaultPaneRatio);
         this.find.setDefaultScope(settings.searchScope);
+        this.maxInlineSize = settings.maxInlineSize;
 
         if (this.doc) {
             this.format();
@@ -577,6 +664,7 @@ export class FormatView {
         this.find.dispose();
         this.problems.dispose();
         this.list?.dispose();
+        this.worker.dispose();
     }
 }
 
