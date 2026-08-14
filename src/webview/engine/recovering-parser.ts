@@ -9,11 +9,12 @@
  * reader to guess what changed.
  */
 import { Diagnostic, LineMap, hasStructuralRepair } from './diagnostics';
+import { ParseSink, ValueSink } from './parse-sink';
 import { CharSource, Token, Tokenizer } from './tokenizer';
 
-export interface ParseResult {
-    /** The document, repaired as far as necessary. Never undefined. */
-    value: unknown;
+export interface ParseResult<T = unknown> {
+    /** Whatever the sink built. For the default sink, the repaired document. */
+    value: T;
     diagnostics: Diagnostic[];
     /** True when a repair changed the document's shape, not just its spelling. */
     structurallyRepaired: boolean;
@@ -23,8 +24,6 @@ export interface ParseResult {
 
 interface Frame {
     kind: 'array' | 'object';
-    array: unknown[];
-    object: Record<string, unknown>;
     /** The key awaiting a value, for object frames. */
     key: string | null;
     /** Where the container opened, so an unclosed one can point at it. */
@@ -36,25 +35,31 @@ interface Frame {
 type State = 'value' | 'key' | 'separator';
 
 export function parseJson(source: CharSource): ParseResult {
-    return new RecoveringParser(source).parse();
+    return parseInto(source, new ValueSink());
 }
 
-class RecoveringParser {
+/** Parses `source`, reporting structure to `sink` as it goes. */
+export function parseInto<T>(source: CharSource, sink: ParseSink<T>): ParseResult<T> {
+    return new RecoveringParser(source, sink).parse();
+}
+
+class RecoveringParser<T> {
     private readonly tokenizer: Tokenizer;
+    private readonly sink: ParseSink<T>;
     private readonly stack: Frame[] = [];
 
-    private root: unknown = null;
     private rootAssigned = false;
     private state: State = 'value';
 
     /** One token of lookahead, so a decision can decline to consume it. */
     private lookahead: Token | null = null;
 
-    constructor(source: CharSource) {
+    constructor(source: CharSource, sink: ParseSink<T>) {
         this.tokenizer = new Tokenizer(source);
+        this.sink = sink;
     }
 
-    public parse(): ParseResult {
+    public parse(): ParseResult<T> {
         const first = this.peek();
 
         if (first.kind === 'eof') {
@@ -64,29 +69,22 @@ class RecoveringParser {
                 'The document is empty; read it as null.',
                 first.start
             );
-            return this.finish(null);
+            this.sink.scalar(null);
+            return this.finish();
         }
 
         this.run();
+        return this.finish();
+    }
 
+    private finish(): ParseResult<T> {
         const diagnostics = [...this.tokenizer.getDiagnostics()];
         // Reported in the order the scanner met them, which is the order a
         // reader scrolling the document will meet them too.
         diagnostics.sort((a, b) => a.offset - b.offset);
 
         return {
-            value: this.root,
-            diagnostics,
-            structurallyRepaired: hasStructuralRepair(diagnostics),
-            lines: this.tokenizer.lines
-        };
-    }
-
-    private finish(value: unknown): ParseResult {
-        const diagnostics = [...this.tokenizer.getDiagnostics()];
-        diagnostics.sort((a, b) => a.offset - b.offset);
-        return {
-            value,
+            value: this.sink.finish(),
             diagnostics,
             structurallyRepaired: hasStructuralRepair(diagnostics),
             lines: this.tokenizer.lines
@@ -176,7 +174,7 @@ class RecoveringParser {
                         token.end - token.start
                     );
                 }
-                this.attach(token.value ?? null);
+                this.attach(token.value === undefined ? null : token.value);
                 this.state = 'separator';
                 return;
 
@@ -239,6 +237,7 @@ class RecoveringParser {
                     }
                     frame.seenKeys?.add(key);
                     frame.key = key;
+                    this.sink.key(key);
                 }
 
                 this.expectColon();
@@ -329,14 +328,27 @@ class RecoveringParser {
     }
 
     private push(kind: 'array' | 'object', start: number): void {
+        // The container about to open *is* the value for the pending key, so
+        // the parent is no longer waiting for one. Leaving it set made every
+        // nested container look like a property with a missing value.
+        const parent = this.top;
+        if (parent) {
+            parent.key = null;
+        }
+
         this.stack.push({
             kind,
-            array: [],
-            object: {},
             key: null,
             start,
             seenKeys: kind === 'object' ? new Set<string>() : null
         });
+
+        if (kind === 'object') {
+            this.sink.beginObject();
+        } else {
+            this.sink.beginArray();
+        }
+        this.rootAssigned = true;
     }
 
     /**
@@ -379,11 +391,15 @@ class RecoveringParser {
                 `Property "${frame.key}" had no value; used null.`,
                 token.start
             );
-            frame.object[frame.key] = null;
+            this.sink.scalar(null);
             frame.key = null;
         }
 
-        this.attach(frame.kind === 'array' ? frame.array : frame.object);
+        if (frame.kind === 'array') {
+            this.sink.endArray();
+        } else {
+            this.sink.endObject();
+        }
         this.state = 'separator';
     }
 
@@ -411,11 +427,13 @@ class RecoveringParser {
                 'The document held no value; read it as null.',
                 token.start
             );
+            this.sink.scalar(null);
+            this.rootAssigned = true;
         }
     }
 
-    /** Places a finished value into its parent, or makes it the root. */
-    private attach(value: unknown): void {
+    /** Reports a scalar to the sink, if it belongs anywhere. */
+    private attach(value: string | number | boolean | null): void {
         const frame = this.top;
 
         if (!frame) {
@@ -423,17 +441,12 @@ class RecoveringParser {
                 // A second root-level value; the first one stands.
                 return;
             }
-            this.root = value;
+            this.sink.scalar(value);
             this.rootAssigned = true;
             return;
         }
 
-        if (frame.kind === 'array') {
-            frame.array.push(value);
-            return;
-        }
-
-        if (frame.key === null) {
+        if (frame.kind === 'object' && frame.key === null) {
             // A value where a property name belonged, e.g. `{1, 2}`.
             this.tokenizer.report(
                 'unexpected-token',
@@ -444,7 +457,7 @@ class RecoveringParser {
             return;
         }
 
-        frame.object[frame.key] = value;
+        this.sink.scalar(value);
         frame.key = null;
     }
 }

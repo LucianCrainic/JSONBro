@@ -2,14 +2,23 @@
  * The Format view: input textarea, formatted output, folding and search.
  */
 import type { Diagnostic } from '../engine/diagnostics';
+import {
+    InvalidPatternError,
+    searchDocument,
+    type SearchMatch,
+    type SearchOptions
+} from '../engine/document-search';
+import { FoldState } from '../engine/line-index';
+import { PrettySink, type PrettyDocument } from '../engine/pretty-sink';
+import { parseInto } from '../engine/recovering-parser';
 import { JSONFormatter } from '../formatter';
-import { JSONParser } from '../json-parser';
 import { byId, delegate, on } from '../ui/dom';
 import { FindWidget } from '../ui/find-widget';
 import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
 import { ProblemsList } from '../ui/problems-list';
 import { Splitter } from '../ui/splitter';
+import { VirtualList } from '../ui/virtual-list';
 import { formatBytes, plural, type StatusModel } from '../ui/status-bar';
 import type { Messenger } from '../ui/messaging';
 
@@ -17,8 +26,18 @@ export class FormatView {
     private readonly messenger: Messenger;
     private readonly teardown: Array<() => void> = [];
 
-    private currentJson: unknown = null;
+    /** The formatted document: text plus where its lines are. */
+    private doc: PrettyDocument | null = null;
+    private folds: FoldState | null = null;
+    private list: VirtualList | null = null;
+
     private diagnostics: Diagnostic[] = [];
+    private matches: SearchMatch[] = [];
+    private matchIndex = -1;
+    private matchesTruncated = false;
+    /** Matches grouped by line, so rendering a row is a lookup, not a scan. */
+    private matchesByLine = new Map<number, SearchMatch[]>();
+
     private loadingFromHistory = false;
     private status: StatusModel = {};
 
@@ -34,25 +53,120 @@ export class FormatView {
         this.messenger = messenger;
 
         this.problems = new ProblemsList({
-            onReveal: diagnostic => this.revealLine(diagnostic.line)
+            onReveal: diagnostic => this.revealSourceLine(diagnostic.line)
         });
 
         this.find = new FindWidget({
-            target: () => byId('output'),
             // Opening find used to be a silent no-op until something had been
             // formatted. Format first instead, so the control always responds.
             ensureSearchable: () => {
-                if (this.currentJson === null) {
+                if (this.doc === null) {
                     this.format();
                 }
-                return this.currentJson !== null;
-            }
+                return this.doc !== null;
+            },
+            search: (term, options) => this.runSearch(term, options),
+            next: () => this.stepMatch(1),
+            previous: () => this.stepMatch(-1),
+            clear: () => this.clearMatches(),
+            position: () => ({
+                current: this.matches.length > 0 ? this.matchIndex + 1 : 0,
+                total: this.matches.length,
+                truncated: this.matchesTruncated
+            })
         });
 
         this.setupLayout();
         this.setupControls();
         this.setupCopyInterception();
         this.setupFolding();
+    }
+
+    // ---------------------------------------------------------------- search
+
+    private runSearch(term: string, options: SearchOptions): number {
+        if (!this.doc) {
+            this.clearMatches();
+            return 0;
+        }
+
+        // Propagates InvalidPatternError to the widget, which reports it.
+        const result = searchDocument(this.doc, term, options);
+
+        this.matches = result.matches;
+        this.matchesTruncated = result.truncated;
+        this.matchIndex = result.matches.length > 0 ? 0 : -1;
+        this.indexMatches();
+        this.list?.refresh();
+
+        if (this.matchIndex === 0) {
+            this.revealMatch();
+        }
+        return this.matches.length;
+    }
+
+    private indexMatches(): void {
+        this.matchesByLine = new Map();
+        for (const match of this.matches) {
+            const bucket = this.matchesByLine.get(match.line);
+            if (bucket) {
+                bucket.push(match);
+            } else {
+                this.matchesByLine.set(match.line, [match]);
+            }
+        }
+    }
+
+    private matchesOnLine(
+        line: number
+    ): Array<{ start: number; end: number; current?: boolean }> | undefined {
+        const found = this.matchesByLine.get(line);
+        if (!found) {
+            return undefined;
+        }
+        const current = this.matches[this.matchIndex];
+        return found.map(match => ({
+            start: match.start,
+            end: match.end,
+            current: match === current
+        }));
+    }
+
+    private stepMatch(direction: 1 | -1): void {
+        if (this.matches.length === 0) {
+            return;
+        }
+        this.matchIndex =
+            (this.matchIndex + direction + this.matches.length) % this.matches.length;
+        this.revealMatch();
+        this.list?.refresh();
+    }
+
+    /** Brings the current match into view, opening any fold hiding it. */
+    private revealMatch(): void {
+        const match = this.matches[this.matchIndex];
+        if (!match || !this.folds) {
+            return;
+        }
+
+        let hiding = this.folds.foldHiding(match.line);
+        while (hiding !== -1) {
+            this.folds.toggle(hiding);
+            hiding = this.folds.foldHiding(match.line);
+        }
+
+        const row = this.folds.rowAt(match.line);
+        if (row >= 0) {
+            this.list?.revealRow(row);
+        }
+    }
+
+    private clearMatches(): void {
+        this.matches = [];
+        this.matchesByLine = new Map();
+        this.matchIndex = -1;
+        this.matchesTruncated = false;
+        this.list?.refresh();
     }
 
     // ---------------------------------------------------------------- layout
@@ -108,13 +222,8 @@ export class FormatView {
         toggle?.classList.toggle('is-active', next);
         toggle?.setAttribute('aria-pressed', String(next));
 
-        const output = byId('output');
-        if (output && this.currentJson !== null) {
-            output.innerHTML = JSONFormatter.renderJson(this.currentJson);
-            output.classList.toggle('hide-line-numbers', !next);
-            // The re-render threw away any highlights the find widget had.
-            this.find.refresh();
-        }
+        byId('output')?.classList.toggle('hide-line-numbers', !next);
+        this.list?.refresh();
     }
 
     // ---------------------------------------------------------------- format
@@ -128,11 +237,7 @@ export class FormatView {
 
         const input = inputEl.value.trim();
         if (!input) {
-            this.currentJson = null;
-            this.diagnostics = [];
-            output.innerHTML = '';
-            this.setEmpty(true);
-            this.problems.clear();
+            this.reset();
             this.publishStatus({});
             return;
         }
@@ -140,17 +245,23 @@ export class FormatView {
         // Parsing no longer throws: broken input is repaired as far as it can
         // be and the repairs are reported, so there is always something to
         // show. That is the point -- the tool should fix JSON, not just judge it.
-        const { parsed, diagnostics } = JSONParser.parseWithStatus(input);
-        this.currentJson = parsed;
+        //
+        // Formatting goes straight from the parse to text, never building a
+        // value for the document -- which is what lets a very large file be
+        // formatted at all.
+        const { value, diagnostics } = parseInto(input, new PrettySink());
+
+        this.doc = value;
+        this.folds = new FoldState(value.lines);
         this.diagnostics = diagnostics;
 
         output.classList.remove('is-error');
-        output.innerHTML = JSONFormatter.renderJson(parsed);
         output.classList.toggle('hide-line-numbers', !JSONFormatter.getShowLineNumbers());
         this.setEmpty(false);
+        this.ensureList().refresh();
 
         this.problems.show(diagnostics);
-        this.publishStatus(this.describe(parsed, input, diagnostics));
+        this.publishStatus(this.describe(input, diagnostics));
         this.find.refresh();
 
         if (!this.loadingFromHistory) {
@@ -158,9 +269,73 @@ export class FormatView {
         }
     }
 
+    // ------------------------------------------------------------- rendering
+
+    private ensureList(): VirtualList {
+        const output = byId('output');
+        if (this.list || !output) {
+            return this.list as VirtualList;
+        }
+
+        this.list = new VirtualList({
+            viewport: output,
+            count: () => this.folds?.visibleCount ?? 0,
+            renderRows: (from, to) => this.renderRows(from, to)
+        });
+        return this.list;
+    }
+
+    /** Markup for the rows currently on screen. */
+    private renderRows(from: number, to: number): string {
+        const doc = this.doc;
+        const folds = this.folds;
+        if (!doc || !folds) {
+            return '';
+        }
+
+        const showLineNumbers = JSONFormatter.getShowLineNumbers();
+        const total = doc.text.length;
+        const out: string[] = [];
+
+        for (let row = from; row < to; row++) {
+            const line = folds.lineAt(row);
+            if (line >= doc.lines.lineCount) {
+                break;
+            }
+
+            const text = doc.text.slice(doc.lines.start(line), doc.lines.end(line, total));
+
+            out.push(
+                JSONFormatter.renderLine(text, {
+                    lineNumber: line + 1,
+                    foldable: doc.lines.isFoldable(line),
+                    collapsed: folds.isCollapsed(line),
+                    showLineNumbers,
+                    matches: this.matchesOnLine(line)
+                })
+            );
+        }
+
+        return out.join('');
+    }
+
+    private reset(): void {
+        this.doc = null;
+        this.folds = null;
+        this.diagnostics = [];
+        this.matches = [];
+        this.matchIndex = -1;
+        this.list?.refresh();
+        this.setEmpty(true);
+        this.problems.clear();
+    }
+
     /** Facts about the formatted document, for the status bar. */
-    private describe(parsed: unknown, source: string, diagnostics: Diagnostic[]): StatusModel {
-        const lines = JSON.stringify(parsed, null, 2).split('\n').length;
+    private describe(source: string, diagnostics: Diagnostic[]): StatusModel {
+        // The line count comes from the index for free. It used to be found by
+        // re-serialising the whole document and splitting on newlines, on
+        // every format.
+        const lines = this.doc?.lines.lineCount ?? 0;
         const bytes = new Blob([source]).size;
         const repairs = diagnostics.filter(diagnostic => diagnostic.severity !== 'info').length;
 
@@ -223,27 +398,21 @@ export class FormatView {
 
     public clear(): void {
         const inputEl = byId<HTMLTextAreaElement>('input');
-        const output = byId('output');
         if (inputEl) {
             inputEl.value = '';
         }
-        if (output) {
-            output.innerHTML = '';
-        }
-        this.currentJson = null;
-        this.diagnostics = [];
         this.find.reset();
-        this.problems.clear();
-        this.setEmpty(true);
+        this.reset();
         this.publishStatus({});
     }
 
     public copy(): void {
-        if (this.currentJson === null) {
+        const text = this.serializeForSave();
+        if (text === null) {
             return;
         }
         void navigator.clipboard
-            .writeText(JSON.stringify(this.currentJson, null, 2))
+            .writeText(text)
             .catch(error => console.error('Failed to copy to clipboard:', error));
     }
 
@@ -254,19 +423,17 @@ export class FormatView {
         }
     }
 
+    /**
+     * The formatted document as text.
+     *
+     * Streamed out of the store rather than re-serialised from a value, since
+     * for a large document there is no value to serialise.
+     */
     private serializeForSave(): string | null {
-        if (this.currentJson !== null) {
-            return JSON.stringify(this.currentJson, null, 2);
-        }
-        const text = byId('output')?.textContent?.trim();
-        if (!text) {
+        if (!this.doc) {
             return null;
         }
-        try {
-            return JSON.stringify(JSON.parse(text), null, 2);
-        } catch {
-            return null;
-        }
+        return this.doc.text.toString();
     }
 
     // -------------------------------------------------------------- problems
@@ -277,7 +444,7 @@ export class FormatView {
      * The repair positions refer to the *input*, which is the text the reader
      * would edit, so this scrolls the input rather than the output.
      */
-    private revealLine(line: number): void {
+    private revealSourceLine(line: number): void {
         const input = byId<HTMLTextAreaElement>('input');
         if (!input) {
             return;
@@ -302,68 +469,39 @@ export class FormatView {
         if (!output) {
             return;
         }
-        // Delegated, so it survives every re-render of the output.
+        // Delegated, so it survives every re-render of the viewport.
         this.teardown.push(
             delegate(output, 'click', '.fold-arrow', (arrow, event) => {
                 event.stopPropagation();
-                this.toggleFold(output, arrow);
+                const line = Number(arrow.dataset.foldLine);
+                if (Number.isInteger(line)) {
+                    this.toggleFold(line);
+                }
             })
         );
     }
 
-    private toggleFold(output: HTMLElement, arrow: HTMLElement): void {
-        const foldId = arrow.getAttribute('data-fold-id');
-        if (!foldId) {
-            return;
-        }
-
-        const folding = !arrow.classList.contains('folded');
-        arrow.classList.toggle('folded', folding);
-
-        const lineNumbers = output.querySelector('.json-container .line-numbers');
-        const content = output.querySelectorAll(`.foldable-content[data-fold-id="${foldId}"]`);
-
-        for (const element of content) {
-            element.classList.toggle('hidden', folding);
-
-            if (!lineNumbers) {
-                continue;
-            }
-            // data-line makes this a direct index. Previously each element
-            // searched the whole line list for its own position, which made
-            // folding quadratic in the size of the document.
-            const line = element.closest('.json-line') as HTMLElement | null;
-            const lineNo = Number(line?.dataset.line);
-            const lineNumber = lineNo ? (lineNumbers.children[lineNo - 1] as HTMLElement) : null;
-            if (lineNumber) {
-                lineNumber.style.display = folding ? 'none' : '';
-            }
-        }
-
-        this.updateFoldEllipsis(arrow.closest('.json-line'), folding);
+    /**
+     * Opens or closes the container starting on `line`.
+     *
+     * Folding is a change to the index, not to the output: the rows that
+     * disappear were never rendered in the first place unless they happened to
+     * be on screen. This used to hide every affected element one at a time and
+     * hunt down each of their gutter entries.
+     */
+    private toggleFold(line: number): void {
+        this.folds?.toggle(line);
+        this.list?.refresh();
     }
 
-    private updateFoldEllipsis(line: Element | null, folding: boolean): void {
-        if (!line) {
-            return;
-        }
-        const existing = line.querySelector('.fold-ellipsis');
+    public collapseAll(): void {
+        this.folds?.collapseAll();
+        this.list?.refresh();
+    }
 
-        if (!folding) {
-            existing?.remove();
-            return;
-        }
-        if (existing) {
-            return;
-        }
-
-        const bracket = line.querySelector('.bracket, .brace');
-        if (bracket) {
-            const ellipsis = document.createElement('span');
-            ellipsis.className = 'fold-ellipsis';
-            ellipsis.textContent = ' ...';
-            bracket.after(ellipsis);
-        }
+    public expandAll(): void {
+        this.folds?.expandAll();
+        this.list?.refresh();
     }
 
     // ------------------------------------------------------------------ copy
@@ -380,7 +518,7 @@ export class FormatView {
 
         this.teardown.push(
             on(output, 'copy', event => {
-                if (this.currentJson === null) {
+                if (this.doc === null) {
                     return;
                 }
                 const selection = window.getSelection();
@@ -405,6 +543,7 @@ export class FormatView {
         this.panels?.dispose();
         this.find.dispose();
         this.problems.dispose();
+        this.list?.dispose();
     }
 }
 

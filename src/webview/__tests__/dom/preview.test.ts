@@ -40,4 +40,32 @@ describeOrSkip('preview pages', () => {
         );
         expect(file).toBeTruthy();
     });
+
+    /** Big enough that rendering every row would be plainly unworkable. */
+    it('format view with a large document', () => {
+        const big = JSON.stringify({
+            rows: Array.from({ length: 25_000 }, (_, i) => ({
+                id: i,
+                name: `record ${i}`,
+                email: `user${i}@example.com`,
+                tags: ['alpha', 'beta'],
+                meta: { active: i % 2 === 0, score: i * 3 }
+            }))
+        });
+
+        const file = writePreview(
+            'big-dark',
+            buildPreview(
+                'format',
+                'dark',
+                `
+                    document.getElementById('input').value = ${JSON.stringify(big)};
+                    const t0 = performance.now();
+                    document.getElementById('action-btn').click();
+                    window.__formatMs = performance.now() - t0;
+                `
+            )
+        );
+        expect(file).toBeTruthy();
+    });
 });
