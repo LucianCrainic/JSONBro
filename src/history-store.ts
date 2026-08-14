@@ -4,126 +4,313 @@
  * History used to be a plain array on the tree provider, so every entry a user
  * saved was gone the next time VS Code started -- which made the feature close
  * to pointless. It lives in `globalState` now.
+ *
+ * That move made the size of it matter. Nothing bounded the total: fifty
+ * format entries and fifty diff entries, each holding up to 256 KB per side,
+ * could reach roughly 38 MB of global state, read back in full on every tree
+ * refresh. Nothing de-duplicated either, and the panel posts an entry on every
+ * format, so formatting one document repeatedly filled every slot with copies
+ * of it. Both are fixed here: entries are keyed by content, and the whole store
+ * lives inside a byte budget.
  */
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
 const FORMAT_KEY = 'jsonbro.history.format';
 const DIFF_KEY = 'jsonbro.history.diff';
 
-/** How many entries of each kind are kept. */
-export const HISTORY_LIMIT = 50;
-
 /**
- * The largest document stored whole.
+ * What the store is allowed to keep. Every value is user-configurable.
  *
- * Everything formatted used to be sent to the extension host and kept, so
- * fifty large documents sat in memory and in global state forever. Past this
- * only a preview is kept, and the entry says so rather than pretending to hold
- * something it can no longer reproduce.
+ * `maxTotalSize` is the budget across *both* kinds of entry, not each -- a
+ * per-kind budget would quietly be twice the number it advertised.
  */
-export const MAX_STORED_BYTES = 256 * 1024;
-
-export interface FormatEntry {
-    kind: 'format';
-    json: string;
-    /** Set when the document was too large to keep whole. */
-    truncated?: boolean;
-    /** Full length in characters, whether or not it was kept. */
-    size: number;
-    timestamp: number;
-    name?: string;
+export interface HistoryLimits {
+    maxEntries: number;
+    /** Largest single document stored whole, in bytes. */
+    maxEntrySize: number;
+    /** Ceiling on everything the store holds, in bytes. */
+    maxTotalSize: number;
 }
 
-export interface DiffEntry {
+export const DEFAULT_LIMITS: HistoryLimits = {
+    maxEntries: 50,
+    maxEntrySize: 128 * 1024,
+    maxTotalSize: 5 * 1024 * 1024
+};
+
+interface StoredEntry {
+    /** Bytes this entry occupies in global state. */
+    bytes: number;
+    /** Content digest, so re-saving the same document reuses its slot. */
+    hash: string;
+    /** Full size of the original document in bytes, kept or not. */
+    size: number;
+    timestamp: number;
+    /**
+     * Write order across both lists.
+     *
+     * `timestamp` has millisecond resolution and saving is far quicker than
+     * that, so entries written in the same tick would otherwise be ordered
+     * arbitrarily -- and eviction, which drops the oldest first, would pick
+     * the wrong one.
+     */
+    seq: number;
+    name?: string;
+    /** Set when the document was too large to keep whole. */
+    truncated?: boolean;
+}
+
+export interface FormatEntry extends StoredEntry {
+    kind: 'format';
+    json: string;
+}
+
+export interface DiffEntry extends StoredEntry {
     kind: 'diff';
     leftJson: string;
     rightJson: string;
-    truncated?: boolean;
-    size: number;
-    timestamp: number;
-    name?: string;
 }
 
 export type HistoryEntry = FormatEntry | DiffEntry;
 
+/** What the store currently holds, for showing the user where they stand. */
+export interface HistoryUsage {
+    entries: number;
+    bytes: number;
+    limit: number;
+}
+
 export class HistoryStore {
     private readonly memento: vscode.Memento;
+    private readonly readLimits: () => HistoryLimits;
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, readLimits: () => HistoryLimits = () => DEFAULT_LIMITS) {
         this.memento = context.globalState;
+        this.readLimits = readLimits;
     }
 
     public getFormatHistory(): FormatEntry[] {
-        return this.memento.get<FormatEntry[]>(FORMAT_KEY, []);
+        return this.memento.get<FormatEntry[]>(FORMAT_KEY, []).map(upgradeFormat);
     }
 
     public getDiffHistory(): DiffEntry[] {
-        return this.memento.get<DiffEntry[]>(DIFF_KEY, []);
+        return this.memento.get<DiffEntry[]>(DIFF_KEY, []).map(upgradeDiff);
+    }
+
+    public usage(): HistoryUsage {
+        const formats = this.getFormatHistory();
+        const diffs = this.getDiffHistory();
+        return {
+            entries: formats.length + diffs.length,
+            bytes: [...formats, ...diffs].reduce((sum, entry) => sum + entry.bytes, 0),
+            limit: this.readLimits().maxTotalSize
+        };
     }
 
     public async addFormat(json: string): Promise<void> {
-        const stored = clip(json);
+        const limits = this.readLimits();
+        const stored = clip(json, limits.maxEntrySize);
         const entry: FormatEntry = {
             kind: 'format',
             json: stored.text,
             truncated: stored.truncated,
-            size: json.length,
-            timestamp: Date.now()
+            bytes: stored.bytes,
+            hash: digest(stored.text),
+            size: byteLength(json),
+            timestamp: Date.now(),
+            seq: this.nextSeq()
         };
-        await this.write(FORMAT_KEY, [entry, ...this.getFormatHistory()]);
+
+        await this.commit(promote(this.getFormatHistory(), entry), this.getDiffHistory());
     }
 
     public async addDiff(leftJson: string, rightJson: string): Promise<void> {
-        const left = clip(leftJson);
-        const right = clip(rightJson);
+        const limits = this.readLimits();
+        // Each side gets its own allowance, so one huge side cannot crowd out
+        // the other and leave the entry unusable.
+        const left = clip(leftJson, limits.maxEntrySize);
+        const right = clip(rightJson, limits.maxEntrySize);
         const entry: DiffEntry = {
             kind: 'diff',
             leftJson: left.text,
             rightJson: right.text,
             truncated: left.truncated || right.truncated,
-            size: leftJson.length + rightJson.length,
-            timestamp: Date.now()
+            bytes: left.bytes + right.bytes,
+            hash: digestPair(left.text, right.text),
+            size: byteLength(leftJson) + byteLength(rightJson),
+            timestamp: Date.now(),
+            seq: this.nextSeq()
         };
-        await this.write(DIFF_KEY, [entry, ...this.getDiffHistory()]);
+
+        await this.commit(this.getFormatHistory(), promote(this.getDiffHistory(), entry));
     }
 
-    public async removeFormat(index: number): Promise<void> {
-        await this.write(FORMAT_KEY, without(this.getFormatHistory(), index));
+    public async removeFormats(indices: number[]): Promise<void> {
+        await this.commit(without(this.getFormatHistory(), indices), this.getDiffHistory());
     }
 
-    public async removeDiff(index: number): Promise<void> {
-        await this.write(DIFF_KEY, without(this.getDiffHistory(), index));
+    public async removeDiffs(indices: number[]): Promise<void> {
+        await this.commit(this.getFormatHistory(), without(this.getDiffHistory(), indices));
     }
 
     public async renameFormat(index: number, name: string): Promise<void> {
-        await this.write(FORMAT_KEY, renamed(this.getFormatHistory(), index, name));
+        await this.commit(renamed(this.getFormatHistory(), index, name), this.getDiffHistory());
     }
 
     public async renameDiff(index: number, name: string): Promise<void> {
-        await this.write(DIFF_KEY, renamed(this.getDiffHistory(), index, name));
+        await this.commit(this.getFormatHistory(), renamed(this.getDiffHistory(), index, name));
     }
 
-    public async clear(): Promise<void> {
+    public async clearFormats(): Promise<void> {
         await this.memento.update(FORMAT_KEY, []);
+    }
+
+    public async clearDiffs(): Promise<void> {
         await this.memento.update(DIFF_KEY, []);
     }
 
-    private async write<T>(key: string, entries: T[]): Promise<void> {
-        await this.memento.update(key, entries.slice(0, HISTORY_LIMIT));
+    public async clear(): Promise<void> {
+        await this.clearFormats();
+        await this.clearDiffs();
+    }
+
+    /** The next write order number, across both lists. */
+    private nextSeq(): number {
+        const seen = [...this.getFormatHistory(), ...this.getDiffHistory()].map(
+            entry => entry.seq
+        );
+        return Math.max(0, ...seen) + 1;
+    }
+
+    /** Writes both lists back, having brought them inside the budget. */
+    private async commit(formats: FormatEntry[], diffs: DiffEntry[]): Promise<void> {
+        const trimmed = applyBudget(formats, diffs, this.readLimits());
+        await this.memento.update(FORMAT_KEY, trimmed.formats);
+        await this.memento.update(DIFF_KEY, trimmed.diffs);
     }
 }
 
-function clip(text: string): { text: string; truncated: boolean } {
-    return text.length > MAX_STORED_BYTES
-        ? { text: text.slice(0, MAX_STORED_BYTES), truncated: true }
-        : { text, truncated: false };
+/**
+ * Puts an entry at the top, replacing any earlier copy of the same document.
+ *
+ * Keeping the older entry's name matters: a user who took the trouble to
+ * name something should not lose the name by formatting it again.
+ */
+function promote<T extends StoredEntry>(entries: T[], entry: T): T[] {
+    const previous = entries.find(existing => existing.hash === entry.hash);
+    const rest = entries.filter(existing => existing.hash !== entry.hash);
+    return [previous?.name ? { ...entry, name: previous.name } : entry, ...rest];
 }
 
-function without<T>(entries: T[], index: number): T[] {
-    if (index < 0 || index >= entries.length) {
-        return entries;
+/**
+ * Drops whatever does not fit, oldest first.
+ *
+ * Both lists are considered together against one budget, so a run of large
+ * diffs evicts old format entries rather than each kind quietly getting the
+ * full allowance to itself.
+ */
+export function applyBudget(
+    formats: FormatEntry[],
+    diffs: DiffEntry[],
+    limits: HistoryLimits
+): { formats: FormatEntry[]; diffs: DiffEntry[] } {
+    const capped = {
+        formats: formats.slice(0, limits.maxEntries),
+        diffs: diffs.slice(0, limits.maxEntries)
+    };
+
+    const ordered = [
+        ...capped.formats.map((entry, index) => ({ list: 'formats' as const, index, entry })),
+        ...capped.diffs.map((entry, index) => ({ list: 'diffs' as const, index, entry }))
+    ].sort((a, b) => b.entry.seq - a.entry.seq || b.entry.timestamp - a.entry.timestamp);
+
+    const keep = new Set<string>();
+    let total = 0;
+
+    for (const item of ordered) {
+        // The newest entry is always kept, even alone over budget: refusing to
+        // remember what the user just did would be the more surprising failure.
+        if (keep.size > 0 && total + item.entry.bytes > limits.maxTotalSize) {
+            break;
+        }
+        total += item.entry.bytes;
+        keep.add(`${item.list}:${item.index}`);
     }
-    return [...entries.slice(0, index), ...entries.slice(index + 1)];
+
+    return {
+        formats: capped.formats.filter((_, index) => keep.has(`formats:${index}`)),
+        diffs: capped.diffs.filter((_, index) => keep.has(`diffs:${index}`))
+    };
+}
+
+/**
+ * Cuts a document down to a byte budget.
+ *
+ * The old version compared `text.length` -- UTF-16 code units -- against a
+ * constant named in bytes, so anything non-ASCII was measured short. Cutting
+ * the buffer can land mid-character, which decodes to a replacement character;
+ * those are trimmed rather than stored.
+ */
+function clip(
+    text: string,
+    maxBytes: number
+): { text: string; truncated: boolean; bytes: number } {
+    const buffer = Buffer.from(text, 'utf8');
+    if (buffer.length <= maxBytes) {
+        return { text, truncated: false, bytes: buffer.length };
+    }
+
+    const kept = buffer.subarray(0, maxBytes).toString('utf8').replace(/�+$/, '');
+    return { text: kept, truncated: true, bytes: byteLength(kept) };
+}
+
+function byteLength(text: string): number {
+    return Buffer.byteLength(text, 'utf8');
+}
+
+function digest(text: string): string {
+    return crypto.createHash('sha1').update(text, 'utf8').digest('hex');
+}
+
+/**
+ * Digest of two documents as a pair.
+ *
+ * Length-prefixed rather than joined by a separator, so that ("a b", "c") and
+ * ("a", "b c") cannot hash alike and be de-duplicated into one entry.
+ */
+function digestPair(left: string, right: string): string {
+    return digest(`${left.length}:${left}${right}`);
+}
+
+/**
+ * Entries written before `bytes` and `hash` existed, as they come back out of
+ * global state.
+ */
+type Legacy<T> = Omit<T, 'bytes' | 'hash' | 'seq'> &
+    Partial<Pick<StoredEntry, 'bytes' | 'hash' | 'seq'>>;
+
+/** Fills in fields added after an entry was written. */
+function upgradeFormat(entry: Legacy<FormatEntry>): FormatEntry {
+    return entry.hash !== undefined && entry.bytes !== undefined
+        ? (entry as FormatEntry)
+        : { ...entry, seq: entry.seq ?? 0, bytes: byteLength(entry.json), hash: digest(entry.json) };
+}
+
+function upgradeDiff(entry: Legacy<DiffEntry>): DiffEntry {
+    return entry.hash !== undefined && entry.bytes !== undefined
+        ? (entry as DiffEntry)
+        : {
+              ...entry,
+              seq: entry.seq ?? 0,
+              bytes: byteLength(entry.leftJson) + byteLength(entry.rightJson),
+              hash: digestPair(entry.leftJson, entry.rightJson)
+          };
+}
+
+function without<T>(entries: T[], indices: number[]): T[] {
+    const drop = new Set(indices);
+    return entries.filter((_, index) => !drop.has(index));
 }
 
 function renamed<T extends { name?: string }>(entries: T[], index: number, name: string): T[] {
@@ -168,12 +355,12 @@ export function relativeTime(timestamp: number, now = Date.now()): string {
 }
 
 /** A compact size, for entry descriptions. */
-export function formatSize(chars: number): string {
-    if (chars < 1024) {
-        return `${chars} B`;
+export function formatSize(bytes: number): string {
+    if (bytes < 1024) {
+        return `${bytes} B`;
     }
-    if (chars < 1024 * 1024) {
-        return `${(chars / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024) {
+        return `${(bytes / 1024).toFixed(1)} KB`;
     }
-    return `${(chars / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
