@@ -76,9 +76,9 @@ export class TooltipHost {
         const body = this.root.body;
 
         this.teardown.push(
-            on(body, 'mouseover', event => this.onEnter(event.target, event.relatedTarget)),
+            on(body, 'mouseover', event => this.onEnter(event.target)),
             on(body, 'mouseout', event => this.onLeave(event.relatedTarget)),
-            on(body, 'focusin', event => this.onEnter(event.target, null, true)),
+            on(body, 'focusin', event => this.onEnter(event.target, true)),
             on(body, 'focusout', () => this.hide()),
             // Any of these can move the anchor out from under the tooltip.
             on(body, 'click', () => this.hide()),
@@ -105,17 +105,29 @@ export class TooltipHost {
         return this.anchor;
     }
 
-    private onEnter(target: EventTarget | null, from: EventTarget | null, immediate = false): void {
+    /**
+     * Starts describing a control.
+     *
+     * The anchor is recorded the moment the pointer arrives rather than when
+     * the tooltip finally appears. Recording it only on show meant that during
+     * the delay nothing was anchored, so the pointer crossing from a button's
+     * padding onto its own icon read as leaving the control: it cancelled the
+     * pending tooltip, and the immediately following re-entry was then dismissed
+     * as movement *within* a control and never rescheduled. Hovering a button
+     * and moving even slightly silenced it until the pointer left and came back,
+     * which is why hover text appeared for some buttons and not others.
+     */
+    private onEnter(target: EventTarget | null, immediate = false): void {
         const anchor = (target as Element | null)?.closest<HTMLElement>('[data-tip]') ?? null;
+        // No anchor means the pointer is over ordinary content; leaving is the
+        // business of mouseout, which knows where the pointer actually went.
+        // The same anchor means it moved between a control's own children.
         if (!anchor || anchor === this.anchor) {
-            return;
-        }
-        // Moving between two children of the same control is not a new hover.
-        if (from instanceof Node && anchor.contains(from)) {
             return;
         }
 
         this.cancel();
+        this.anchor = anchor;
 
         // Once one tooltip is up, moving along a row of buttons should not make
         // the user wait again for each of them.
@@ -126,12 +138,21 @@ export class TooltipHost {
 
         this.timer = window.setTimeout(() => {
             this.timer = null;
-            this.show(anchor);
+            if (this.anchor) {
+                this.show(this.anchor);
+            }
         }, SHOW_DELAY_MS);
     }
 
+    /**
+     * Stops describing a control, unless the pointer went somewhere that keeps
+     * one described: further inside the same control, or straight onto another
+     * one whose own mouseover is about to re-anchor us. Hiding on the way to a
+     * neighbouring button would make the delay start over for every button in a
+     * row, since "already showing" is what suppresses it.
+     */
     private onLeave(to: EventTarget | null): void {
-        if (this.anchor && to instanceof Node && this.anchor.contains(to)) {
+        if (to instanceof Element && to.closest<HTMLElement>('[data-tip]')) {
             return;
         }
         this.hide();
@@ -143,7 +164,6 @@ export class TooltipHost {
             return;
         }
 
-        this.anchor = anchor;
         const keys = anchor.dataset.tipKey
             ? formatShortcut(anchor.dataset.tipKey)
                   .map(key => `<kbd>${escapeHtml(key)}</kbd>`)
@@ -163,6 +183,17 @@ export class TooltipHost {
      */
     private position(anchor: HTMLElement): void {
         const control = anchor.getBoundingClientRect();
+
+        // Measured from the corner rather than from wherever the last tooltip
+        // was left. A fixed box with `left` set shrink-to-fits into the space
+        // remaining to its right, so measuring it in place gave the width it
+        // would have *there* -- and every pane action button sits at the
+        // right-hand edge, where that width is a few characters. The text then
+        // wrapped to one word per line and the clamp below, working from the
+        // squeezed figure, kept it there.
+        this.element.style.left = '0px';
+        this.element.style.top = '0px';
+
         const tip = this.element.getBoundingClientRect();
         const viewportWidth = window.innerWidth || this.root.documentElement.clientWidth;
         const viewportHeight = window.innerHeight || this.root.documentElement.clientHeight;

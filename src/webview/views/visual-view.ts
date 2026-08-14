@@ -18,6 +18,7 @@ import { type PrettyDocument } from '../engine/pretty-sink';
 import { JSONFormatter } from '../formatter';
 import { DocumentPane, type RowContext } from '../ui/document-pane';
 import { byId, delegate, escapeHtml, on, qsa } from '../ui/dom';
+import { PaneFlag } from '../ui/pane-flag';
 import { setTip } from '../ui/tooltip';
 import { GraphCanvas } from '../ui/graph-canvas';
 import { Icons } from '../ui/icons';
@@ -62,6 +63,17 @@ export class VisualView {
     /** The lines a match falls on, so drawing a row is a lookup, not a scan. */
     private matchLines = new Set<number>();
     private rebuildTimer: number | null = null;
+    /** Whether this view is the one on screen. */
+    private onScreen = false;
+    /**
+     * Says so when the picture is older than the input.
+     *
+     * Typing in this mode rebuilds on its own, so the badge is for the other
+     * route: editing in the Format tab and coming back here, where the picture
+     * would otherwise sit there describing the previous document with nothing
+     * to suggest it.
+     */
+    private readonly staleness: PaneFlag;
 
     /**
      * Rebuilds the picture from edited input.
@@ -165,6 +177,11 @@ export class VisualView {
 
     constructor(messenger: Messenger) {
         this.messenger = messenger;
+        this.staleness = new PaneFlag({
+            panelId: 'visual-panel',
+            buttonId: 'visual-flag',
+            onAct: () => this.onRebuildRequested()
+        });
         this.setupControls();
         this.setupInteractions();
     }
@@ -191,13 +208,16 @@ export class VisualView {
             return;
         }
 
+        // Whatever it is being handed, it is what the input says right now.
+        this.staleness.lower();
+
         if (!doc) {
             this.pane?.setDocument(null);
             this.source?.setDocument(null);
             this.graph?.setDocument(null, null);
             this.nodeCount = 0;
             this.setEmpty(true);
-            this.setBreadcrumb([]);
+            this.setBreadcrumb([], false);
             this.publishStatus({});
             return;
         }
@@ -212,7 +232,7 @@ export class VisualView {
         // Both shapes read the one fold state, so the graph is handed the same
         // object rather than a copy that could drift out of step with it.
         this.ensureGraph().setDocument(doc, this.pane?.foldState ?? null);
-        this.setBreadcrumb([]);
+        this.setBreadcrumb([], false);
 
         this.nodeCount = nodeCount(doc.lines);
         this.repairCount = diagnostics.length;
@@ -364,6 +384,35 @@ export class VisualView {
         }
     }
 
+    /**
+     * Responds to the input changing.
+     *
+     * Only while this view is the one on screen. The handler is on the shared
+     * input box, so without the guard it also fired while the reader was typing
+     * in the Format tab -- quietly reformatting there on every pause, which is
+     * exactly the per-keystroke cost the whole design avoids, and which made
+     * the Format button look like it did nothing.
+     *
+     * When the view is not on screen the picture simply falls behind, and says
+     * so with the badge when the reader returns to it.
+     */
+    private onInputChanged(): void {
+        if (this.onScreen) {
+            this.scheduleRebuild();
+        } else if (this.document) {
+            this.markStale();
+        }
+    }
+
+    private markStale(): void {
+        this.staleness.raise(
+            'Out of date',
+            'stale',
+            'The input has changed since this was drawn. Build it again.',
+            'mod+enter'
+        );
+    }
+
     /** Rebuilds after a pause, so a burst of typing is one rebuild. */
     private scheduleRebuild(): void {
         if (this.rebuildTimer !== null) {
@@ -386,7 +435,23 @@ export class VisualView {
      * again now that there is something to lay it out in.
      */
     public activate(): void {
+        this.onScreen = true;
         this.setShape(this.shape);
+    }
+
+    /**
+     * Called when another mode takes the screen.
+     *
+     * A rebuild already queued is dropped rather than left to fire from behind
+     * another view, where it would reformat the input the reader is now editing
+     * in the Format tab.
+     */
+    public deactivate(): void {
+        this.onScreen = false;
+        if (this.rebuildTimer !== null) {
+            window.clearTimeout(this.rebuildTimer);
+            this.rebuildTimer = null;
+        }
     }
 
     public setShape(shape: VisualShape): void {
@@ -549,7 +614,7 @@ export class VisualView {
         // change anything.
         const input = byId<HTMLTextAreaElement>('input');
         if (input) {
-            this.teardown.push(on(input, 'input', () => this.scheduleRebuild()));
+            this.teardown.push(on(input, 'input', () => this.onInputChanged()));
         }
 
         for (const button of qsa<HTMLElement>('[data-visual-shape]')) {
@@ -587,7 +652,7 @@ export class VisualView {
         // The formatted source follows the picture, so picking a node in either
         // shape shows the text it came from.
         this.source?.selectLine(line);
-        this.setBreadcrumb(pathForLine(doc, line));
+        this.setBreadcrumb(pathForLine(doc, line), true);
     }
 
     /** Moves the selection to the next or previous visible node. */
@@ -699,8 +764,10 @@ export class VisualView {
 
     // -------------------------------------------------------------- breadcrumb
 
-    private setBreadcrumb(path: string[]): void {
-        const bar = byId('visual-breadcrumb');
+    private setBreadcrumb(path: string[], selected: boolean): void {
+        byId('visual-breadcrumb')?.setAttribute('data-selected', String(selected));
+
+        const bar = byId('visual-path');
         if (!bar) {
             return;
         }
@@ -742,6 +809,7 @@ export class VisualView {
             off();
         }
         this.teardown.length = 0;
+        this.staleness.dispose();
         this.pane?.dispose();
         this.pane = null;
         this.source?.dispose();

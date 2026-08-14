@@ -30,7 +30,15 @@ const rowFor = (start: string) => rows().find(row => row.textContent?.startsWith
 const rowWith = (text: string) =>
     rows().find(row => row.textContent?.includes(text)) as HTMLElement;
 const selected = () => document.querySelector<HTMLElement>('.tree-row.is-selected');
-const breadcrumb = () => document.getElementById('visual-breadcrumb')?.textContent ?? '';
+/*
+ * The path alone. The bar around it also carries the actions that act on the
+ * selected node, which used to sit in the pane header among the ones that
+ * reshape the whole document.
+ */
+const breadcrumb = () => document.getElementById('visual-path')?.textContent ?? '';
+/** Whether the bar is offering the actions that need a selected node. */
+const nodeActionsShown = () =>
+    document.getElementById('visual-breadcrumb')?.dataset.selected === 'true';
 
 describe('VisualView', () => {
     let view: VisualView;
@@ -166,6 +174,41 @@ describe('VisualView', () => {
             rowWith('"safe"').click();
 
             expect(breadcrumb()).toBe('root›tags›1');
+        });
+
+        /*
+         * Copy path, copy value and copy subtree used to sit in the pane header
+         * beside the controls that reshape the whole document, three of twelve
+         * buttons, with nothing to say they needed a node picked first. They now
+         * live on the bar that names the node they act on, and appear with it.
+         */
+        it('offers the node actions only once a node is chosen', () => {
+            show(view);
+            expect(nodeActionsShown()).toBe(false);
+
+            rowFor('first').click();
+            expect(nodeActionsShown()).toBe(true);
+        });
+
+        it('withdraws them when the document is replaced', () => {
+            show(view);
+            rowFor('first').click();
+            view.setDocument(null);
+
+            expect(nodeActionsShown()).toBe(false);
+        });
+
+        it('keeps every copy action working from its new home', () => {
+            show(view);
+            rowFor('first').click();
+
+            for (const id of ['visual-copy-path', 'visual-copy-value', 'visual-copy-subtree']) {
+                const control = document.getElementById(id);
+                expect(control).not.toBeNull();
+                expect(
+                    document.getElementById('visual-breadcrumb')?.contains(control)
+                ).toBe(true);
+            }
         });
 
         it('steps down and up', () => {
@@ -519,6 +562,7 @@ describe('editing beside the picture', () => {
         mountPanel('format');
         view = new VisualView(new Messenger());
         show(view);
+        view.activate();
     });
 
     afterEach(() => {

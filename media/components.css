@@ -798,3 +798,187 @@ kbd {
     font-size: var(--jb-fs-xs);
     line-height: 16px;
 }
+
+/* ------------------------------------------------------------------ menu */
+
+/* A pane header used to be a flat row of every action the pane could perform;
+   the visual pane carried twelve icon buttons in a line, which reads as noise
+   rather than as a set of choices. The frequent actions stay on the header and
+   the rest live behind a `⋯`. Positioned from script in viewport coordinates,
+   so no ancestor's overflow can clip it. */
+.menu-anchor {
+    display: flex;
+    align-items: center;
+}
+
+.menu {
+    position: fixed;
+    z-index: 90;
+    top: 0;
+    left: 0;
+    min-width: 180px;
+    padding: var(--jb-sp-1);
+    border: 1px solid var(--jb-border-widget);
+    border-radius: var(--jb-radius-md);
+    background: var(--jb-bg-widget);
+    box-shadow: var(--jb-shadow);
+}
+
+.menu[hidden] {
+    display: none;
+}
+
+.menu__item {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-3);
+    width: 100%;
+    padding: var(--jb-sp-2) var(--jb-sp-3);
+    border: none;
+    border-radius: var(--jb-radius-sm);
+    background: none;
+    color: var(--jb-fg);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-md);
+    text-align: left;
+    cursor: pointer;
+}
+
+.menu__item:hover,
+.menu__item:focus-visible {
+    background-color: var(--jb-bg-hover);
+    outline: none;
+}
+
+.menu__item .codicon {
+    flex-shrink: 0;
+    color: var(--jb-fg-muted);
+    font-size: 14px;
+}
+
+.menu__label {
+    flex: 1;
+    white-space: nowrap;
+}
+
+.menu__keys {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--jb-sp-1);
+}
+
+.menu__keys kbd {
+    padding: 0 var(--jb-sp-2);
+    border: 1px solid var(--jb-border);
+    border-radius: var(--jb-radius-sm);
+    background: var(--jb-bg-chrome);
+    color: var(--jb-fg-subtle);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-xs);
+    line-height: 16px;
+}
+
+/* ------------------------------------------------------- segmented control */
+
+/* Two ways of doing one thing read as a single control with two positions,
+   rather than as two buttons that happen to sit next to each other. */
+.segmented {
+    display: flex;
+    align-items: center;
+    padding: 1px;
+    border: 1px solid var(--jb-border);
+    border-radius: var(--jb-radius-md);
+    background-color: var(--jb-bg);
+}
+
+.segmented__btn {
+    border-radius: var(--jb-radius-sm);
+}
+
+/* ---------------------------------------------------------- pane divider */
+
+.pane__divider {
+    width: 1px;
+    height: 14px;
+    margin: 0 var(--jb-sp-1);
+    background-color: var(--jb-border);
+}
+
+/* ------------------------------------------------------------- pane flag */
+
+/* What a pane says when it is showing an older document than the input holds,
+   or holding edits that exist nowhere else. It is a button rather than a label
+   so that the explanation and the remedy are the same object -- noticing the
+   problem and fixing it is one movement. */
+.pane__flag {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    flex-shrink: 0;
+    padding: 1px var(--jb-sp-3);
+    border: 1px solid var(--jb-border);
+    border-radius: 999px;
+    background-color: var(--jb-neutral);
+    color: var(--jb-fg-muted);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-sm);
+    line-height: 18px;
+    white-space: nowrap;
+    cursor: pointer;
+    animation: pane-flag-in 140ms ease-out;
+}
+
+.pane__flag[hidden] {
+    display: none;
+}
+
+.pane__flag:hover {
+    border-color: var(--jb-fg-muted);
+    color: var(--jb-fg);
+}
+
+.pane__flag-icon {
+    font-size: 12px;
+}
+
+/* Being out of date is the ordinary condition of a pane that is recomputed on
+   request: it happens on every keystroke, and colouring it as a warning every
+   time would train the reader to ignore the colour. Holding edits that exist
+   nowhere else is the rarer, costlier one, and is the one that gets the
+   warning treatment. */
+.pane[data-flag='unsaved'] .pane__flag {
+    border-color: var(--jb-warn-border);
+    background-color: var(--jb-warn-bg);
+    color: var(--jb-warn-fg);
+}
+
+.pane[data-flag='unsaved'] .pane__flag:hover {
+    border-color: var(--jb-fg-warn);
+}
+
+.pane[data-flag='unsaved'] .pane__flag-icon {
+    color: var(--jb-marker-warn);
+}
+
+/* A thread of the same colour down the top of the pane, so the state reads
+   from the pane itself and not only from the badge. */
+.pane[data-flag] .pane__header {
+    box-shadow: inset 0 2px 0 -1px var(--jb-border);
+}
+
+.pane[data-flag='unsaved'] .pane__header {
+    box-shadow: inset 0 2px 0 -1px var(--jb-warn-border);
+}
+
+@keyframes pane-flag-in {
+    from {
+        opacity: 0;
+        transform: translateY(-2px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pane__flag {
+        animation: none;
+    }
+}

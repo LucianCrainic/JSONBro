@@ -5,6 +5,7 @@
  */
 import { PanelStateStore } from './state';
 import { byId, on, qsa } from './ui/dom';
+import { MenuHost } from './ui/menu';
 import { Messenger } from './ui/messaging';
 import { Shortcuts } from './ui/shortcuts';
 import { FindWidget, type Searchable } from './ui/find-widget';
@@ -49,6 +50,7 @@ export class Shell {
     private readonly shortcuts = new Shortcuts();
     private readonly statusBar = new StatusBar();
     private readonly tooltips = new TooltipHost();
+    private readonly menus = new MenuHost();
     private readonly formatView: FormatView;
     private readonly diffView: DiffView;
     private readonly visualView: VisualView;
@@ -93,7 +95,10 @@ export class Shell {
 
         // Editing in the visual view rebuilds through the format view, since
         // that is what owns parsing; the picture renders what it produces.
-        this.visualView.onRebuildRequested = () => this.formatView.format();
+        // Not recorded in history: a rebuild happens on every pause in typing,
+        // and the documents on the way to the one they meant are not worth
+        // keeping.
+        this.visualView.onRebuildRequested = () => this.formatView.format(false);
 
         this.find = new FindWidget({
             ensureSearchable: () => this.searchTarget().ensureSearchable(),
@@ -108,6 +113,7 @@ export class Shell {
     public start(): void {
         this.labelModifierKeys();
         this.tooltips.start();
+        this.menus.start();
 
         // The host renders <body data-mode="..."> so the first paint is already
         // correct; adopt it rather than assuming a default.
@@ -243,6 +249,13 @@ export class Shell {
      * Nothing here touches element visibility directly.
      */
     private setMode(mode: Mode): void {
+        // Told before the switch, so a rebuild it has queued is dropped rather
+        // than firing from behind whichever view takes the screen.
+        if (mode !== 'visual') {
+            this.visualView.deactivate();
+        }
+        this.menus.close();
+
         this.mode = mode;
         document.body.dataset.mode = mode;
         this.saveState();
