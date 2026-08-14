@@ -7,6 +7,8 @@ import * as os from 'os';
 import { WebviewContentGenerator } from './webview-content';
 import { JSONBroActivityBarProvider } from './activity-bar-provider';
 import { readSettings } from './settings';
+import { resolveSyntaxColors } from './theme/token-colors';
+import { vscodeThemeSource } from './theme/vscode-theme-source';
 import type { HostToWebview, Mode } from './shared/messages';
 
 export class WebviewProvider {
@@ -65,6 +67,24 @@ export class WebviewProvider {
         const settings = readSettings();
         for (const mode of this.existingPanels.keys()) {
             this.sendToPanel(mode as Mode, { command: 'settings', settings });
+        }
+        void this.broadcastThemeColors();
+    }
+
+    /**
+     * Pushes the active theme's JSON colours to every open panel.
+     *
+     * Reading a theme file is I/O, so this never blocks the handshake: panels
+     * paint with the contributed defaults and are repainted when the answer
+     * arrives.
+     */
+    public async broadcastThemeColors(): Promise<void> {
+        const colors = readSettings().matchEditorTheme
+            ? await resolveSyntaxColors(vscodeThemeSource())
+            : {};
+
+        for (const mode of this.existingPanels.keys()) {
+            this.sendToPanel(mode as Mode, { command: 'themeColors', colors });
         }
     }
 
@@ -257,6 +277,7 @@ export class WebviewProvider {
                             settings: readSettings()
                         });
                         this.flushPendingMessages(mode);
+                        void this.broadcastThemeColors();
                         break;
                     case 'showError':
                         vscode.window.showErrorMessage(message.text);

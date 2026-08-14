@@ -20,10 +20,17 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(event => {
-            if (event.affectsConfiguration('jsonbro')) {
+            if (
+                event.affectsConfiguration('jsonbro') ||
+                // A different theme, or a change to how its tokens are
+                // coloured, changes how the panel should paint JSON.
+                event.affectsConfiguration('workbench.colorTheme') ||
+                event.affectsConfiguration('editor.tokenColorCustomizations')
+            ) {
                 commandHandler.broadcastSettings();
             }
-        })
+        }),
+        vscode.window.onDidChangeActiveColorTheme(() => commandHandler.broadcastSettings())
     );
 }
 

@@ -41,6 +41,59 @@ describeOrSkip('preview pages', () => {
         expect(file).toBeTruthy();
     });
 
+    /**
+     * The colours a real theme would push over the contributed defaults.
+     * Gruvbox, because its JSON palette looks nothing like VS Code's own --
+     * if the message is ignored the difference is obvious rather than subtle.
+     */
+    it('format view with theme colours applied', () => {
+        const colors = {
+            key: '#689d6a',
+            string: '#83a598',
+            number: '#d3869b',
+            boolean: '#d3869b',
+            null: '#d3869b',
+            punctuation: '#a89984'
+        };
+
+        const file = writePreview(
+            'themed-dark',
+            buildPreview(
+                'format',
+                'dark',
+                `
+                    window.postMessage({ command: 'themeColors', colors: ${JSON.stringify(colors)} }, '*');
+                    ${seedFormat('{"a":1,"b":"two","c":true,"d":null,"e":[1,2]}')}
+                `
+            )
+        );
+        expect(file).toBeTruthy();
+    });
+
+    /** One change of each kind, to judge whether the three read apart. */
+    it.each(['dark', 'light'])('diff view with changes (%s)', theme => {
+        const left = { keep: 1, drop: 'gone', change: 'before', items: [1, 2, 3] };
+        const right = { keep: 1, change: 'after', added: true, items: [1, 2, 3, 4] };
+
+        const file = writePreview(
+            `diff-${theme}`,
+            buildPreview(
+                'diff',
+                theme,
+                `
+                    document.getElementById('left-json').value = ${JSON.stringify(
+                        JSON.stringify(left)
+                    )};
+                    document.getElementById('right-json').value = ${JSON.stringify(
+                        JSON.stringify(right)
+                    )};
+                    document.getElementById('action-btn').click();
+                `
+            )
+        );
+        expect(file).toBeTruthy();
+    });
+
     /** Big enough that rendering every row would be plainly unworkable. */
     it('format view with a large document', () => {
         const big = JSON.stringify({
