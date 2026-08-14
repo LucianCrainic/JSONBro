@@ -83,9 +83,27 @@ export class CommandHandler {
             () => this.clearHistory()
         );
 
+        // These four also appear on a file's Explorer context menu, which
+        // passes the clicked file as the first argument and the whole
+        // selection as the second.
         const openFileCommand = vscode.commands.registerCommand(
             'jsonbro.openFile',
-            () => this.webviewProvider.openJsonFile()
+            (uri?: vscode.Uri) => this.webviewProvider.openJsonFile(uri)
+        );
+
+        const setDiffOriginalCommand = vscode.commands.registerCommand(
+            'jsonbro.setDiffOriginal',
+            (uri?: vscode.Uri) => this.webviewProvider.loadDiffSide('left', uri)
+        );
+
+        const setDiffModifiedCommand = vscode.commands.registerCommand(
+            'jsonbro.setDiffModified',
+            (uri?: vscode.Uri) => this.webviewProvider.loadDiffSide('right', uri)
+        );
+
+        const compareFilesCommand = vscode.commands.registerCommand(
+            'jsonbro.compareSelectedFiles',
+            (_uri: vscode.Uri, selection?: vscode.Uri[]) => this.compareSelected(selection)
         );
 
         context.subscriptions.push(
@@ -101,7 +119,10 @@ export class CommandHandler {
             renameFormatHistoryCommand,
             renameDiffHistoryCommand,
             clearHistoryCommand,
-            openFileCommand
+            openFileCommand,
+            setDiffOriginalCommand,
+            setDiffModifiedCommand,
+            compareFilesCommand
         );
     }
 
@@ -159,6 +180,17 @@ export class CommandHandler {
         if (indices.length > 0 && (await this.confirmRemoval(indices.length))) {
             await this.activityBarProvider.removeDiffHistoryEntries(indices);
         }
+    }
+
+    /** Loads exactly two selected files as the two sides of a comparison. */
+    private async compareSelected(selection?: vscode.Uri[]): Promise<void> {
+        if (!selection || selection.length !== 2) {
+            vscode.window.showWarningMessage(
+                'Select exactly two files to compare them in JSONBro.'
+            );
+            return;
+        }
+        await this.webviewProvider.compareFiles(selection[0], selection[1]);
     }
 
     private async clearFormatHistory(): Promise<void> {

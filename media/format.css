@@ -148,3 +148,19 @@
     background-color: var(--jb-find-match);
     box-shadow: 0 0 0 1px var(--jb-find-match-border);
 }
+
+/*
+ * The row a change in the list points at.
+ *
+ * Drawn with a left rail and a wash rather than a solid fill, so the syntax
+ * colouring underneath stays readable -- the point is to say "here", not to
+ * replace what is on the line.
+ */
+.json-line.is-selected {
+    background-color: var(--jb-selection);
+    box-shadow: inset 2px 0 0 var(--jb-focus);
+}
+
+.json-line.is-selected .line-number {
+    color: var(--jb-gutter-fg-active);
+}

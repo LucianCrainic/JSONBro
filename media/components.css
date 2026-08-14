@@ -339,9 +339,20 @@ body[data-mode='diff'] [data-mode-only='format'] {
  * absolutely positioned window would be offset by it, and a horizontal pad
  * would clip the long lines that need to scroll sideways.
  */
-#output {
+#output,
+.doc-view {
     padding: var(--jb-sp-2) 0;
     white-space: pre;
+}
+
+/*
+ * Each diff input pane holds both a textarea and a rendered view of the same
+ * document, and shows one at a time. Which one is a single attribute on the
+ * section, so nothing in script has to touch element visibility.
+ */
+.pane[data-view='edit'] .doc-view,
+.pane[data-view='view'] textarea {
+    display: none;
 }
 
 .pane__content.is-error {
