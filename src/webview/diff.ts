@@ -1,3 +1,5 @@
+import { alignArrays, DEFAULT_ALIGN_BUDGET } from './array-align';
+
 /**
  * Diff operation types
  */
@@ -8,12 +10,96 @@ export type DiffType = 'added' | 'removed' | 'modified' | 'unchanged';
  */
 export type DiffApplicationState = 'pending' | 'applied' | 'rejected';
 
+/**
+ * Whether a path segment indexes an array or names an object property.
+ *
+ * A path is just strings, so `"0"` is ambiguous: it is an array index in
+ * `[{...}]` and a property name in `{"0": ...}`. Recording which one it was
+ * stops the apply step from turning an object into an array.
+ */
+export type PathSegmentKind = 'key' | 'index';
+
 export interface DiffResult {
     type: DiffType;
     path: string[];
+    /** Parallel to `path`. Absent on hand-built diffs, which fall back to a guess. */
+    kinds?: PathSegmentKind[];
     oldValue?: any;
     newValue?: any;
+    /**
+     * For an element added to an array: the position in the *old* array it
+     * belongs before. `path` carries the position in the new array, which is
+     * what the reader wants to see but not what insertion needs.
+     */
+    arrayAnchor?: number;
     children?: DiffResult[];
+}
+
+export interface CompareOptions {
+    strictMode?: boolean;
+    /** Ceiling on the quadratic array alignment pass. */
+    alignBudget?: number;
+}
+
+/**
+ * A path built by sharing its prefix with its parent.
+ *
+ * Carrying paths as arrays meant copying the whole thing at every level, which
+ * made a traversal cost O(nodes x depth) -- 50,000 levels of nesting took
+ * seconds. Descending now costs one small object, and the array is built only
+ * for the handful of nodes that turn out to differ.
+ */
+interface PathNode {
+    readonly parent: PathNode | null;
+    readonly segment: string;
+    readonly kind: PathSegmentKind;
+    readonly depth: number;
+}
+
+function descend(parent: PathNode | null, segment: string, kind: PathSegmentKind): PathNode {
+    return { parent, segment, kind, depth: (parent?.depth ?? 0) + 1 };
+}
+
+function materialize(node: PathNode | null): { path: string[]; kinds: PathSegmentKind[] } {
+    const depth = node?.depth ?? 0;
+    const path = new Array<string>(depth);
+    const kinds = new Array<PathSegmentKind>(depth);
+
+    let current = node;
+    for (let i = depth - 1; i >= 0 && current !== null; i--) {
+        path[i] = current.segment;
+        kinds[i] = current.kind;
+        current = current.parent;
+    }
+
+    return { path, kinds };
+}
+
+/**
+ * One item of pending work while comparing.
+ *
+ * `emit` frames let a finished result queue behind comparisons that have not
+ * expanded yet, which is what keeps the output in document order even though
+ * the traversal runs off a stack.
+ */
+type CompareFrame =
+    | {
+          kind: 'compare';
+          oldValue: any;
+          newValue: any;
+          node: PathNode | null;
+      }
+    | { kind: 'emit'; diff: DiffResult };
+
+/** Builds a result frame, expanding the shared path chain into arrays. */
+function emit(node: PathNode | null, diff: Omit<DiffResult, 'path' | 'kinds'>): CompareFrame {
+    const { path, kinds } = materialize(node);
+    return { kind: 'emit', diff: { ...diff, path, kinds } };
+}
+
+/** True for objects and arrays; notably false for `null`. */
+function isContainer(value: any): boolean {
+    return typeof value === 'object' && value !== null;
 }
 
 /**
@@ -39,151 +125,187 @@ export class JSONDiff {
     };
 
     /**
-     * Compares two JSON objects and returns diff results
+     * Compares two JSON values and returns the differences between them.
+     *
+     * Walks an explicit stack rather than recursing, so a deeply nested
+     * document cannot overflow the call stack.
+     *
      * @param oldValue The original/expected JSON value
      * @param newValue The new/actual JSON value
      * @param path The current path in the JSON structure
      * @param strictMode If true, only compare keys that exist in oldValue (ignore added keys in newValue)
      */
-    static compareJson(oldValue: any, newValue: any, path: string[] = [], strictMode: boolean = false): DiffResult[] {
+    static compareJson(
+        oldValue: any,
+        newValue: any,
+        path: string[] = [],
+        strictMode: boolean = false,
+        options: CompareOptions = {}
+    ): DiffResult[] {
+        const alignBudget = options.alignBudget ?? DEFAULT_ALIGN_BUDGET;
         const diffs: DiffResult[] = [];
 
-        // Handle null/undefined cases
-        if (oldValue === null || oldValue === undefined) {
-            if (newValue === null || newValue === undefined) {
-                return diffs; // Both null/undefined, no diff
+        let root: PathNode | null = null;
+        for (const segment of path) {
+            root = descend(root, segment, 'key');
+        }
+
+        const stack: CompareFrame[] = [{ kind: 'compare', oldValue, newValue, node: root }];
+
+        while (stack.length > 0) {
+            const frame = stack.pop()!;
+
+            if (frame.kind === 'emit') {
+                diffs.push(frame.diff);
+                continue;
             }
-            diffs.push({
-                type: JSONDiff.DIFF_TYPES.ADDED,
-                path: [...path],
-                newValue: newValue
-            });
-            return diffs;
-        }
 
-        if (newValue === null || newValue === undefined) {
-            diffs.push({
-                type: JSONDiff.DIFF_TYPES.REMOVED,
-                path: [...path],
-                oldValue: oldValue
-            });
-            return diffs;
-        }
-
-        // Handle primitive values
-        if (typeof oldValue !== 'object' || typeof newValue !== 'object') {
-            if (oldValue !== newValue) {
-                diffs.push({
-                    type: JSONDiff.DIFF_TYPES.MODIFIED,
-                    path: [...path],
-                    oldValue: oldValue,
-                    newValue: newValue
-                });
-            }
-            return diffs;
-        }
-
-        // Handle arrays
-        if (Array.isArray(oldValue) && Array.isArray(newValue)) {
-            return this.compareArrays(oldValue, newValue, path, strictMode);
-        }
-
-        if (Array.isArray(oldValue) || Array.isArray(newValue)) {
-            diffs.push({
-                type: JSONDiff.DIFF_TYPES.MODIFIED,
-                path: [...path],
-                oldValue: oldValue,
-                newValue: newValue
-            });
-            return diffs;
-        }
-
-        // Handle objects
-        return this.compareObjects(oldValue, newValue, path, strictMode);
-    }
-
-    /**
-     * Compares two arrays
-     */
-    private static compareArrays(oldArray: any[], newArray: any[], path: string[], strictMode: boolean = false): DiffResult[] {
-        const diffs: DiffResult[] = [];
-        const maxLength = strictMode ? oldArray.length : Math.max(oldArray.length, newArray.length);
-
-        for (let i = 0; i < maxLength; i++) {
-            const currentPath = [...path, i.toString()];
-            
-            if (i >= oldArray.length) {
-                // Item added (only report if not in strict mode)
-                if (!strictMode) {
-                    diffs.push({
-                        type: JSONDiff.DIFF_TYPES.ADDED,
-                        path: currentPath,
-                        newValue: newArray[i]
-                    });
-                }
-            } else if (i >= newArray.length) {
-                // Item removed
-                diffs.push({
-                    type: JSONDiff.DIFF_TYPES.REMOVED,
-                    path: currentPath,
-                    oldValue: oldArray[i]
-                });
-            } else {
-                // Compare items
-                const itemDiffs = this.compareJson(oldArray[i], newArray[i], currentPath, strictMode);
-                diffs.push(...itemDiffs);
+            const produced = this.expand(frame, strictMode, alignBudget);
+            // Pushed in reverse so popping replays them in document order.
+            for (let i = produced.length - 1; i >= 0; i--) {
+                stack.push(produced[i]);
             }
         }
 
         return diffs;
     }
 
-    /**
-     * Compares two objects
-     */
-    private static compareObjects(oldObj: any, newObj: any, path: string[], strictMode: boolean = false): DiffResult[] {
-        const diffs: DiffResult[] = [];
+    /** Expands one comparison into the frames it implies, in document order. */
+    private static expand(
+        frame: Extract<CompareFrame, { kind: 'compare' }>,
+        strictMode: boolean,
+        alignBudget: number
+    ): CompareFrame[] {
+        const { oldValue, newValue, node } = frame;
 
+        if (oldValue === undefined && newValue === undefined) {
+            return [];
+        }
+        if (oldValue === undefined) {
+            return [emit(node, { type: this.DIFF_TYPES.ADDED, newValue })];
+        }
+        if (newValue === undefined) {
+            return [emit(node, { type: this.DIFF_TYPES.REMOVED, oldValue })];
+        }
+
+        const oldIsContainer = isContainer(oldValue);
+        const newIsContainer = isContainer(newValue);
+
+        // `null` is a value, not an absence. Treating it as one meant a change
+        // from null to a number reported as "added", and a change to null
+        // reported as "removed" -- so applying it deleted the key outright.
+        if (!oldIsContainer && !newIsContainer) {
+            return oldValue === newValue
+                ? []
+                : [emit(node, { type: this.DIFF_TYPES.MODIFIED, oldValue, newValue })];
+        }
+
+        if (oldIsContainer !== newIsContainer || Array.isArray(oldValue) !== Array.isArray(newValue)) {
+            return [emit(node, { type: this.DIFF_TYPES.MODIFIED, oldValue, newValue })];
+        }
+
+        return Array.isArray(oldValue)
+            ? this.expandArray(oldValue, newValue, node, strictMode, alignBudget)
+            : this.expandObject(oldValue, newValue, node, strictMode);
+    }
+
+    private static expandObject(
+        oldObj: any,
+        newObj: any,
+        node: PathNode | null,
+        strictMode: boolean
+    ): CompareFrame[] {
         const allKeys = strictMode
             ? new Set(Object.keys(oldObj))  // In strict mode, only check keys from oldObj
             : new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
 
+        const frames: CompareFrame[] = [];
+
         for (const key of allKeys) {
-            const currentPath = [...path, key];
+            const child = descend(node, key, 'key');
 
             if (!(key in oldObj)) {
-                // Property added (only report if not in strict mode)
                 if (!strictMode) {
-                    diffs.push({
-                        type: JSONDiff.DIFF_TYPES.ADDED,
-                        path: currentPath,
-                        newValue: newObj[key]
-                    });
+                    frames.push(emit(child, { type: this.DIFF_TYPES.ADDED, newValue: newObj[key] }));
                 }
             } else if (!(key in newObj)) {
-                // Property removed
-                diffs.push({
-                    type: JSONDiff.DIFF_TYPES.REMOVED,
-                    path: currentPath,
-                    oldValue: oldObj[key]
-                });
+                frames.push(emit(child, { type: this.DIFF_TYPES.REMOVED, oldValue: oldObj[key] }));
             } else {
-                // Compare property values
-                const propertyDiffs = this.compareJson(oldObj[key], newObj[key], currentPath, strictMode);
-                diffs.push(...propertyDiffs);
+                frames.push({
+                    kind: 'compare',
+                    oldValue: oldObj[key],
+                    newValue: newObj[key],
+                    node: child
+                });
             }
         }
 
-        return diffs;
+        return frames;
     }
 
     /**
-     * Renders a diff result as HTML
+     * Expands an array comparison over the aligned edit script.
+     *
+     * Every path uses *old*-array coordinates, so several changes to one array
+     * can be applied in any order without their indices shifting under each
+     * other. The exception is an addition, whose path shows where the element
+     * lands in the new array because that is the useful thing to read; the
+     * insertion point travels separately in `arrayAnchor`.
+     */
+    private static expandArray(
+        oldArray: any[],
+        newArray: any[],
+        node: PathNode | null,
+        strictMode: boolean,
+        alignBudget: number
+    ): CompareFrame[] {
+        const steps = alignArrays(oldArray, newArray, { budget: alignBudget });
+        const frames: CompareFrame[] = [];
+
+        for (const step of steps) {
+            if (step.kind === 'pair') {
+                frames.push({
+                    kind: 'compare',
+                    oldValue: oldArray[step.oldIndex],
+                    newValue: newArray[step.newIndex],
+                    node: descend(node, String(step.oldIndex), 'index')
+                });
+            } else if (step.kind === 'remove') {
+                frames.push(
+                    emit(descend(node, String(step.oldIndex), 'index'), {
+                        type: this.DIFF_TYPES.REMOVED,
+                        oldValue: oldArray[step.oldIndex]
+                    })
+                );
+            } else if (!strictMode) {
+                frames.push(
+                    emit(descend(node, String(step.newIndex), 'index'), {
+                        type: this.DIFF_TYPES.ADDED,
+                        newValue: newArray[step.newIndex],
+                        arrayAnchor: step.anchor
+                    })
+                );
+            }
+        }
+
+        return frames;
+    }
+
+    /**
+     * Compares two documents and renders the result as HTML.
+     *
+     * Callers that already hold the comparison should use `renderDiffs`
+     * instead; this overload exists for the ones that do not.
      */
     static renderJsonDiff(oldValue: any, newValue: any, strictMode: boolean = false): string {
+        return this.renderDiffs(this.compareJson(oldValue, newValue, [], strictMode));
+    }
+
+    /**
+     * Renders an already-computed diff as HTML.
+     */
+    static renderDiffs(diffs: DiffResult[]): string {
         try {
-            const diffs = this.compareJson(oldValue, newValue, [], strictMode);
-            
             if (diffs.length === 0) {
                 return `<div class="diff-result no-changes">
                     <span class="codicon codicon-check-all" aria-hidden="true"></span>
@@ -231,6 +353,14 @@ export class JSONDiff {
         }
         if (diff.oldValue !== undefined) {
             attrs.push(`data-diff-old-value="${this.escapeHtml(JSON.stringify(diff.oldValue))}"`);
+        }
+        // Carried through the DOM because the view reads changes back off it
+        // when applying them, and both are needed to target the right slot.
+        if (diff.kinds) {
+            attrs.push(`data-diff-kinds="${this.escapeHtml(JSON.stringify(diff.kinds))}"`);
+        }
+        if (diff.arrayAnchor !== undefined) {
+            attrs.push(`data-diff-anchor="${diff.arrayAnchor}"`);
         }
 
         const glyphs: Record<string, string> = {
@@ -353,92 +483,216 @@ export class JSONDiff {
      * @returns The modified JSON object
      */
     static applyDiff(json: any, diff: DiffResult): any {
-        // Create a deep copy to avoid mutating the original
-        const result = JSON.parse(JSON.stringify(json));
-        
-        if (diff.path.length === 0) {
-            // Root level change
-            return diff.newValue !== undefined ? diff.newValue : undefined;
-        }
-
-        this.applyDiffAtPath(result, diff.path, diff);
-        return result;
+        return this.applyDiffs(json, [diff]);
     }
 
     /**
-     * Applies multiple diffs to a JSON object
+     * Applies diffs to the document they were computed against.
+     *
+     * Every diff is interpreted against `json`, never against the result of
+     * its predecessors, so the outcome does not depend on the order they are
+     * given in. That matters most for arrays: the previous implementation
+     * spliced them one at a time, and each splice shifted the indices the
+     * remaining diffs still referred to.
+     *
      * @param json The JSON object to modify
      * @param diffs The diffs to apply
      * @returns The modified JSON object
      */
     static applyDiffs(json: any, diffs: DiffResult[]): any {
-        let result = JSON.parse(JSON.stringify(json));
-        
-        // Sort diffs to apply removals last and additions/modifications first
-        // This prevents issues with array index shifts
-        const sortedDiffs = [...diffs].sort((a, b) => {
-            if (a.type === 'removed' && b.type !== 'removed') return 1;
-            if (a.type !== 'removed' && b.type === 'removed') return -1;
-            return 0;
-        });
+        const root = diffs.find(diff => diff.path.length === 0);
+        if (root) {
+            return root.type === this.DIFF_TYPES.REMOVED ? undefined : root.newValue;
+        }
 
-        for (const diff of sortedDiffs) {
-            result = this.applyDiff(result, diff);
+        // One clone for the whole batch. Cloning per diff made applying a
+        // large change set quadratic in the size of the document.
+        const result = JSON.parse(JSON.stringify(json));
+
+        const structural: DiffResult[] = [];
+
+        // Value updates first, in old coordinates, so that a change nested
+        // inside an array element lands before the array is restructured.
+        for (const diff of diffs) {
+            if (this.isArrayStructural(result, diff)) {
+                structural.push(diff);
+            } else {
+                this.applyValueChange(result, diff);
+            }
+        }
+
+        // Deepest arrays first: rebuilding an inner array must not be undone
+        // by its container being rebuilt around it afterwards.
+        const groups = new Map<string, { parent: string[]; diffs: DiffResult[] }>();
+        for (const diff of structural) {
+            const parent = diff.path.slice(0, -1);
+            const groupKey = JSON.stringify(parent);
+            const group = groups.get(groupKey) ?? { parent, diffs: [] };
+            group.diffs.push(diff);
+            groups.set(groupKey, group);
+        }
+
+        const ordered = [...groups.values()].sort((a, b) => b.parent.length - a.parent.length);
+        for (const group of ordered) {
+            const array = this.resolve(result, group.parent);
+            if (Array.isArray(array)) {
+                this.rebuildArray(array, group.diffs);
+            }
         }
 
         return result;
     }
 
-    /**
-     * Applies a diff at a specific path in the JSON object
-     */
-    private static applyDiffAtPath(obj: any, path: string[], diff: DiffResult): void {
-        if (path.length === 0) return;
-
-        // Navigate to the parent object
-        let current = obj;
-        for (let i = 0; i < path.length - 1; i++) {
-            const key = path[i];
-            
-            // Create intermediate objects/arrays if they don't exist
-            if (current[key] === undefined || current[key] === null) {
-                // Determine if next key is array index
-                const nextKey = path[i + 1];
-                const isArrayIndex = /^\d+$/.test(nextKey);
-                current[key] = isArrayIndex ? [] : {};
+    /** Walks to the value at `path`, or undefined if the route does not exist. */
+    private static resolve(root: any, path: string[]): any {
+        let current = root;
+        for (const segment of path) {
+            if (current === null || typeof current !== 'object') {
+                return undefined;
             }
-            
-            current = current[key];
+            current = current[segment];
+        }
+        return current;
+    }
+
+    /** True when the diff inserts into or deletes from an array. */
+    private static isArrayStructural(root: any, diff: DiffResult): boolean {
+        if (diff.type !== this.DIFF_TYPES.ADDED && diff.type !== this.DIFF_TYPES.REMOVED) {
+            return false;
+        }
+        if (diff.path.length === 0) {
+            return false;
+        }
+        const kind = diff.kinds?.[diff.path.length - 1];
+        if (kind === 'key') {
+            return false;
+        }
+        // Without recorded kinds -- hand-built diffs -- fall back to asking the
+        // document what the container actually is.
+        return Array.isArray(this.resolve(root, diff.path.slice(0, -1)));
+    }
+
+    /**
+     * Rewrites an array so that every insertion and deletion in `diffs` takes
+     * effect at once, reading their positions in the array's original
+     * coordinates.
+     */
+    private static rebuildArray(array: any[], diffs: DiffResult[]): void {
+        const removed = new Set<number>();
+        const insertions = new Map<number, any[]>();
+
+        for (const diff of diffs) {
+            const last = diff.path[diff.path.length - 1];
+            const index = Number(last);
+
+            if (diff.type === this.DIFF_TYPES.REMOVED) {
+                if (Number.isInteger(index)) {
+                    removed.add(index);
+                }
+                continue;
+            }
+
+            // `arrayAnchor` is the old-array position; without it -- a
+            // hand-built diff -- the path segment is the best available guess.
+            const anchor = Math.min(
+                diff.arrayAnchor ?? (Number.isInteger(index) ? index : array.length),
+                array.length
+            );
+            const bucket = insertions.get(anchor) ?? [];
+            bucket.push(diff.newValue);
+            insertions.set(anchor, bucket);
+        }
+
+        const rebuilt: any[] = [];
+        for (let i = 0; i <= array.length; i++) {
+            for (const value of insertions.get(i) ?? []) {
+                rebuilt.push(value);
+            }
+            if (i < array.length && !removed.has(i)) {
+                rebuilt.push(array[i]);
+            }
+        }
+
+        // In place: the parent holds a reference to this array. Assigned in a
+        // loop rather than spread, which overflows the stack on long arrays.
+        array.length = 0;
+        for (const value of rebuilt) {
+            array.push(value);
+        }
+    }
+
+    /** Sets or deletes the value at a path, creating containers on the way. */
+    private static applyValueChange(root: any, diff: DiffResult): void {
+        const { path } = diff;
+        if (path.length === 0) {
+            return;
+        }
+
+        const parent = this.ensureParent(root, diff);
+        if (parent === undefined) {
+            return;
         }
 
         const lastKey = path[path.length - 1];
 
-        // Apply the change based on diff type
         switch (diff.type) {
-            case 'added':
-            case 'modified':
-                if (diff.newValue !== undefined) {
-                    current[lastKey] = diff.newValue;
-                }
+            case this.DIFF_TYPES.ADDED:
+            case this.DIFF_TYPES.MODIFIED:
+                parent[lastKey] = diff.newValue;
                 break;
-            
-            case 'removed':
-                if (Array.isArray(current)) {
-                    // For arrays, use splice to maintain indices
-                    const index = parseInt(lastKey, 10);
-                    if (!isNaN(index)) {
-                        current.splice(index, 1);
+
+            case this.DIFF_TYPES.REMOVED:
+                if (Array.isArray(parent)) {
+                    const index = Number(lastKey);
+                    if (Number.isInteger(index)) {
+                        parent.splice(index, 1);
                     }
                 } else {
-                    // For objects, delete the property
-                    delete current[lastKey];
+                    delete parent[lastKey];
                 }
                 break;
         }
     }
 
     /**
-     * Reverts a diff from a JSON object (opposite of applyDiff)
+     * Walks to a diff's parent container, creating anything missing.
+     *
+     * Whether a missing level becomes an array or an object comes from the
+     * recorded segment kind. Guessing from a numeric-looking segment turned
+     * an object with the key "0" into an array.
+     */
+    private static ensureParent(root: any, diff: DiffResult): any {
+        const { path, kinds } = diff;
+        let current = root;
+
+        for (let i = 0; i < path.length - 1; i++) {
+            const key = path[i];
+            if (current[key] === undefined || current[key] === null) {
+                const nextKind = kinds?.[i + 1];
+                const isIndex =
+                    nextKind !== undefined ? nextKind === 'index' : /^\d+$/.test(path[i + 1]);
+                current[key] = isIndex ? [] : {};
+            }
+            current = current[key];
+            if (current === null || typeof current !== 'object') {
+                return undefined;
+            }
+        }
+
+        return current;
+    }
+
+    /**
+     * Undoes a single change (the opposite of `applyDiff`).
+     *
+     * This works on one change at a time. Undoing several in sequence is not
+     * sound where arrays are restructured, because each path is expressed in
+     * the coordinates of the document the comparison ran against, and an
+     * insertion or deletion moves everything after it. To back changes out in
+     * bulk, re-derive the document instead: `applyDiffs(original, keep)` with
+     * the unwanted changes left out of `keep`, which is what the diff view
+     * does when a row is undone.
+     *
      * @param json The JSON object to modify
      * @param diff The diff to revert
      * @returns The modified JSON object
@@ -460,15 +714,9 @@ export class JSONDiff {
     private static revertDiffAtPath(obj: any, path: string[], diff: DiffResult): void {
         if (path.length === 0) return;
 
-        let current = obj;
-        for (let i = 0; i < path.length - 1; i++) {
-            const key = path[i];
-            if (current[key] === undefined || current[key] === null) {
-                const nextKey = path[i + 1];
-                const isArrayIndex = /^\d+$/.test(nextKey);
-                current[key] = isArrayIndex ? [] : {};
-            }
-            current = current[key];
+        const current = this.ensureParent(obj, diff);
+        if (current === undefined) {
+            return;
         }
 
         const lastKey = path[path.length - 1];
@@ -485,10 +733,23 @@ export class JSONDiff {
                     delete current[lastKey];
                 }
                 break;
-            
+
             case 'removed':
+                // Putting an array element back is an insertion, not an
+                // assignment -- assigning would overwrite whatever took its
+                // place and leave the array a element short.
+                if (Array.isArray(current)) {
+                    const index = parseInt(lastKey, 10);
+                    if (!isNaN(index)) {
+                        current.splice(index, 0, diff.oldValue);
+                    }
+                } else {
+                    current[lastKey] = diff.oldValue;
+                }
+                break;
+
             case 'modified':
-                // Revert removed/modified: restore old value
+                // Revert modified: restore old value
                 if (diff.oldValue !== undefined) {
                     current[lastKey] = diff.oldValue;
                 }
