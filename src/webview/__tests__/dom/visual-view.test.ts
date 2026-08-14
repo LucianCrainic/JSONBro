@@ -432,6 +432,143 @@ describe('the source beside the picture', () => {
     });
 });
 
+/*
+ * The find control used to belong to the format view, so the picture could not
+ * be searched at all. It drives whichever view is showing now, and a hit is
+ * shown as the node it falls on rather than as a position in text.
+ */
+describe('searching the picture', () => {
+    let view: VisualView;
+
+    const search = (term: string) => view.searchable.search(term, { matchCase: false, regex: false, scope: 'all' });
+
+    beforeEach(() => {
+        mountPanel('format');
+        view = new VisualView(new Messenger());
+        show(view);
+    });
+
+    afterEach(() => {
+        view.dispose();
+    });
+
+    it('finds every hit in the document', () => {
+        expect(search('admin')).toBe(1);
+        expect(search('a')).toBeGreaterThan(1);
+    });
+
+    it('marks the rows that hold a hit', () => {
+        search('Ada');
+        expect(document.querySelectorAll('.tree-row.is-match').length).toBeGreaterThan(0);
+    });
+
+    it('selects the first hit and shows where it is', () => {
+        search('Ada');
+
+        expect(selected()?.textContent).toContain('first');
+        expect(breadcrumb()).toBe('root›author›first');
+    });
+
+    it('steps between hits', () => {
+        search('a');
+        const first = document.querySelector('.tree-row.is-current-match')?.textContent;
+
+        view.searchable.next();
+
+        expect(document.querySelector('.tree-row.is-current-match')?.textContent).not.toBe(first);
+    });
+
+    it('opens a fold that was hiding a hit', () => {
+        document.getElementById('visual-collapse-all')?.click();
+        expect(rows()).toHaveLength(1);
+
+        search('admin');
+
+        expect(texts().some(text => text.includes('"admin"'))).toBe(true);
+    });
+
+    it('reports how many it found', () => {
+        search('Ada');
+        expect(view.searchable.position()).toEqual(
+            expect.objectContaining({ current: 1, total: 1 })
+        );
+    });
+
+    it('clears the marks', () => {
+        search('Ada');
+        view.searchable.clear();
+
+        expect(document.querySelectorAll('.tree-row.is-match')).toHaveLength(0);
+    });
+
+    it('finds nothing in an empty view rather than throwing', () => {
+        view.setDocument(null);
+        expect(search('anything')).toBe(0);
+    });
+});
+
+/*
+ * Making a change used to mean leaving for the Format tab and coming back,
+ * because the pane beside the picture was read-only with no way out of it.
+ */
+describe('editing beside the picture', () => {
+    let view: VisualView;
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        mountPanel('format');
+        view = new VisualView(new Messenger());
+        show(view);
+    });
+
+    afterEach(() => {
+        view.dispose();
+        jest.useRealTimers();
+    });
+
+    it('starts as something to read', () => {
+        expect(document.getElementById('input-panel')?.dataset.input).toBe('source');
+    });
+
+    it('swaps to the editable box and back', () => {
+        document.getElementById('edit-input')?.click();
+        expect(document.getElementById('input-panel')?.dataset.input).toBe('edit');
+
+        document.getElementById('edit-input')?.click();
+        expect(document.getElementById('input-panel')?.dataset.input).toBe('source');
+    });
+
+    it('rebuilds the picture after a pause in typing', () => {
+        const rebuilds = jest.fn();
+        view.onRebuildRequested = rebuilds;
+        document.getElementById('edit-input')?.click();
+
+        const field = document.getElementById('input') as HTMLTextAreaElement;
+        field.value = '{"other":1}';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+
+        expect(rebuilds).not.toHaveBeenCalled();
+        jest.advanceTimersByTime(1000);
+        expect(rebuilds).toHaveBeenCalledTimes(1);
+    });
+
+    /* A burst of typing is one rebuild, not one per keystroke. */
+    it('rebuilds once for a burst of typing', () => {
+        const rebuilds = jest.fn();
+        view.onRebuildRequested = rebuilds;
+        const field = document.getElementById('input') as HTMLTextAreaElement;
+
+        for (const text of ['{', '{"a', '{"a":', '{"a":1}']) {
+            field.value = text;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            jest.advanceTimersByTime(50);
+        }
+        jest.advanceTimersByTime(1000);
+
+        expect(rebuilds).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('formatPath', () => {
     it('uses dots for names that need no quoting', () => {
         expect(formatPath(['author', 'first'])).toBe('$.author.first');

@@ -13,7 +13,7 @@ import { parseInto } from '../engine/recovering-parser';
 import { JSONFormatter } from '../formatter';
 import { DocumentPane } from '../ui/document-pane';
 import { byId, on } from '../ui/dom';
-import { FindWidget } from '../ui/find-widget';
+import type { Searchable } from '../ui/find-widget';
 import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
 import { ProblemsList } from '../ui/problems-list';
@@ -48,7 +48,32 @@ export class FormatView {
     private splitter: Splitter | null = null;
     private panels: PanelGroup | null = null;
     private readonly problems: ProblemsList;
-    public readonly find: FindWidget;
+
+    /**
+     * What the shell's find widget drives while this view is on screen.
+     *
+     * The widget itself belongs to the shell, since the same control searches
+     * whichever view is showing.
+     */
+    public readonly searchable: Searchable = {
+        // Opening find used to be a silent no-op until something had been
+        // formatted. Format first instead, so the control always responds.
+        ensureSearchable: () => {
+            if (!this.doc) {
+                this.format();
+            }
+            return this.doc !== null;
+        },
+        search: (term, options) => this.runSearch(term, options),
+        next: () => this.stepMatch(1),
+        previous: () => this.stepMatch(-1),
+        clear: () => this.clearMatches(),
+        position: () => ({
+            current: this.matches.length > 0 ? this.matchIndex + 1 : 0,
+            total: this.matches.length,
+            truncated: this.matchesTruncated
+        })
+    };
 
     /** Notifies the shell that the status model changed. */
     public onStatusChange: (status: StatusModel) => void = () => undefined;
@@ -70,26 +95,6 @@ export class FormatView {
 
         this.problems = new ProblemsList({
             onReveal: diagnostic => this.revealSourceLine(diagnostic.line)
-        });
-
-        this.find = new FindWidget({
-            // Opening find used to be a silent no-op until something had been
-            // formatted. Format first instead, so the control always responds.
-            ensureSearchable: () => {
-                if (!this.doc) {
-                    this.format();
-                }
-                return this.doc !== null;
-            },
-            search: (term, options) => this.runSearch(term, options),
-            next: () => this.stepMatch(1),
-            previous: () => this.stepMatch(-1),
-            clear: () => this.clearMatches(),
-            position: () => ({
-                current: this.matches.length > 0 ? this.matchIndex + 1 : 0,
-                total: this.matches.length,
-                truncated: this.matchesTruncated
-            })
         });
 
         this.setupLayout();
@@ -336,7 +341,6 @@ export class FormatView {
 
         this.problems.show(outcome.diagnostics);
         this.publishStatus(this.describeDocument(sourceLength, outcome.diagnostics));
-        this.find.refresh();
         this.onDocumentChange(outcome.doc, outcome.diagnostics);
     }
 
@@ -458,7 +462,6 @@ export class FormatView {
         this.setShowLineNumbers(settings.showLineNumbers);
         this.indentSize = settings.indentSize;
         this.setSplitRatio(settings.defaultPaneRatio);
-        this.find.setDefaultScope(settings.searchScope);
         this.maxInlineSize = settings.maxInlineSize;
 
         if (this.doc) {
@@ -501,7 +504,6 @@ export class FormatView {
         if (inputEl) {
             inputEl.value = '';
         }
-        this.find.reset();
         this.reset();
         this.publishStatus({});
     }
@@ -606,7 +608,6 @@ export class FormatView {
         this.teardown.length = 0;
         this.splitter?.dispose();
         this.panels?.dispose();
-        this.find.dispose();
         this.problems.dispose();
         this.pane?.dispose();
         this.worker.dispose();

@@ -7,6 +7,7 @@ import { PanelStateStore } from './state';
 import { byId, on, qsa } from './ui/dom';
 import { Messenger } from './ui/messaging';
 import { Shortcuts } from './ui/shortcuts';
+import { FindWidget, type Searchable } from './ui/find-widget';
 import { StatusBar, type StatusModel } from './ui/status-bar';
 import { setTip, TooltipHost } from './ui/tooltip';
 import { DiffView } from './views/diff-view';
@@ -52,6 +53,13 @@ export class Shell {
     private readonly diffView: DiffView;
     private readonly visualView: VisualView;
     private readonly state = new PanelStateStore();
+    /**
+     * One find control for the whole panel.
+     *
+     * It used to belong to the format view, which meant the picture had no way
+     * to be searched at all. It drives whichever view is on screen instead.
+     */
+    private readonly find: FindWidget;
     private mode: Mode = 'format';
 
     constructor() {
@@ -78,8 +86,23 @@ export class Shell {
         };
         // One document, two renderers: the tree is handed what the format view
         // produced rather than parsing the same input again.
-        this.formatView.onDocumentChange = (doc, diagnostics) =>
+        this.formatView.onDocumentChange = (doc, diagnostics) => {
             this.visualView.setDocument(doc, diagnostics);
+            this.find.refresh();
+        };
+
+        // Editing in the visual view rebuilds through the format view, since
+        // that is what owns parsing; the picture renders what it produces.
+        this.visualView.onRebuildRequested = () => this.formatView.format();
+
+        this.find = new FindWidget({
+            ensureSearchable: () => this.searchTarget().ensureSearchable(),
+            search: (term, options) => this.searchTarget().search(term, options),
+            next: () => this.searchTarget().next(),
+            previous: () => this.searchTarget().previous(),
+            clear: () => this.searchTarget().clear(),
+            position: () => this.searchTarget().position()
+        });
     }
 
     public start(): void {
@@ -160,6 +183,7 @@ export class Shell {
 
     /** Applies the user's configuration to both views. */
     private applySettings(settings: Settings): void {
+        this.find.setDefaultScope(settings.searchScope);
         this.formatView.applySettings(settings);
         this.diffView.applySettings(settings);
         this.visualView.applySettings(settings);
@@ -211,7 +235,7 @@ export class Shell {
         bind('clear', () => this.clear());
         bind('copy', () => this.copy());
         bind('save', () => this.formatView.save());
-        bind('search-toggle', () => this.formatView.find.toggle());
+        bind('search-toggle', () => this.find.toggle());
     }
 
     /**
@@ -238,8 +262,11 @@ export class Shell {
             setTip(actionButton, ACTION_LABELS[mode].title, 'mod+enter');
         }
 
+        // The control searches the document, which the diff view does not have.
         if (mode === 'diff') {
-            this.formatView.find.close();
+            this.find.close();
+        } else {
+            this.find.reset();
         }
 
         // The visual view shows the same document the format view does, so
@@ -254,6 +281,11 @@ export class Shell {
         }
 
         this.statusBar.render(this.activeView().getStatus());
+    }
+
+    /** Whichever view the find control should be searching. */
+    private searchTarget(): Searchable {
+        return this.mode === 'visual' ? this.visualView.searchable : this.formatView.searchable;
     }
 
     /** Whichever view the toolbar's shared buttons should act on. */
@@ -283,6 +315,7 @@ export class Shell {
         // Format and tree share one input and one document, so clearing in
         // either empties both.
         this.formatView.clear();
+        this.find.reset();
     }
 
     private copy(): void {
@@ -322,9 +355,9 @@ export class Shell {
         this.shortcuts.register({
             key: 'f',
             mod: true,
-            when: inFormat,
-            description: 'Find in formatted JSON',
-            run: () => this.formatView.find.open()
+            when: () => !inDiff(),
+            description: 'Find in the document',
+            run: () => this.find.open()
         });
         this.shortcuts.register({
             key: '1',
