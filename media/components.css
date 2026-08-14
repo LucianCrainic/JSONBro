@@ -342,6 +342,16 @@ body[data-mode='diff'] [data-mode-only='format'] {
     padding: var(--jb-sp-2) 0;
 }
 
+/*
+ * The formatted output scrolls rows itself, so it cannot carry padding: the
+ * absolutely positioned window would be offset by it, and a horizontal pad
+ * would clip the long lines that need to scroll sideways.
+ */
+#output {
+    padding: var(--jb-sp-2) 0;
+    white-space: pre;
+}
+
 .pane__content.is-error {
     color: var(--jb-fg-error);
     font-family: var(--jb-font);

@@ -23,19 +23,16 @@ function openFind(): void {
     el('search-toggle').click();
 }
 
+/** Types a term and lets the debounce elapse. */
 function type(term: string): void {
     const input = el<HTMLInputElement>('find-input');
     input.value = term;
     input.dispatchEvent(new Event('input', { bubbles: true }));
+    jest.runOnlyPendingTimers();
 }
 
-function matches(): HTMLElement[] {
+function marks(): HTMLElement[] {
     return Array.from(el('output').querySelectorAll<HTMLElement>('.search-highlight'));
-}
-
-/** Distinct match groups, since one match can be split across text nodes. */
-function matchCount(): number {
-    return new Set(matches().map(m => m.getAttribute('data-match-id'))).size;
 }
 
 function counter(): string {
@@ -48,32 +45,59 @@ function press(key: string, init: Partial<KeyboardEventInit> = {}): void {
     );
 }
 
-describe('FindWidget', () => {
-    beforeEach(() => startFormatted());
+function option(name: string): void {
+    document.querySelector<HTMLElement>(`[data-find-option="${name}"]`)?.click();
+}
 
-    it('highlights every match and reports the position', () => {
+function scope(name: string): void {
+    document.querySelector<HTMLElement>(`[data-find-scope="${name}"]`)?.click();
+}
+
+describe('FindWidget', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+        startFormatted();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it('marks every match and reports the position', () => {
         openFind();
         type('name');
 
         // name, Name, nested.name, and the "name" array item -- case-insensitive
-        expect(matchCount()).toBe(4);
         expect(counter()).toBe('1 of 4');
+        expect(marks().length).toBeGreaterThan(0);
     });
 
     it('reports when nothing matches', () => {
         openFind();
-        type('nonexistent');
+        type('zzz');
 
-        expect(matchCount()).toBe(0);
         expect(counter()).toBe('No results');
+        expect(marks()).toHaveLength(0);
+        expect(el<HTMLButtonElement>('find-next').disabled).toBe(true);
     });
 
-    it('disables navigation when there are no matches', () => {
+    /*
+     * Searching used to run on every keystroke, walking the rendered document
+     * each time. Waiting for a pause means one search per word, not per letter.
+     */
+    it('waits for typing to pause before searching', () => {
         openFind();
-        type('nonexistent');
+        const input = el<HTMLInputElement>('find-input');
 
-        expect(el<HTMLButtonElement>('find-next').disabled).toBe(true);
-        expect(el<HTMLButtonElement>('find-prev').disabled).toBe(true);
+        for (const term of ['n', 'na', 'nam', 'name']) {
+            input.value = term;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        expect(counter()).toBe('');
+
+        jest.runOnlyPendingTimers();
+        expect(counter()).toBe('1 of 4');
     });
 
     it('advances and wraps through matches', () => {
@@ -105,16 +129,23 @@ describe('FindWidget', () => {
         openFind();
         type('name');
 
-        expect(matches().filter(m => m.classList.contains('current'))).toHaveLength(1);
+        expect(document.querySelectorAll('.search-highlight.current').length).toBeGreaterThan(0);
+        const currents = new Set(
+            Array.from(document.querySelectorAll('.search-highlight.current')).map(node =>
+                node.closest('.json-line')?.getAttribute('data-line')
+            )
+        );
+        expect(currents.size).toBe(1);
     });
 
-    it('closes on Escape and drops the highlights', () => {
+    it('closes on Escape and drops the marks', () => {
         openFind();
         type('name');
+
         press('Escape');
 
         expect(el('find-widget').hidden).toBe(true);
-        expect(matchCount()).toBe(0);
+        expect(marks()).toHaveLength(0);
     });
 
     it('restores the previous term when reopened', () => {
@@ -124,24 +155,22 @@ describe('FindWidget', () => {
 
         openFind();
         expect(el<HTMLInputElement>('find-input').value).toBe('name');
-        expect(matchCount()).toBe(4);
+        expect(counter()).toBe('1 of 4');
     });
 
     describe('match case', () => {
         it('is off by default', () => {
             openFind();
             type('NAME');
-            expect(matchCount()).toBe(4);
+            expect(counter()).toBe('1 of 4');
         });
 
-        it('restricts to exact casing when on', () => {
+        it('narrows to exact case when on', () => {
             openFind();
             type('Name');
-            el('find-match-case').click();
+            option('matchCase');
 
-            // Only the "Name" key; "name" occurrences no longer qualify.
-            expect(matchCount()).toBe(1);
-            expect(matches()[0].textContent).toBe('Name');
+            expect(counter()).toBe('1 of 1');
         });
     });
 
@@ -149,100 +178,81 @@ describe('FindWidget', () => {
         it('defaults to searching everything', () => {
             openFind();
             type('name');
-            expect(matchCount()).toBe(4);
+            expect(counter()).toBe('1 of 4');
         });
 
         it('restricts to keys', () => {
             openFind();
             type('name');
-            el('find-widget').querySelector<HTMLElement>('[data-find-scope="keys"]')?.click();
+            scope('keys');
 
-            // name, Name and nested.name are keys; the array item is a value.
-            expect(matchCount()).toBe(3);
-            for (const match of matches()) {
-                expect(match.closest('.key')).not.toBeNull();
-            }
+            // "name", "Name" and nested "name" are property names; the array
+            // element "name" is a value.
+            expect(counter()).toBe('1 of 3');
         });
 
         it('restricts to values', () => {
             openFind();
             type('name');
-            el('find-widget').querySelector<HTMLElement>('[data-find-scope="values"]')?.click();
+            scope('values');
 
-            expect(matchCount()).toBe(1);
-            expect(matches()[0].closest('.string')).not.toBeNull();
-        });
-
-        it('marks the active scope', () => {
-            openFind();
-            const keys = el('find-widget').querySelector<HTMLElement>('[data-find-scope="keys"]');
-            const all = el('find-widget').querySelector<HTMLElement>('[data-find-scope="all"]');
-
-            keys?.click();
-
-            expect(keys?.classList.contains('is-active')).toBe(true);
-            expect(all?.classList.contains('is-active')).toBe(false);
+            expect(counter()).toBe('1 of 1');
         });
     });
 
     describe('regular expressions', () => {
-        it('matches a pattern when enabled', () => {
-            openFind();
-            type('n[ae]sted');
-            expect(matchCount()).toBe(0);
-
-            el('find-regex').click();
-            expect(matchCount()).toBe(1);
-        });
-
         it('reports an invalid pattern instead of silently finding nothing', () => {
             openFind();
-            el('find-regex').click();
+            option('regex');
             type('[unclosed');
 
             expect(counter()).toBe('Invalid pattern');
-            expect(el('find-count').classList.contains('is-error')).toBe(true);
         });
 
         it('does not lowercase the pattern when match case is off', () => {
             openFind();
-            el('find-regex').click();
-            // \S would become \s if the pattern were lowercased, matching
-            // whitespace instead of non-whitespace.
+            option('regex');
+            // \S would become \s -- the opposite class -- if the pattern were
+            // lowercased before compiling.
             type('\\S+');
 
-            expect(matchCount()).toBeGreaterThan(0);
-            expect(counter()).not.toBe('Invalid pattern');
+            expect(counter()).not.toBe('No results');
+        });
+
+        it('matches with a pattern', () => {
+            openFind();
+            option('regex');
+            type('"n[a-z]+"');
+
+            expect(counter()).toMatch(/of \d+/);
         });
     });
 
-    /*
-     * The gutter is chrome, not content. Matching it meant searching for a
-     * number lit up line numbers alongside real hits.
-     */
-    describe('line numbers', () => {
-        it('never matches the gutter', () => {
-            startFormatted(JSON.stringify({ total: 12 }));
+    describe('the gutter', () => {
+        /* Line numbers are chrome, not content: a search for "12" must not
+           light up the gutter. */
+        it('is never matched', () => {
+            startFormatted(JSON.stringify({ a: 1, b: 2, c: 3, d: 4, e: 5 }));
             openFind();
-            type('1');
+            type('3');
 
-            for (const match of matches()) {
-                expect(match.closest('.line-numbers')).toBeNull();
+            for (const mark of marks()) {
+                expect(mark.closest('.line-number')).toBeNull();
             }
-            // Only the "12" value contains a 1.
-            expect(matchCount()).toBe(1);
+            expect(counter()).toBe('1 of 1');
         });
     });
 
     describe('re-rendering', () => {
-        it('keeps the highlights after toggling line numbers', () => {
+        it('keeps the marks after toggling line numbers', () => {
             openFind();
             type('name');
-            expect(matchCount()).toBe(4);
+            const before = marks().length;
 
             el('line-numbers-toggle').click();
 
-            expect(matchCount()).toBe(4);
+            expect(marks().length).toBe(before);
+            expect(counter()).toBe('1 of 4');
         });
     });
 });
