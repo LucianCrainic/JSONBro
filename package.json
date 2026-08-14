@@ -70,6 +70,16 @@
         "command": "jsonbro.clearHistory",
         "title": "Clear History",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "jsonbro.clearFormatHistory",
+        "title": "Clear Format History",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "jsonbro.clearDiffHistory",
+        "title": "Clear Diff History",
+        "icon": "$(clear-all)"
       }
     ],
     "viewsContainers": {
@@ -128,6 +138,16 @@
           "command": "jsonbro.removeDiffHistory",
           "when": "view == jsonbro.explorer && viewItem == diffHistoryEntry",
           "group": "inline@2"
+        },
+        {
+          "command": "jsonbro.clearFormatHistory",
+          "when": "view == jsonbro.explorer && viewItem == formatHistoryRoot",
+          "group": "inline@1"
+        },
+        {
+          "command": "jsonbro.clearDiffHistory",
+          "when": "view == jsonbro.explorer && viewItem == diffHistoryRoot",
+          "group": "inline@1"
         }
       ],
       "commandPalette": [
@@ -153,6 +173,14 @@
         },
         {
           "command": "jsonbro.renameDiffHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.clearFormatHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.clearDiffHistory",
           "when": "false"
         }
       ]
@@ -223,6 +251,22 @@
           "type": "number",
           "default": 1000000,
           "description": "Ceiling on the array alignment pass, as old length times new length. Above it arrays are compared by position, which is faster but reports an insertion as a change to every later element."
+        },
+        "jsonbro.history.maxEntries": {
+          "type": "number",
+          "default": 50,
+          "minimum": 0,
+          "description": "How many format and how many diff entries history keeps."
+        },
+        "jsonbro.history.maxEntrySize": {
+          "type": "number",
+          "default": 131072,
+          "description": "Largest document stored whole, in bytes. Anything larger keeps a preview and says so."
+        },
+        "jsonbro.history.maxTotalSize": {
+          "type": "number",
+          "default": 5242880,
+          "description": "Ceiling on everything history holds, in bytes, across format and diff entries together. Oldest entries are dropped first."
         }
       }
     },

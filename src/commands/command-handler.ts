@@ -46,14 +46,26 @@ export class CommandHandler {
             (leftJson: string, rightJson: string) => this.loadDiffHistory(leftJson, rightJson)
         );
 
+        // The second argument is the tree's whole selection, so these act on
+        // everything the user picked rather than only the row they clicked.
         const removeFormatHistoryCommand = vscode.commands.registerCommand(
             'jsonbro.removeFormatHistory',
-            (item: any) => this.removeFormatHistory(item)
+            (item: any, selection?: any[]) => this.removeFormatHistory(item, selection)
         );
 
         const removeDiffHistoryCommand = vscode.commands.registerCommand(
             'jsonbro.removeDiffHistory',
-            (item: any) => this.removeDiffHistory(item)
+            (item: any, selection?: any[]) => this.removeDiffHistory(item, selection)
+        );
+
+        const clearFormatHistoryCommand = vscode.commands.registerCommand(
+            'jsonbro.clearFormatHistory',
+            () => this.clearFormatHistory()
+        );
+
+        const clearDiffHistoryCommand = vscode.commands.registerCommand(
+            'jsonbro.clearDiffHistory',
+            () => this.clearDiffHistory()
         );
 
         const renameFormatHistoryCommand = vscode.commands.registerCommand(
@@ -84,6 +96,8 @@ export class CommandHandler {
             loadDiffHistoryCommand,
             removeFormatHistoryCommand,
             removeDiffHistoryCommand,
+            clearFormatHistoryCommand,
+            clearDiffHistoryCommand,
             renameFormatHistoryCommand,
             renameDiffHistoryCommand,
             clearHistoryCommand,
@@ -102,12 +116,7 @@ export class CommandHandler {
     }
 
     private async clearHistory(): Promise<void> {
-        const result = await vscode.window.showWarningMessage(
-            'Clear all JSONBro history?',
-            { modal: true },
-            'Clear'
-        );
-        if (result === 'Clear') {
+        if (await this.confirm('Clear all JSONBro history?', 'Clear')) {
             await this.activityBarProvider.clearHistory();
         }
     }
@@ -132,70 +141,114 @@ export class CommandHandler {
         this.webviewProvider.loadDiffHistory(leftJson, rightJson);
     }
 
-    private async removeFormatHistory(item: any): Promise<void> {
-        if (item && item.resourceUri) {
-            const index = this.extractIndexFromUri(item.resourceUri);
-            if (index !== -1) {
-                const result = await vscode.window.showWarningMessage(
-                    'Are you sure you want to remove this history entry?',
-                    { modal: true },
-                    'Remove'
-                );
-                if (result === 'Remove') {
-                    this.activityBarProvider.removeFormatHistoryEntry(index);
-                }
-            }
+    /**
+     * Removes every selected format entry.
+     *
+     * VS Code passes the whole tree selection as the second argument, so
+     * removing five entries is one confirmation rather than five.
+     */
+    private async removeFormatHistory(item: any, selection?: any[]): Promise<void> {
+        const indices = this.selectedIndices(item, selection);
+        if (indices.length > 0 && (await this.confirmRemoval(indices.length))) {
+            await this.activityBarProvider.removeFormatHistoryEntries(indices);
         }
     }
 
-    private async removeDiffHistory(item: any): Promise<void> {
-        if (item && item.resourceUri) {
-            const index = this.extractIndexFromUri(item.resourceUri);
+    private async removeDiffHistory(item: any, selection?: any[]): Promise<void> {
+        const indices = this.selectedIndices(item, selection);
+        if (indices.length > 0 && (await this.confirmRemoval(indices.length))) {
+            await this.activityBarProvider.removeDiffHistoryEntries(indices);
+        }
+    }
+
+    private async clearFormatHistory(): Promise<void> {
+        if (await this.confirm('Clear all format history?', 'Clear')) {
+            await this.activityBarProvider.clearFormatHistory();
+        }
+    }
+
+    private async clearDiffHistory(): Promise<void> {
+        if (await this.confirm('Clear all diff history?', 'Clear')) {
+            await this.activityBarProvider.clearDiffHistory();
+        }
+    }
+
+    /**
+     * The history indices a command was invoked on.
+     *
+     * The right-clicked item is included even when it is not part of the
+     * selection, which is what VS Code's own trees do.
+     */
+    private selectedIndices(item: any, selection?: any[]): number[] {
+        const items = selection && selection.length > 0 ? selection : [item];
+        const indices = new Set<number>();
+
+        for (const candidate of items) {
+            const index = candidate?.resourceUri
+                ? this.extractIndexFromUri(candidate.resourceUri)
+                : -1;
             if (index !== -1) {
-                const result = await vscode.window.showWarningMessage(
-                    'Are you sure you want to remove this history entry?',
-                    { modal: true },
-                    'Remove'
-                );
-                if (result === 'Remove') {
-                    this.activityBarProvider.removeDiffHistoryEntry(index);
-                }
+                indices.add(index);
             }
         }
+        if (item?.resourceUri) {
+            const index = this.extractIndexFromUri(item.resourceUri);
+            if (index !== -1) {
+                indices.add(index);
+            }
+        }
+
+        return [...indices];
+    }
+
+    private confirmRemoval(count: number): Promise<boolean> {
+        return this.confirm(
+            count === 1
+                ? 'Remove this history entry?'
+                : `Remove ${count} history entries?`,
+            'Remove'
+        );
+    }
+
+    private async confirm(question: string, action: string): Promise<boolean> {
+        const result = await vscode.window.showWarningMessage(
+            question,
+            { modal: true },
+            action
+        );
+        return result === action;
     }
 
     private async renameFormatHistory(item: any): Promise<void> {
-        if (item && item.resourceUri) {
-            const index = this.extractIndexFromUri(item.resourceUri);
-            if (index !== -1) {
-                const currentName = item.label;
-                const newName = await vscode.window.showInputBox({
-                    prompt: 'Enter a new name for this history entry',
-                    value: currentName.startsWith('Entry ') ? '' : currentName,
-                    placeHolder: 'History entry name'
-                });
-                if (newName !== undefined) {
-                    this.activityBarProvider.renameFormatHistoryEntry(index, newName);
-                }
-            }
+        const name = await this.askForName(item);
+        if (name !== undefined) {
+            await this.activityBarProvider.renameFormatHistoryEntry(
+                this.extractIndexFromUri(item.resourceUri),
+                name
+            );
         }
     }
 
     private async renameDiffHistory(item: any): Promise<void> {
-        if (item && item.resourceUri) {
-            const index = this.extractIndexFromUri(item.resourceUri);
-            if (index !== -1) {
-                const currentName = item.label;
-                const newName = await vscode.window.showInputBox({
-                    prompt: 'Enter a new name for this history entry',
-                    value: currentName.startsWith('Diff ') ? '' : currentName,
-                    placeHolder: 'History entry name'
-                });
-                if (newName !== undefined) {
-                    this.activityBarProvider.renameDiffHistoryEntry(index, newName);
-                }
-            }
+        const name = await this.askForName(item);
+        if (name !== undefined) {
+            await this.activityBarProvider.renameDiffHistoryEntry(
+                this.extractIndexFromUri(item.resourceUri),
+                name
+            );
         }
+    }
+
+    private async askForName(item: any): Promise<string | undefined> {
+        if (!item?.resourceUri || this.extractIndexFromUri(item.resourceUri) === -1) {
+            return undefined;
+        }
+
+        return vscode.window.showInputBox({
+            prompt: 'Enter a new name for this history entry',
+            value: item.label,
+            placeHolder: 'History entry name'
+        });
     }
 
     private extractIndexFromUri(uri: vscode.Uri): number {
