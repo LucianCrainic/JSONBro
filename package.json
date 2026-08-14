@@ -92,6 +92,25 @@
       {
         "command": "jsonbro.compareSelectedFiles",
         "title": "JSONBro: Compare Selected Files"
+      },
+      {
+        "command": "jsonbro.clearRecentFiles",
+        "title": "Clear Recent Files",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "jsonbro.formatClipboard",
+        "title": "JSONBro: Format from Clipboard"
+      },
+      {
+        "command": "jsonbro.pinHistoryEntry",
+        "title": "Pin",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "jsonbro.unpinHistoryEntry",
+        "title": "Unpin",
+        "icon": "$(pinned)"
       }
     ],
     "viewsContainers": {
@@ -106,9 +125,20 @@
     "views": {
       "jsonbro": [
         {
-          "id": "jsonbro.explorer",
-          "name": "JSONBro",
-          "when": "true"
+          "id": "jsonbro.actions",
+          "name": "Quick Actions"
+        },
+        {
+          "id": "jsonbro.recentFiles",
+          "name": "Recent Files"
+        },
+        {
+          "id": "jsonbro.formatHistory",
+          "name": "Format History"
+        },
+        {
+          "id": "jsonbro.diffHistory",
+          "name": "Diff History"
         }
       ]
     },
@@ -116,55 +146,91 @@
       "view/title": [
         {
           "command": "jsonbro.openFromActivityBar",
-          "when": "view == jsonbro.explorer",
-          "group": "navigation"
+          "when": "view == jsonbro.actions",
+          "group": "navigation@1"
         },
         {
-          "command": "jsonbro.openFile",
-          "when": "view == jsonbro.explorer",
+          "command": "jsonbro.clearRecentFiles",
+          "when": "view == jsonbro.recentFiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "jsonbro.clearFormatHistory",
+          "when": "view == jsonbro.formatHistory",
+          "group": "navigation@1"
+        },
+        {
+          "command": "jsonbro.clearDiffHistory",
+          "when": "view == jsonbro.diffHistory",
           "group": "navigation@1"
         },
         {
           "command": "jsonbro.clearHistory",
-          "when": "view == jsonbro.explorer",
-          "group": "navigation@2"
+          "when": "view == jsonbro.formatHistory",
+          "group": "overflow@1"
         }
       ],
       "view/item/context": [
         {
-          "command": "jsonbro.renameFormatHistory",
-          "when": "view == jsonbro.explorer && viewItem == formatHistoryEntry",
+          "command": "jsonbro.pinHistoryEntry",
+          "when": "view == jsonbro.formatHistory && viewItem == formatHistoryEntry",
           "group": "inline@1"
+        },
+        {
+          "command": "jsonbro.unpinHistoryEntry",
+          "when": "view == jsonbro.formatHistory && viewItem == formatHistoryEntryPinned",
+          "group": "inline@1"
+        },
+        {
+          "command": "jsonbro.renameFormatHistory",
+          "when": "view == jsonbro.formatHistory && viewItem =~ /formatHistoryEntry/",
+          "group": "inline@2"
         },
         {
           "command": "jsonbro.removeFormatHistory",
-          "when": "view == jsonbro.explorer && viewItem == formatHistoryEntry",
-          "group": "inline@2"
+          "when": "view == jsonbro.formatHistory && viewItem =~ /formatHistoryEntry/",
+          "group": "inline@3"
+        },
+        {
+          "command": "jsonbro.pinHistoryEntry",
+          "when": "view == jsonbro.diffHistory && viewItem == diffHistoryEntry",
+          "group": "inline@1"
+        },
+        {
+          "command": "jsonbro.unpinHistoryEntry",
+          "when": "view == jsonbro.diffHistory && viewItem == diffHistoryEntryPinned",
+          "group": "inline@1"
         },
         {
           "command": "jsonbro.renameDiffHistory",
-          "when": "view == jsonbro.explorer && viewItem == diffHistoryEntry",
-          "group": "inline@1"
-        },
-        {
-          "command": "jsonbro.removeDiffHistory",
-          "when": "view == jsonbro.explorer && viewItem == diffHistoryEntry",
+          "when": "view == jsonbro.diffHistory && viewItem =~ /diffHistoryEntry/",
           "group": "inline@2"
         },
         {
-          "command": "jsonbro.clearFormatHistory",
-          "when": "view == jsonbro.explorer && viewItem == formatHistoryRoot",
-          "group": "inline@1"
-        },
-        {
-          "command": "jsonbro.clearDiffHistory",
-          "when": "view == jsonbro.explorer && viewItem == diffHistoryRoot",
-          "group": "inline@1"
+          "command": "jsonbro.removeDiffHistory",
+          "when": "view == jsonbro.diffHistory && viewItem =~ /diffHistoryEntry/",
+          "group": "inline@3"
         }
       ],
       "commandPalette": [
         {
-          "command": "jsonbro.loadFormatHistory",
+          "command": "jsonbro.clearDiffHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.clearFormatHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.clearHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.clearRecentFiles",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.compareSelectedFiles",
           "when": "false"
         },
         {
@@ -172,7 +238,15 @@
           "when": "false"
         },
         {
-          "command": "jsonbro.removeFormatHistory",
+          "command": "jsonbro.loadFormatHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.openFromActivityBar",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.pinHistoryEntry",
           "when": "false"
         },
         {
@@ -180,7 +254,7 @@
           "when": "false"
         },
         {
-          "command": "jsonbro.renameFormatHistory",
+          "command": "jsonbro.removeFormatHistory",
           "when": "false"
         },
         {
@@ -188,15 +262,11 @@
           "when": "false"
         },
         {
-          "command": "jsonbro.clearFormatHistory",
+          "command": "jsonbro.renameFormatHistory",
           "when": "false"
         },
         {
-          "command": "jsonbro.clearDiffHistory",
-          "when": "false"
-        },
-        {
-          "command": "jsonbro.compareSelectedFiles",
+          "command": "jsonbro.unpinHistoryEntry",
           "when": "false"
         }
       ],
@@ -432,6 +502,20 @@
         "command": "jsonbro.openFile",
         "key": "ctrl+alt+o",
         "mac": "cmd+alt+o"
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "jsonbro.recentFiles",
+        "contents": "No files opened yet.\n[Open a JSON file](command:jsonbro.openFile)"
+      },
+      {
+        "view": "jsonbro.formatHistory",
+        "contents": "Nothing formatted yet. Documents you format are saved here.\n[Format JSON](command:jsonbro.formatJson)"
+      },
+      {
+        "view": "jsonbro.diffHistory",
+        "contents": "Nothing compared yet. Comparisons you run are saved here.\n[Compare JSON](command:jsonbro.diffJson)"
       }
     ]
   },

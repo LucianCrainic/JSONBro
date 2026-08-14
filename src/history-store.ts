@@ -18,6 +18,18 @@ import * as vscode from 'vscode';
 
 const FORMAT_KEY = 'jsonbro.history.format';
 const DIFF_KEY = 'jsonbro.history.diff';
+const FILES_KEY = 'jsonbro.history.files';
+
+/** How many recently opened files are remembered. Paths are tiny. */
+export const RECENT_FILE_LIMIT = 20;
+
+/**
+ * How many entries may be pinned.
+ *
+ * A pinned entry is exempt from eviction, so without a cap the budget could be
+ * filled entirely with entries nothing is allowed to drop.
+ */
+export const PIN_LIMIT = 10;
 
 /**
  * What the store is allowed to keep. Every value is user-configurable.
@@ -59,6 +71,8 @@ interface StoredEntry {
     name?: string;
     /** Set when the document was too large to keep whole. */
     truncated?: boolean;
+    /** Kept regardless of age once the budget is full. */
+    pinned?: boolean;
 }
 
 export interface FormatEntry extends StoredEntry {
@@ -73,6 +87,12 @@ export interface DiffEntry extends StoredEntry {
 }
 
 export type HistoryEntry = FormatEntry | DiffEntry;
+
+/** A file opened through JSONBro, remembered so it can be reopened. */
+export interface RecentFile {
+    uri: string;
+    timestamp: number;
+}
 
 /** What the store currently holds, for showing the user where they stand. */
 export interface HistoryUsage {
@@ -162,6 +182,54 @@ export class HistoryStore {
         await this.commit(this.getFormatHistory(), renamed(this.getDiffHistory(), index, name));
     }
 
+    // ------------------------------------------------------------ recent files
+
+    public getRecentFiles(): RecentFile[] {
+        return this.memento.get<RecentFile[]>(FILES_KEY, []);
+    }
+
+    public async addRecentFile(uri: string): Promise<void> {
+        const rest = this.getRecentFiles().filter(file => file.uri !== uri);
+        await this.memento.update(
+            FILES_KEY,
+            [{ uri, timestamp: Date.now() }, ...rest].slice(0, RECENT_FILE_LIMIT)
+        );
+    }
+
+    public async clearRecentFiles(): Promise<void> {
+        await this.memento.update(FILES_KEY, []);
+    }
+
+    // -------------------------------------------------------------------- pins
+
+    public async setFormatPinned(index: number, pinned: boolean): Promise<void> {
+        await this.commit(this.pin(this.getFormatHistory(), index, pinned), this.getDiffHistory());
+    }
+
+    public async setDiffPinned(index: number, pinned: boolean): Promise<void> {
+        await this.commit(this.getFormatHistory(), this.pin(this.getDiffHistory(), index, pinned));
+    }
+
+    /** Marks an entry pinned, refusing once the cap is reached. */
+    private pin<T extends StoredEntry>(entries: T[], index: number, pinned: boolean): T[] {
+        if (index < 0 || index >= entries.length) {
+            return entries;
+        }
+        if (pinned && this.pinnedCount() >= PIN_LIMIT && !entries[index].pinned) {
+            return entries;
+        }
+
+        const copy = [...entries];
+        copy[index] = { ...copy[index], pinned: pinned || undefined };
+        return copy;
+    }
+
+    private pinnedCount(): number {
+        return [...this.getFormatHistory(), ...this.getDiffHistory()].filter(
+            entry => entry.pinned
+        ).length;
+    }
+
     public async clearFormats(): Promise<void> {
         await this.memento.update(FORMAT_KEY, []);
     }
@@ -200,7 +268,10 @@ export class HistoryStore {
 function promote<T extends StoredEntry>(entries: T[], entry: T): T[] {
     const previous = entries.find(existing => existing.hash === entry.hash);
     const rest = entries.filter(existing => existing.hash !== entry.hash);
-    return [previous?.name ? { ...entry, name: previous.name } : entry, ...rest];
+    const carried = previous
+        ? { ...entry, name: previous.name ?? entry.name, pinned: previous.pinned }
+        : entry;
+    return [carried, ...rest];
 }
 
 /**
@@ -215,10 +286,13 @@ export function applyBudget(
     diffs: DiffEntry[],
     limits: HistoryLimits
 ): { formats: FormatEntry[]; diffs: DiffEntry[] } {
-    const capped = {
-        formats: formats.slice(0, limits.maxEntries),
-        diffs: diffs.slice(0, limits.maxEntries)
+    // A pinned entry is never dropped, by count or by budget: pinning is the
+    // user saying this one matters more than recency does.
+    const cap = <T extends StoredEntry>(entries: T[]): T[] => {
+        let kept = 0;
+        return entries.filter(entry => entry.pinned || ++kept <= limits.maxEntries);
     };
+    const capped = { formats: cap(formats), diffs: cap(diffs) };
 
     const ordered = [
         ...capped.formats.map((entry, index) => ({ list: 'formats' as const, index, entry })),
@@ -228,7 +302,19 @@ export function applyBudget(
     const keep = new Set<string>();
     let total = 0;
 
+    // Pinned entries claim their space before anything else. Taking them in
+    // recency order with everything else would strand an old pinned entry
+    // behind a budget the newer ones had already filled -- which is exactly
+    // the entry the user asked to protect.
+    for (const item of ordered.filter(candidate => candidate.entry.pinned)) {
+        total += item.entry.bytes;
+        keep.add(`${item.list}:${item.index}`);
+    }
+
     for (const item of ordered) {
+        if (item.entry.pinned) {
+            continue;
+        }
         // The newest entry is always kept, even alone over budget: refusing to
         // remember what the user just did would be the more surprising failure.
         if (keep.size > 0 && total + item.entry.bytes > limits.maxTotalSize) {

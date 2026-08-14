@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CommandHandler } from './commands/command-handler';
-import { JSONBroActivityBarProvider } from './activity-bar-provider';
+import { Sidebar } from './views/sidebar';
 import { HistoryStore } from './history-store';
 import { readHistoryLimits } from './settings';
 
@@ -9,18 +9,10 @@ export function activate(context: vscode.ExtensionContext) {
     // Limits are read per write, so lowering one takes effect immediately.
     const history = new HistoryStore(context, readHistoryLimits);
 
-    const activityBarProvider = new JSONBroActivityBarProvider(history);
-    context.subscriptions.push(
-        // A TreeView rather than a bare data provider: only this gives
-        // multi-select, so deleting several entries is one action.
-        vscode.window.createTreeView('jsonbro.explorer', {
-            treeDataProvider: activityBarProvider,
-            canSelectMany: true,
-            showCollapseAll: true
-        })
-    );
+    const sidebar = new Sidebar(history);
+    context.subscriptions.push(sidebar.register());
 
-    const commandHandler = new CommandHandler(context, activityBarProvider);
+    const commandHandler = new CommandHandler(context, sidebar);
     commandHandler.registerCommands(context);
 
     // Panels come back after a window reload rather than being discarded.
