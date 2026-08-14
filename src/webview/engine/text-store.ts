@@ -148,6 +148,28 @@ export class TextStore implements CharSource {
         }
     }
 
+    /**
+     * The chunks themselves, for handing to another thread.
+     *
+     * Strings are copied rather than transferred, but this is one copy at the
+     * end of a long job -- against which the alternative is the panel being
+     * unresponsive for the whole of it.
+     */
+    public toChunks(): string[] {
+        this.flush();
+        return this.chunks;
+    }
+
+    public static fromChunks(chunks: string[]): TextStore {
+        const store = new TextStore();
+        for (const chunk of chunks) {
+            store.offsets.push(store.total);
+            store.chunks.push(chunk);
+            store.total += chunk.length;
+        }
+        return store;
+    }
+
     /** The whole document as a string. Only safe when it is known to be small. */
     public toString(): string {
         this.flush();

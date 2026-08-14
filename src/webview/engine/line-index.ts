@@ -11,6 +11,14 @@
 /** No fold opens on this line. Line 0 can never be a fold's last line. */
 const NO_FOLD = 0;
 
+/** A line table reduced to plain buffers, for crossing a thread boundary. */
+export interface SerializedLines {
+    starts: Uint32Array;
+    depths: Uint16Array;
+    foldEnds: Uint32Array;
+    count: number;
+}
+
 export class LineTable {
     private starts: Uint32Array;
     private depths: Uint16Array;
@@ -73,6 +81,30 @@ export class LineTable {
         if (end > line) {
             this.foldEnds[line] = end;
         }
+    }
+
+    /**
+     * The raw columns, for handing to another thread.
+     *
+     * The buffers are transferable, so moving an index between the worker and
+     * the panel costs no copy.
+     */
+    public serialize(): SerializedLines {
+        return {
+            starts: this.starts.slice(0, this.count),
+            depths: this.depths.slice(0, this.count),
+            foldEnds: this.foldEnds.slice(0, this.count),
+            count: this.count
+        };
+    }
+
+    public static deserialize(data: SerializedLines): LineTable {
+        const table = new LineTable(Math.max(1, data.count));
+        table.starts = data.starts;
+        table.depths = data.depths;
+        table.foldEnds = data.foldEnds;
+        table.count = data.count;
+        return table;
     }
 
     public isFoldable(line: number): boolean {

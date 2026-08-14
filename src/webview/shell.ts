@@ -286,5 +286,9 @@ export class Shell {
             this.diffView.load(message.leftJson, message.rightJson);
         });
         this.messenger.on('settings', message => this.applySettings(message.settings));
+        this.messenger.on('openUrl', message => {
+            this.setMode('format');
+            this.formatView.openUrl(message.url, message.label);
+        });
     }
 }

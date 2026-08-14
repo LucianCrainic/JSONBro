@@ -131,6 +131,7 @@ function themeCss(theme: string): string {
  * inlined and a script that drives the panel into the state we want to see.
  */
 export function buildPreview(mode: 'format' | 'diff', theme: string, seed: string): string {
+    fs.mkdirSync(process.env.JSONBRO_PREVIEW as string, { recursive: true });
     const generator = new WebviewContentGenerator(contextStub as never);
     let html = generator.getWebviewContent(webviewStub as never, mode);
 
@@ -150,6 +151,15 @@ export function buildPreview(mode: 'format' | 'diff', theme: string, seed: strin
     );
 
     const bundle = fs.readFileSync(path.join(ROOT, 'out', 'webview', 'main.js'), 'utf8');
+
+    // The worker is served alongside the preview pages so it can actually be
+    // started; without a real URL the panel would silently fall back to
+    // formatting in place, which is the thing under test.
+    fs.copyFileSync(
+        path.join(ROOT, 'out', 'webview', 'worker.js'),
+        path.join(process.env.JSONBRO_PREVIEW as string, 'worker.js')
+    );
+    html = html.replace(/data-worker-src="[^"]*"/, 'data-worker-src="worker.js"');
 
     html = html.replace(
         /<script[^>]*><\/script>/,
@@ -175,7 +185,6 @@ export function buildPreview(mode: 'format' | 'diff', theme: string, seed: strin
 
 export function writePreview(name: string, html: string): string {
     const dir = process.env.JSONBRO_PREVIEW as string;
-    fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `${name}.html`);
     fs.writeFileSync(file, html, 'utf8');
     return file;
