@@ -163,21 +163,9 @@ export class DocumentPane {
         }
     }
 
-    /**
-     * Opens every fold hiding a line. Reports whether anything changed.
-     *
-     * Folds nest, so opening the innermost one can reveal that another still
-     * hides the line; this repeats until nothing does.
-     */
+    /** Opens every fold hiding a line. Reports whether anything changed. */
     private openFoldsHiding(line: number): boolean {
-        let opened = false;
-        let hiding = this.folds?.foldHiding(line) ?? -1;
-        while (hiding !== -1) {
-            this.folds?.toggle(hiding);
-            opened = true;
-            hiding = this.folds?.foldHiding(line) ?? -1;
-        }
-        return opened;
+        return this.folds?.expose(line) ?? false;
     }
 
     /**

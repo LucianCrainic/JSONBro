@@ -1,4 +1,5 @@
-import { FoldState, LineTable } from '../engine/line-index';
+import { FoldState, isCloserLine, LineTable } from '../engine/line-index';
+import { lineForPath } from '../engine/path-index';
 import { PrettySink } from '../engine/pretty-sink';
 import { parseInto } from '../engine/recovering-parser';
 import { TextStore } from '../engine/text-store';
@@ -257,6 +258,101 @@ describe('FoldState', () => {
         for (let row = 0; row < folds.visibleCount; row++) {
             expect(folds.rowAt(folds.lineAt(row))).toBe(row);
         }
+    });
+});
+
+/*
+ * These are the operations the visual view leans on, and on a document with a
+ * million nodes each of them used to walk, allocate or sort something the size
+ * of the document. What matters is that the cheaper implementation still says
+ * exactly what the old one did.
+ */
+describe('FoldState at scale', () => {
+    /** A wide document: one array of `count` small objects. */
+    function wide(count: number) {
+        const json = JSON.stringify({
+            rows: Array.from({ length: count }, (_, i) => ({ id: i, tags: ['a', 'b'] }))
+        });
+        const doc = parseInto(json, new PrettySink({ indent: 2 })).value;
+        return { doc, folds: new FoldState(doc.lines, { alwaysHidden: isCloserLine }) };
+    }
+
+    it('hides every closing bracket without listing them', () => {
+        const { doc, folds } = wide(200);
+        for (let line = 0; line < doc.lines.lineCount; line++) {
+            if (isCloserLine(doc.lines, line)) {
+                expect(folds.rowAt(line)).toBe(-1);
+            }
+        }
+    });
+
+    it('collapses below a depth in one step', () => {
+        const { doc, folds } = wide(50);
+        folds.collapseBelowDepth(2);
+
+        for (let row = 0; row < folds.visibleCount; row++) {
+            expect(doc.lines.depth(folds.lineAt(row))).toBeLessThanOrEqual(2);
+        }
+    });
+
+    it('agrees with collapsing each container by hand', () => {
+        const byDepth = wide(30);
+        byDepth.folds.collapseBelowDepth(1);
+
+        const byHand = wide(30);
+        byHand.folds.expandAll();
+        for (let line = 0; line < byHand.doc.lines.lineCount; line++) {
+            if (byHand.doc.lines.isFoldable(line) && byHand.doc.lines.depth(line) >= 1) {
+                byHand.folds.toggle(line);
+            }
+        }
+
+        expect(byDepth.folds.visibleCount).toBe(byHand.folds.visibleCount);
+    });
+
+    it('opens everything hiding a line in one pass', () => {
+        const { doc, folds } = wide(40);
+        folds.collapseAll();
+
+        const deep = lineForPath(doc, ['rows', '20', 'tags', '1']);
+        expect(folds.rowAt(deep)).toBe(-1);
+
+        expect(folds.expose(deep)).toBe(true);
+        expect(folds.rowAt(deep)).toBeGreaterThanOrEqual(0);
+    });
+
+    it('says nothing changed when the line is already visible', () => {
+        const { doc, folds } = wide(10);
+        expect(folds.expose(lineForPath(doc, ['rows', '0', 'id']))).toBe(false);
+    });
+
+    it('leaves a collapsed document with very few hidden stretches', () => {
+        const { folds } = wide(2000);
+        folds.collapseAll();
+
+        // Everything below the root is one contiguous block.
+        expect(folds.hiddenRangeCount).toBeLessThanOrEqual(2);
+        expect(folds.visibleCount).toBe(1);
+    });
+
+    it('keeps row and line consistent however wide the document', () => {
+        const { folds } = wide(500);
+        folds.collapseBelowDepth(2);
+
+        for (let row = 0; row < folds.visibleCount; row += 7) {
+            expect(folds.rowAt(folds.lineAt(row))).toBe(row);
+        }
+    });
+
+    it('stays quick on a document with a million nodes', () => {
+        const { folds } = wide(60_000);
+
+        const started = Date.now();
+        folds.collapseAll();
+        folds.collapseBelowDepth(2);
+        folds.expandAll();
+
+        expect(Date.now() - started).toBeLessThan(3000);
     });
 });
 
