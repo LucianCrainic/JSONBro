@@ -271,3 +271,15 @@
 .diff-item[data-state='rejected']::after {
     background-color: var(--jb-fg-subtle);
 }
+
+/*
+ * The change being looked at.
+ *
+ * Drawn with a ring rather than a fill: the row already uses its background to
+ * say what kind of change it is, so selection has to read as a separate thing
+ * rather than compete with it.
+ */
+.diff-item.is-selected {
+    outline: 1px solid var(--jb-focus);
+    outline-offset: -1px;
+}

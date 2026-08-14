@@ -4,11 +4,12 @@
 import { JSONDiff } from '../diff';
 import type { DiffResult } from '../diff';
 import { PrettySink } from '../engine/pretty-sink';
+import { lineForPath, NOT_FOUND } from '../engine/path-index';
 import { parseInto } from '../engine/recovering-parser';
 import { JSONParser } from '../json-parser';
 import { JSONFormatter } from '../formatter';
 import { DocumentPane } from '../ui/document-pane';
-import { byId, delegate, escapeHtml, on, qsa } from '../ui/dom';
+import { byId, delegate, escapeHtml, on, qs, qsa } from '../ui/dom';
 import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
 import { Splitter } from '../ui/splitter';
@@ -585,6 +586,112 @@ export class DiffView {
         }
     }
 
+    // -------------------------------------------------------------- selection
+
+    /**
+     * Marks a change as the one being looked at and shows where it is.
+     *
+     * `data-diff-path` has been written onto every row since the change list
+     * was built, and nothing has ever read it back -- the panes had no way to
+     * turn a path into a position. They do now.
+     */
+    private selectRow(item: HTMLElement): void {
+        for (const other of qsa<HTMLElement>('.diff-item.is-selected')) {
+            other.classList.remove('is-selected');
+        }
+        item.classList.add('is-selected');
+        item.scrollIntoView({ block: 'nearest' });
+
+        const index = Number(item.dataset.diffId?.replace('diff-', ''));
+        const diff = this.diffs[index];
+        if (!diff) {
+            return;
+        }
+
+        this.revealPath('right', diff.path);
+        this.revealPath('left', this.leftPathOf(diff));
+    }
+
+    /**
+     * Where a change sits in the original document.
+     *
+     * A path names the position in the document the change came *from*, which
+     * for an element added to an array is the modified side. `arrayAnchor`
+     * carries the matching position in the original, so an insertion in the
+     * middle of a list points at the right neighbour rather than at the list.
+     */
+    private leftPathOf(diff: DiffResult): string[] {
+        if (diff.type !== 'added' || diff.arrayAnchor === undefined) {
+            return diff.path;
+        }
+        return [...diff.path.slice(0, -1), String(diff.arrayAnchor)];
+    }
+
+    /**
+     * Highlights the deepest part of `path` this document actually has.
+     *
+     * A change does not exist on both sides -- something added has no line in
+     * the original -- so falling back to the closest enclosing container says
+     * "the change belongs here" instead of silently doing nothing.
+     */
+    private revealPath(side: Side, path: string[]): void {
+        const pane = this.panes.get(side);
+        const doc = pane?.document;
+        if (!pane || !doc) {
+            return;
+        }
+
+        for (let depth = path.length; depth >= 0; depth--) {
+            const line = lineForPath(doc, path.slice(0, depth));
+            if (line !== NOT_FOUND) {
+                pane.selectLine(line);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Moves the selection through the rows the current filter shows.
+     *
+     * Which rows those are is read from the filter rather than from whether
+     * each row happens to be laid out: asking the browser costs a reflow per
+     * row, and the answer is already here.
+     */
+    public stepSelection(direction: 1 | -1): void {
+        const filter = byId('diff-output')?.dataset.filter ?? 'all';
+        const rows = qsa<HTMLElement>('.diff-item').filter(
+            row => filter === 'all' || row.dataset.diffType === filter
+        );
+        if (rows.length === 0) {
+            return;
+        }
+
+        const current = rows.findIndex(row => row.classList.contains('is-selected'));
+        const next = current === -1 ? (direction === 1 ? 0 : rows.length - 1) : current + direction;
+        this.selectRow(rows[(next + rows.length) % rows.length]);
+    }
+
+    /** Applies whichever change is selected. */
+    public applySelection(): void {
+        const selected = qs<HTMLElement>('.diff-item.is-selected');
+        if (selected && selected.dataset.state === 'pending') {
+            this.applyOne(selected);
+        }
+    }
+
+    /**
+     * Whether the arrow keys belong to the change list right now.
+     *
+     * They belong to whatever the user is typing in first; stealing them from
+     * a textarea would make the input panes unusable.
+     */
+    public get changeListHasFocus(): boolean {
+        const active = document.activeElement;
+        const typing =
+            active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement;
+        return !typing && this.diffs.length > 0;
+    }
+
     // ---------------------------------------------------- result interaction
 
     private setupResultInteractions(): void {
@@ -594,6 +701,9 @@ export class DiffView {
         }
 
         this.teardown.push(
+            // Selecting a row is the outermost handler, so it runs for a click
+            // anywhere on the row that the more specific ones below ignore.
+            delegate(output, 'click', '.diff-item', item => this.selectRow(item)),
             delegate(output, 'click', '.expandable-value', element => {
                 const full = element.getAttribute('data-full');
                 if (full) {

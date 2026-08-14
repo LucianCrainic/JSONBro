@@ -162,6 +162,111 @@ describe('DiffView', () => {
         });
     });
 
+    /*
+     * `data-diff-path` has been written onto every row since the change list
+     * was built, and nothing ever read it back: clicking a change did nothing
+     * at all, because the panes had no way to turn a path into a position.
+     */
+    describe('selecting a change', () => {
+        const selectedIn = (side: 'left' | 'right') =>
+            document.querySelector<HTMLElement>(`#${side}-json-view .json-line.is-selected`);
+
+        const rowFor = (path: string) =>
+            items().find(item => item.dataset.diffPath === path) as HTMLElement;
+
+        it('marks the row and highlights the line in both panes', () => {
+            view.compare();
+            rowFor('["changed"]').click();
+
+            expect(rowFor('["changed"]').classList).toContain('is-selected');
+            expect(selectedIn('left')?.textContent).toContain('"before"');
+            expect(selectedIn('right')?.textContent).toContain('"after"');
+        });
+
+        it('moves the highlight when another change is picked', () => {
+            view.compare();
+            rowFor('["changed"]').click();
+            rowFor('["gone"]').click();
+
+            expect(document.querySelectorAll('.diff-item.is-selected')).toHaveLength(1);
+            expect(selectedIn('left')?.textContent).toContain('"gone"');
+        });
+
+        /*
+         * Something added has no line in the original, so pointing at the
+         * container it belongs to beats doing nothing at all.
+         */
+        it('falls back to the enclosing container on the side that lacks it', () => {
+            view.compare();
+            rowFor('["added"]').click();
+
+            expect(selectedIn('right')?.textContent).toContain('"added"');
+            // The original has no `added`, so its root is highlighted instead.
+            expect(selectedIn('left')?.textContent).toContain('{');
+        });
+
+        it('finds an element inserted into the middle of an array', () => {
+            setInputs(
+                JSON.stringify({ items: ['a', 'c'] }),
+                JSON.stringify({ items: ['a', 'b', 'c'] })
+            );
+            view.compare();
+            items()[0].click();
+
+            expect(selectedIn('right')?.textContent).toContain('"b"');
+            // `arrayAnchor` puts it against the neighbour it goes before,
+            // rather than against the array as a whole.
+            expect(selectedIn('left')?.textContent).toContain('"c"');
+        });
+
+        it('steps through the list with the keyboard', () => {
+            view.compare();
+
+            view.stepSelection(1);
+            const first = document.querySelector('.diff-item.is-selected');
+            view.stepSelection(1);
+
+            expect(document.querySelector('.diff-item.is-selected')).not.toBe(first);
+        });
+
+        it('wraps around at the end of the list', () => {
+            view.compare();
+
+            // The first step selects row 0, so `length` steps land on the last.
+            for (let i = 0; i < items().length; i++) {
+                view.stepSelection(1);
+            }
+            view.stepSelection(1);
+
+            expect(document.querySelector('.diff-item.is-selected')).toBe(items()[0]);
+        });
+
+        it('applies the selected change from the keyboard', () => {
+            view.compare();
+            view.stepSelection(1);
+            view.applySelection();
+
+            expect(
+                document.querySelector<HTMLElement>('.diff-item.is-selected')?.dataset.state
+            ).toBe('applied');
+        });
+
+        /* Stealing the arrow keys would make the input panes unusable. */
+        it('leaves the arrow keys alone while a pane is being typed into', () => {
+            view.compare();
+            el<HTMLTextAreaElement>('left-json').focus();
+
+            expect(view.changeListHasFocus).toBe(false);
+        });
+
+        it('claims them once focus is out of the text', () => {
+            view.compare();
+            el<HTMLTextAreaElement>('left-json').blur();
+
+            expect(view.changeListHasFocus).toBe(true);
+        });
+    });
+
     describe('change rows', () => {
         beforeEach(() => view.compare());
 
