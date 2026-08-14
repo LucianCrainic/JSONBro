@@ -4,6 +4,7 @@
  * Imported by both bundles, so it must stay free of any DOM or node API.
  */
 import type { Diagnostic } from '../webview/engine/diagnostics';
+import type { SerializedLines } from '../webview/engine/line-index';
 
 /** Work the panel asks the worker to do. */
 export type PanelToWorker =
@@ -18,12 +19,11 @@ export type WorkerToPanel =
           id: number;
           command: 'done';
           chunks: string[];
-          lines: {
-              starts: Uint32Array;
-              depths: Uint16Array;
-              foldEnds: Uint32Array;
-              count: number;
-          };
+          /**
+           * Restated from the index itself rather than spelled out here, so
+           * adding a column cannot leave the two definitions disagreeing.
+           */
+          lines: SerializedLines;
           diagnostics: Diagnostic[];
           /** Length of the *source*, for reporting size. */
           sourceLength: number;
