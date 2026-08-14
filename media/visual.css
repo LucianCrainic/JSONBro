@@ -30,14 +30,22 @@
 }
 
 /*
- * In this mode the input pane shows the formatted document rather than the box
- * it was pasted into: here it is something to read, and editing it would leave
- * the picture describing older text. Switching back to Format brings the
- * editable box back.
+ * The input pane shows the formatted document while the picture is up, and the
+ * box it was pasted into while it is being edited. Which one is a single
+ * attribute on the pane, so nothing in script touches element visibility.
+ *
+ * Outside this mode the editable box is the only thing that makes sense, so
+ * the attribute is ignored there.
  */
 #input-view {
     padding: var(--jb-sp-2) 0;
     white-space: pre;
+}
+
+body:not([data-mode='visual']) #input-view,
+body[data-mode='visual'] #input-panel[data-input='source'] #input,
+body[data-mode='visual'] #input-panel[data-input='edit'] #input-view {
+    display: none;
 }
 
 /* The shape switch reads as one control, so its two halves sit together. */
@@ -64,6 +72,21 @@
 
 .tree-row:hover {
     background-color: var(--jb-row-hover);
+}
+
+/*
+ * A row holding a search hit. Marked on the row rather than around the
+ * characters: a tree row shows a summary of a node, so the hit is a fact about
+ * the node rather than a position in the text on screen.
+ */
+.tree-row.is-match {
+    background-color: var(--jb-find-other);
+    box-shadow: inset 0 0 0 1px var(--jb-find-other-border);
+}
+
+.tree-row.is-current-match {
+    background-color: var(--jb-find-match);
+    box-shadow: inset 0 0 0 1px var(--jb-find-match-border);
 }
 
 .tree-row.is-selected {

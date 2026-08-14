@@ -136,9 +136,9 @@ export class WebviewContentGenerator {
                         id: 'search-toggle',
                         icon: 'search',
                         label: 'Find',
-                        title: 'Find in formatted JSON',
+                        title: 'Find in the document',
                         key: 'mod+f',
-                        attrs: 'data-mode-only="format"'
+                        attrs: 'data-mode-not="diff"'
                     })}
                     ${this.iconButton({ id: 'copy', icon: 'copy', label: 'Copy', title: 'Copy to clipboard' })}
                     ${this.iconButton({
@@ -159,15 +159,57 @@ export class WebviewContentGenerator {
             </div>
 
             <div id="format-container" class="mode-container">
-                <section id="input-panel" class="pane">
+                <div id="find-widget" class="find-widget" role="search" hidden>
+                    <div class="find-widget__row">
+                        <div class="find-widget__field">
+                            <input type="text" id="find-input" placeholder="Find" spellcheck="false" aria-label="Find in formatted JSON" data-tip="Search the formatted output" />
+                            ${this.iconButton({
+                                id: 'find-match-case',
+                                icon: 'case-sensitive',
+                                label: 'Match case',
+                                title: 'Match case',
+                                classes: 'find-option',
+                                attrs: 'data-find-option="matchCase" aria-pressed="false"'
+                            })}
+                            ${this.iconButton({
+                                id: 'find-regex',
+                                icon: 'regex',
+                                label: 'Use regular expression',
+                                title: 'Use regular expression',
+                                classes: 'find-option',
+                                attrs: 'data-find-option="regex" aria-pressed="false"'
+                            })}
+                        </div>
+                        <span id="find-count" class="find-widget__count" role="status"></span>
+                        ${this.iconButton({ id: 'find-prev', icon: 'arrow-up', label: 'Previous match', title: 'Previous match', key: 'shift+enter' })}
+                        ${this.iconButton({ id: 'find-next', icon: 'arrow-down', label: 'Next match', title: 'Next match', key: 'enter' })}
+                        ${this.iconButton({ id: 'find-close', icon: 'close', label: 'Close find', title: 'Close find', key: 'escape' })}
+                    </div>
+                    <div class="find-widget__scopes" role="group" aria-label="Search scope">
+                        ${this.findScope('all', 'All', 'Search keys and values')}
+                        ${this.findScope('keys', 'Keys', 'Search property names only')}
+                        ${this.findScope('values', 'Values', 'Search values only')}
+                    </div>
+                </div>
+
+                <section id="input-panel" class="pane" data-input="source">
                     ${this.paneHeader(
                         'Input',
-                        [this.maximizeButton('input-panel')],
+                        [
+                            this.iconButton({
+                                id: 'edit-input',
+                                icon: 'edit',
+                                label: 'Edit the document',
+                                title: 'Edit the document',
+                                attrs: 'data-mode-only="visual"'
+                            }),
+                            this.maximizeButton('input-panel')
+                        ],
                         'input-meta'
                     )}
                     <div class="pane__body">
-                        <textarea id="input" spellcheck="false" aria-label="JSON to format" placeholder="Paste or type JSON here" data-mode-only="format"></textarea>
-                        <div id="input-view" class="pane__content doc-view" data-mode-only="visual"></div>
+                        <textarea id="input" spellcheck="false" aria-label="JSON to format" placeholder="Paste or type JSON here"></textarea>
+                        <div id="input-view" class="pane__content doc-view"></div>
                     </div>
                 </section>
                 <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
@@ -192,38 +234,6 @@ export class WebviewContentGenerator {
                             </button>
                             <ol id="problems-list" class="problems__list" hidden></ol>
                         </section>
-                        <div id="find-widget" class="find-widget" role="search" hidden>
-                            <div class="find-widget__row">
-                                <div class="find-widget__field">
-                                    <input type="text" id="find-input" placeholder="Find" spellcheck="false" aria-label="Find in formatted JSON" data-tip="Search the formatted output" />
-                                    ${this.iconButton({
-                                        id: 'find-match-case',
-                                        icon: 'case-sensitive',
-                                        label: 'Match case',
-                                        title: 'Match case',
-                                        classes: 'find-option',
-                                        attrs: 'data-find-option="matchCase" aria-pressed="false"'
-                                    })}
-                                    ${this.iconButton({
-                                        id: 'find-regex',
-                                        icon: 'regex',
-                                        label: 'Use regular expression',
-                                        title: 'Use regular expression',
-                                        classes: 'find-option',
-                                        attrs: 'data-find-option="regex" aria-pressed="false"'
-                                    })}
-                                </div>
-                                <span id="find-count" class="find-widget__count" role="status"></span>
-                                ${this.iconButton({ id: 'find-prev', icon: 'arrow-up', label: 'Previous match', title: 'Previous match', key: 'shift+enter' })}
-                                ${this.iconButton({ id: 'find-next', icon: 'arrow-down', label: 'Next match', title: 'Next match', key: 'enter' })}
-                                ${this.iconButton({ id: 'find-close', icon: 'close', label: 'Close find', title: 'Close find', key: 'escape' })}
-                            </div>
-                            <div class="find-widget__scopes" role="group" aria-label="Search scope">
-                                ${this.findScope('all', 'All', 'Search keys and values')}
-                                ${this.findScope('keys', 'Keys', 'Search property names only')}
-                                ${this.findScope('values', 'Values', 'Search values only')}
-                            </div>
-                        </div>
                         <div id="output" class="pane__content"></div>
                         <div class="empty-state">
                             <span class="codicon codicon-json empty-state__icon" aria-hidden="true"></span>

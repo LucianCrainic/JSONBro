@@ -19,7 +19,15 @@ export interface FindPosition {
     truncated?: boolean;
 }
 
-export interface FindWidgetOptions {
+/**
+ * What the find widget drives.
+ *
+ * A view implements this rather than owning a widget of its own, so the one
+ * control can search whichever view is on screen -- the formatted text and the
+ * picture are two ways of looking at the same document, and a reader should
+ * not have to notice which one the search box belongs to.
+ */
+export interface Searchable {
     /**
      * Called before opening or searching. Returns false when there is nothing
      * to search, which lets the caller format first instead of no-opping.
@@ -32,6 +40,8 @@ export interface FindWidgetOptions {
     clear: () => void;
     position: () => FindPosition;
 }
+
+export type FindWidgetOptions = Searchable;
 
 interface FindState {
     term: string;

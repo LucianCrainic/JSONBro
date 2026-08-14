@@ -9,6 +9,7 @@
  * about a node, not about how it happens to be drawn.
  */
 import type { Diagnostic } from '../engine/diagnostics';
+import { searchDocument, type SearchMatch, type SearchOptions } from '../engine/document-search';
 import { DEFAULT_NODE_BUDGET, depthThatFits, layoutGraph } from '../engine/graph-layout';
 import { isCloserLine, nodeCount } from '../engine/line-index';
 import { nodeAt, subtreeText, type NodeView } from '../engine/node-view';
@@ -17,14 +18,24 @@ import { type PrettyDocument } from '../engine/pretty-sink';
 import { JSONFormatter } from '../formatter';
 import { DocumentPane, type RowContext } from '../ui/document-pane';
 import { byId, delegate, escapeHtml, on, qsa } from '../ui/dom';
+import { setTip } from '../ui/tooltip';
 import { GraphCanvas } from '../ui/graph-canvas';
 import { Icons } from '../ui/icons';
+import type { Searchable } from '../ui/find-widget';
 import { plural, type StatusModel } from '../ui/status-bar';
 import type { Messenger } from '../ui/messaging';
 import type { Settings } from '../../shared/messages';
 
 /** How deep "expand to depth" opens the document. */
 const DEFAULT_DEPTH = 2;
+
+/**
+ * How long typing pauses before the picture is rebuilt.
+ *
+ * Long enough that a burst of typing is one rebuild, short enough that the
+ * picture feels like it is following what is being typed.
+ */
+const REBUILD_DELAY_MS = 300;
 
 
 /** How the document is drawn. */
@@ -45,8 +56,112 @@ export class VisualView {
     /** Whether the graph has already chosen an opening depth for this document. */
     private graphFramed = false;
 
+    private matches: SearchMatch[] = [];
+    private matchIndex = -1;
+    private matchesTruncated = false;
+    /** The lines a match falls on, so drawing a row is a lookup, not a scan. */
+    private matchLines = new Set<number>();
+    private rebuildTimer: number | null = null;
+
+    /**
+     * Rebuilds the picture from edited input.
+     *
+     * Set by the shell, because parsing belongs to the format view: the
+     * picture is a second renderer over that document, not a second parser.
+     */
+    public onRebuildRequested: () => void = () => undefined;
+
     /** Notifies the shell that the status model changed. */
     public onStatusChange: (status: StatusModel) => void = () => undefined;
+
+    /**
+     * What the shell's find widget drives while this view is on screen.
+     *
+     * The picture is a way of looking at the document, so searching it means
+     * searching the same text the formatted view searches -- and then showing
+     * where each hit sits, in whichever shape is up.
+     */
+    public readonly searchable: Searchable = {
+        ensureSearchable: () => this.document !== null,
+        search: (term, options) => this.runSearch(term, options),
+        next: () => this.stepMatch(1),
+        previous: () => this.stepMatch(-1),
+        clear: () => this.clearMatches(),
+        position: () => ({
+            current: this.matches.length > 0 ? this.matchIndex + 1 : 0,
+            total: this.matches.length,
+            truncated: this.matchesTruncated
+        })
+    };
+
+    // ---------------------------------------------------------------- search
+
+    private runSearch(term: string, options: SearchOptions): number {
+        const doc = this.document;
+        if (!doc) {
+            this.clearMatches();
+            return 0;
+        }
+
+        // Propagates InvalidPatternError to the widget, which reports it.
+        const result = searchDocument(doc, term, options);
+        this.matches = [...result.matches];
+        this.matchesTruncated = result.truncated;
+        this.matchLines = new Set(this.matches.map(match => match.line));
+        this.matchIndex = this.matches.length > 0 ? 0 : -1;
+
+        if (this.matchIndex >= 0) {
+            this.revealMatch();
+        }
+        this.pane?.refresh();
+        this.graph?.render();
+        return this.matches.length;
+    }
+
+    private stepMatch(direction: 1 | -1): void {
+        if (this.matches.length === 0) {
+            return;
+        }
+        this.matchIndex =
+            (this.matchIndex + direction + this.matches.length) % this.matches.length;
+        this.revealMatch();
+    }
+
+    /**
+     * Shows the node a match falls on.
+     *
+     * A match is a position in the text, and every node is a line of that
+     * text, so selecting its line is what puts it on screen -- in the tree, in
+     * the graph, and in the breadcrumb, all at once.
+     */
+    private revealMatch(): void {
+        const match = this.matches[this.matchIndex];
+        if (!match) {
+            return;
+        }
+        this.select(match.line);
+        this.graph?.revealLine(match.line);
+        this.pane?.refresh();
+    }
+
+    private clearMatches(): void {
+        this.matches = [];
+        this.matchLines = new Set();
+        this.matchIndex = -1;
+        this.matchesTruncated = false;
+        this.pane?.refresh();
+        this.graph?.render();
+    }
+
+    /** Whether a line carries a search hit, and whether it is the current one. */
+    private matchStateOf(line: number): '' | ' is-match' | ' is-match is-current-match' {
+        if (!this.matchLines.has(line)) {
+            return '';
+        }
+        return this.matches[this.matchIndex]?.line === line
+            ? ' is-match is-current-match'
+            : ' is-match';
+    }
 
     constructor(messenger: Messenger) {
         this.messenger = messenger;
@@ -209,6 +324,57 @@ export class VisualView {
         this.pane?.toggleFold(line);
     }
 
+    // --------------------------------------------------------------- input
+
+    /**
+     * Swaps the pane beside the picture between reading and editing.
+     *
+     * Reading is the default, since in this mode the document is something to
+     * look at -- but making a change should not mean leaving for another tab
+     * and coming back.
+     */
+    public toggleInput(): void {
+        this.setInputMode(this.inputMode === 'edit' ? 'source' : 'edit');
+    }
+
+    private get inputMode(): 'source' | 'edit' {
+        return byId('input-panel')?.dataset.input === 'edit' ? 'edit' : 'source';
+    }
+
+    private setInputMode(mode: 'source' | 'edit'): void {
+        const panel = byId('input-panel');
+        if (!panel) {
+            return;
+        }
+        panel.dataset.input = mode;
+
+        const toggle = byId('edit-input');
+        if (toggle) {
+            const editing = mode === 'edit';
+            toggle.classList.toggle('is-active', editing);
+            toggle.querySelector('.codicon')?.classList.toggle('codicon-edit', !editing);
+            toggle.querySelector('.codicon')?.classList.toggle('codicon-eye', editing);
+            const label = editing ? 'Show the formatted document' : 'Edit the document';
+            setTip(toggle, label);
+            toggle.setAttribute('aria-label', label);
+        }
+
+        if (mode === 'edit') {
+            byId<HTMLTextAreaElement>('input')?.focus();
+        }
+    }
+
+    /** Rebuilds after a pause, so a burst of typing is one rebuild. */
+    private scheduleRebuild(): void {
+        if (this.rebuildTimer !== null) {
+            window.clearTimeout(this.rebuildTimer);
+        }
+        this.rebuildTimer = window.setTimeout(() => {
+            this.rebuildTimer = null;
+            this.onRebuildRequested();
+        }, REBUILD_DELAY_MS);
+    }
+
     // --------------------------------------------------------------- shape
 
     /**
@@ -310,7 +476,9 @@ export class VisualView {
                 ? `<span class="tree-row__count">${escapeHtml(node.preview)}</span>`
                 : `<span class="tree-row__value ${node.type}">${escapeHtml(node.preview)}</span>`;
 
-        return `<div class="tree-row${context.selected ? ' is-selected' : ''}" data-tree-line="${
+        return `<div class="tree-row${context.selected ? ' is-selected' : ''}${this.matchStateOf(
+            context.line
+        )}" data-tree-line="${
             context.line
         }" role="treeitem" aria-level="${node.depth + 1}"${
             node.expandable ? ` aria-expanded="${!context.collapsed}"` : ''
@@ -374,6 +542,15 @@ export class VisualView {
         bind('graph-zoom-in', () => this.graph?.zoomBy(1.25));
         bind('graph-zoom-out', () => this.graph?.zoomBy(1 / 1.25));
         bind('graph-zoom-reset', () => this.graph?.resetView());
+        bind('edit-input', () => this.toggleInput());
+
+        // Typing rebuilds the picture rather than leaving it describing older
+        // text -- which is what made this mode something to leave in order to
+        // change anything.
+        const input = byId<HTMLTextAreaElement>('input');
+        if (input) {
+            this.teardown.push(on(input, 'input', () => this.scheduleRebuild()));
+        }
 
         for (const button of qsa<HTMLElement>('[data-visual-shape]')) {
             this.teardown.push(
@@ -557,6 +734,10 @@ export class VisualView {
     }
 
     public dispose(): void {
+        if (this.rebuildTimer !== null) {
+            window.clearTimeout(this.rebuildTimer);
+            this.rebuildTimer = null;
+        }
         for (const off of this.teardown) {
             off();
         }

@@ -22,6 +22,11 @@ body:not([data-mode='diff']) [data-mode-only='diff'] {
     display: none;
 }
 
+/* For controls that belong to everything except one mode. */
+body[data-mode='diff'] [data-mode-not='diff'] {
+    display: none;
+}
+
 /* ---------------------------------------------------------------- Toolbar */
 
 #toolbar {
@@ -90,11 +95,16 @@ body:not([data-mode='diff']) [data-mode-only='diff'] {
 /*
  * Floats over the content it searches, like the editor's own find control,
  * instead of living in the toolbar and swapping places with its trigger.
+ *
+ * Anchored to the row rather than to one pane inside it: the formatted text
+ * and the picture are different panes of the same row, and the control has to
+ * outlive switching between them.
  */
 .find-widget {
     position: absolute;
     top: var(--jb-sp-2);
     right: var(--jb-sp-4);
+    z-index: 30;
     z-index: 20;
     display: flex;
     flex-direction: column;
@@ -203,6 +213,7 @@ body:not([data-mode='diff']) [data-mode-only='diff'] {
 /* ----------------------------------------------------------------- Layout */
 
 .mode-container {
+    position: relative;
     display: flex;
     flex: 1;
     min-height: 0;
