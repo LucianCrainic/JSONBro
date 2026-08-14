@@ -2,7 +2,7 @@
  * Renders the panel's real markup into jsdom.
  */
 import { WebviewContentGenerator } from '../../../../webview-content';
-import type { Mode } from '../../../../shared/messages';
+import type { PanelKind } from '../../../../shared/messages';
 
 const webviewStub = {
     cspSource: 'vscode-webview://test',
@@ -19,7 +19,7 @@ const contextStub = {
  * Only the <body> contents are mounted -- the <head> links to stylesheets that
  * jsdom does not fetch, and no assertion here depends on styling.
  */
-export function mountPanel(mode: Mode): string {
+export function mountPanel(mode: PanelKind): string {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const generator = new WebviewContentGenerator(contextStub as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

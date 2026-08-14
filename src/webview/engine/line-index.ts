@@ -225,17 +225,49 @@ export class LineTable {
  * entries, whatever its size, and turning a visible row back into a document
  * line is a binary search over them.
  */
+/**
+ * The lines holding nothing but a closing bracket.
+ *
+ * A container that spans several lines ends with `}` or `]` on its own. That
+ * is a line of the formatted document but not a node of the tree, so the tree
+ * hides them and a container becomes one row with its children beneath it.
+ */
+export function closerLines(table: LineTable): number[] {
+    const lines: number[] = [];
+    for (let line = 0; line < table.lineCount; line++) {
+        if (table.kind(line) === LineKind.Closer) {
+            lines.push(line);
+        }
+    }
+    return lines;
+}
+
+export interface FoldStateOptions {
+    /**
+     * Lines that are never rows, whatever is collapsed.
+     *
+     * The tree view uses this to drop the closing-bracket lines: `}` on its own
+     * is a line of the formatted document but not a node of the tree.
+     */
+    alwaysHidden?: (table: LineTable) => number[];
+}
+
 export class FoldState {
     private readonly table: LineTable;
     /** Sorted by `from`, never overlapping. */
     private hidden: Array<{ from: number; to: number }> = [];
     /** Cumulative hidden lines before each range; parallel to `hidden`. */
     private hiddenBefore: number[] = [];
+    /** Sorted lines hidden regardless of what is collapsed. */
+    private readonly always: number[];
+    /** Kept rather than recomputed: the virtual list asks on every frame. */
+    private visible = 0;
 
     private collapsed = new Set<number>();
 
-    constructor(table: LineTable) {
+    constructor(table: LineTable, options: FoldStateOptions = {}) {
         this.table = table;
+        this.always = options.alwaysHidden?.(table) ?? [];
         this.reindex();
     }
 
@@ -244,8 +276,7 @@ export class FoldState {
     }
 
     public get visibleCount(): number {
-        const hiddenTotal = this.hidden.reduce((sum, range) => sum + (range.to - range.from + 1), 0);
-        return this.table.lineCount - hiddenTotal;
+        return this.visible;
     }
 
     public toggle(line: number): void {
@@ -282,20 +313,30 @@ export class FoldState {
      * ranges are merged and the inner one simply disappears into the outer.
      */
     private reindex(): void {
-        const ranges: Array<{ from: number; to: number }> = [];
-
-        for (const line of [...this.collapsed].sort((a, b) => a - b)) {
-            const from = line + 1;
+        // Every collapsed fold hides the span after its opening line, and the
+        // always-hidden lines hide themselves. Merging the two as one sorted
+        // stream keeps the result a single non-overlapping list.
+        const spans: Array<{ from: number; to: number }> = [];
+        for (const line of this.collapsed) {
             const to = this.table.foldEnd(line);
-            if (to < from) {
-                continue;
+            if (to > line) {
+                spans.push({ from: line + 1, to });
             }
+        }
+        for (const line of this.always) {
+            spans.push({ from: line, to: line });
+        }
+        spans.sort((a, b) => a.from - b.from);
 
+        const ranges: Array<{ from: number; to: number }> = [];
+        for (const span of spans) {
             const last = ranges[ranges.length - 1];
-            if (last && from <= last.to + 1) {
-                last.to = Math.max(last.to, to);
+            // A fold inside a collapsed fold hides nothing extra, so
+            // overlapping ranges merge and the inner one disappears.
+            if (last && span.from <= last.to + 1) {
+                last.to = Math.max(last.to, span.to);
             } else {
-                ranges.push({ from, to });
+                ranges.push({ ...span });
             }
         }
 
@@ -306,6 +347,7 @@ export class FoldState {
             this.hiddenBefore.push(running);
             running += range.to - range.from + 1;
         }
+        this.visible = this.table.lineCount - running;
     }
 
     /** The document line shown at visible row `row`. */
@@ -329,20 +371,35 @@ export class FoldState {
         return row + skipped;
     }
 
-    /** The visible row showing `line`, or -1 when it is hidden. */
+    /**
+     * The visible row showing `line`, or -1 when it is hidden.
+     *
+     * A binary search rather than a walk: the tree hides every closing bracket,
+     * so the range list is as long as the document has containers and scanning
+     * it on each lookup would be felt.
+     */
     public rowAt(line: number): number {
-        let hiddenSoFar = 0;
-        for (let i = 0; i < this.hidden.length; i++) {
-            const range = this.hidden[i];
-            if (line < range.from) {
-                break;
+        let low = 0;
+        let high = this.hidden.length;
+
+        while (low < high) {
+            const mid = (low + high) >> 1;
+            if (this.hidden[mid].from <= line) {
+                low = mid + 1;
+            } else {
+                high = mid;
             }
-            if (line <= range.to) {
-                return -1;
-            }
-            hiddenSoFar += range.to - range.from + 1;
         }
-        return line - hiddenSoFar;
+
+        if (low === 0) {
+            return line;
+        }
+
+        const last = this.hidden[low - 1];
+        if (line <= last.to) {
+            return -1;
+        }
+        return line - (this.hiddenBefore[low - 1] + (last.to - last.from + 1));
     }
 
     /** The innermost collapsed fold hiding `line`, or -1 when it is visible. */

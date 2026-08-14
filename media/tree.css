@@ -1,0 +1,201 @@
+/* The tree view: nodes, guide rails and the breadcrumb above them. */
+
+#tree-output {
+    padding: var(--jb-sp-2) 0;
+    white-space: nowrap;
+    outline: none;
+}
+
+#tree-panel[data-empty] #tree-output,
+#tree-panel[data-empty] #tree-breadcrumb {
+    display: none;
+}
+
+#tree-panel:not([data-empty]) .empty-state {
+    display: none;
+}
+
+/* ------------------------------------------------------------------- Row */
+
+.tree-row {
+    display: flex;
+    align-items: center;
+    min-height: calc(var(--jb-fs-code) * var(--jb-lh-code));
+    gap: var(--jb-sp-2);
+    padding: 0 var(--jb-sp-4) 0 var(--jb-sp-2);
+    line-height: var(--jb-lh-code);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-code);
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.tree-row:hover {
+    background-color: var(--jb-row-hover);
+}
+
+.tree-row.is-selected {
+    background-color: var(--jb-selection);
+    box-shadow: inset 2px 0 0 var(--jb-focus);
+}
+
+/*
+ * Guide rails, one element per level.
+ *
+ * Drawn as elements rather than as left padding so the vertical line that
+ * connects a container to its children lands in the same place at every depth,
+ * however deep the document goes. The row centres its contents, so the rails
+ * have to opt out of that and stretch or they collapse to nothing.
+ */
+.tree-row__indent {
+    display: flex;
+    flex-shrink: 0;
+    align-self: stretch;
+}
+
+.tree-row__indent i {
+    display: block;
+    width: 12px;
+    border-left: 1px solid var(--jb-border);
+}
+
+/*
+ * The twisty, drawn from a rotated triangle rather than an icon font -- the
+ * same way the text view draws its fold arrow, so the two match and a row
+ * costs no font lookup.
+ */
+.tree-row__twisty {
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    color: var(--jb-fg-muted);
+    opacity: 0.7;
+    cursor: pointer;
+    transition: opacity var(--jb-dur) var(--jb-ease);
+}
+
+.tree-row__twisty::before {
+    content: '\25be'; /* down-pointing triangle */
+    display: inline-block;
+    font-size: 0.85em;
+    transition: transform var(--jb-dur) var(--jb-ease);
+}
+
+.tree-row__twisty.is-collapsed::before {
+    transform: rotate(-90deg);
+}
+
+.tree-row__twisty:hover {
+    opacity: 1;
+    color: var(--jb-fg);
+}
+
+/* A leaf keeps the space, so keys line up down a column. */
+.tree-row__twisty--leaf {
+    cursor: default;
+}
+
+.tree-row__twisty--leaf::before {
+    content: '';
+}
+
+.tree-row__key {
+    flex-shrink: 0;
+    color: var(--jb-syntax-key);
+    font-weight: 600;
+}
+
+.tree-row__key--root {
+    color: var(--jb-fg-muted);
+    font-weight: 400;
+    font-style: italic;
+}
+
+/*
+ * The type badge.
+ *
+ * Deliberately quiet: it answers "what is this" at a glance without competing
+ * with the value, which is what the reader is actually looking for.
+ */
+.tree-row__badge {
+    flex-shrink: 0;
+    padding: 0 var(--jb-sp-2);
+    border-radius: var(--jb-radius-sm);
+    background-color: var(--jb-neutral);
+    color: var(--jb-fg-subtle);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-xs);
+    line-height: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tree-row__badge--string {
+    color: var(--jb-syntax-string);
+}
+.tree-row__badge--number {
+    color: var(--jb-syntax-number);
+}
+.tree-row__badge--boolean {
+    color: var(--jb-syntax-boolean);
+}
+.tree-row__badge--null {
+    color: var(--jb-syntax-null);
+}
+
+.tree-row__value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-row__value.string {
+    color: var(--jb-syntax-string);
+}
+.tree-row__value.number {
+    color: var(--jb-syntax-number);
+}
+.tree-row__value.boolean {
+    color: var(--jb-syntax-boolean);
+}
+.tree-row__value.null {
+    color: var(--jb-syntax-null);
+}
+
+/* A container shows how much is inside rather than a truncated dump of it. */
+.tree-row__count {
+    color: var(--jb-fg-subtle);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-sm);
+}
+
+/* ------------------------------------------------------------ Breadcrumb */
+
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    flex-shrink: 0;
+    height: var(--jb-h-header);
+    padding: 0 var(--jb-sp-4);
+    border-bottom: 1px solid var(--jb-border);
+    background-color: var(--jb-bg);
+    color: var(--jb-fg-muted);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-sm);
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.breadcrumb__segment--leaf {
+    color: var(--jb-fg);
+    font-weight: 600;
+}
+
+.breadcrumb__segment--root {
+    font-style: italic;
+}
+
+.breadcrumb__sep {
+    color: var(--jb-fg-subtle);
+}
