@@ -115,8 +115,6 @@ export class Shell {
             return;
         }
 
-        this.setMode(saved.mode);
-
         if (saved.showLineNumbers !== undefined) {
             this.formatView.setShowLineNumbers(saved.showLineNumbers);
         }
@@ -126,6 +124,10 @@ export class Shell {
         if (saved.leftJson || saved.rightJson) {
             this.diffView.restore(saved.leftJson ?? '', saved.rightJson ?? '', saved.strict);
         }
+
+        // Last, so that coming back to the tree finds the document already
+        // rebuilt rather than formatting an input box that is still empty.
+        this.setMode(saved.mode);
     }
 
     private wirePersistence(): void {

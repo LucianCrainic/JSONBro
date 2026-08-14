@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as os from 'os';
 import { WebviewContentGenerator } from './webview-content';
-import { JSONBroActivityBarProvider } from './activity-bar-provider';
+import { Sidebar } from './views/sidebar';
 import { readSettings } from './settings';
 import { resolveSyntaxColors } from './theme/token-colors';
 import { vscodeThemeSource } from './theme/vscode-theme-source';
@@ -28,7 +28,7 @@ function nameOf(file: vscode.Uri): string {
 export class WebviewProvider {
     private context: vscode.ExtensionContext;
     private contentGenerator: WebviewContentGenerator;
-    private activityBarProvider: JSONBroActivityBarProvider;
+    private sidebar: Sidebar;
     private existingPanels: Map<string, vscode.WebviewPanel> = new Map();
 
     /** Panels whose webview has reported that it is listening. */
@@ -40,10 +40,10 @@ export class WebviewProvider {
     /** A folder a panel must be able to read, set when opening a file from it. */
     private extraResourceRoot: vscode.Uri | undefined;
 
-    constructor(context: vscode.ExtensionContext, activityBarProvider: JSONBroActivityBarProvider) {
+    constructor(context: vscode.ExtensionContext, sidebar: Sidebar) {
         this.context = context;
         this.contentGenerator = new WebviewContentGenerator(context);
-        this.activityBarProvider = activityBarProvider;
+        this.sidebar = sidebar;
     }
 
     /**
@@ -157,6 +157,8 @@ export class WebviewProvider {
             return;
         }
 
+        void this.sidebar.addRecentFile(file);
+
         // A file can only be handed to the webview as a URI if its folder is a
         // permitted resource root, so widen the roots before asking for one.
         this.extraResourceRoot = vscode.Uri.joinPath(file, '..');
@@ -197,6 +199,8 @@ export class WebviewProvider {
         if (json === null) {
             return;
         }
+
+        void this.sidebar.addRecentFile(file);
 
         this.sendToPanel('diff', {
             command: 'loadDiffSide',
@@ -349,10 +353,10 @@ export class WebviewProvider {
                         vscode.window.showInformationMessage(message.text);
                         break;
                     case 'addFormatHistory':
-                        this.activityBarProvider.addFormatHistory(message.json);
+                        this.sidebar.addFormatHistory(message.json);
                         break;
                     case 'addDiffHistory':
-                        this.activityBarProvider.addDiffHistory(message.leftJson, message.rightJson);
+                        this.sidebar.addDiffHistory(message.leftJson, message.rightJson);
                         break;
                     case 'saveFormattedJson':
                         this.saveFormattedJsonToFile(message.content);

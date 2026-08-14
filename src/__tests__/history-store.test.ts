@@ -2,6 +2,8 @@ import {
     DEFAULT_LIMITS,
     formatSize,
     HistoryStore,
+    PIN_LIMIT,
+    RECENT_FILE_LIMIT,
     relativeTime,
     type HistoryLimits
 } from '../history-store';
@@ -280,6 +282,123 @@ describe('the byte budget', () => {
         await store.addDiff('{"a":1}', '{"a":2}');
 
         expect(store.usage()).toEqual({ entries: 2, bytes: 7 + 14, limit: 10_000 });
+    });
+});
+
+describe('recent files', () => {
+    let store: HistoryStore;
+
+    beforeEach(() => {
+        store = storeWith();
+    });
+
+    it('remembers a file that was opened', async () => {
+        await store.addRecentFile('file:///a.json');
+
+        expect(store.getRecentFiles().map(file => file.uri)).toEqual(['file:///a.json']);
+    });
+
+    it('moves a re-opened file back to the top rather than repeating it', async () => {
+        await store.addRecentFile('file:///a.json');
+        await store.addRecentFile('file:///b.json');
+        await store.addRecentFile('file:///a.json');
+
+        expect(store.getRecentFiles().map(file => file.uri)).toEqual([
+            'file:///a.json',
+            'file:///b.json'
+        ]);
+    });
+
+    it('keeps only the most recent', async () => {
+        for (let i = 0; i < RECENT_FILE_LIMIT + 5; i++) {
+            await store.addRecentFile(`file:///${i}.json`);
+        }
+
+        expect(store.getRecentFiles()).toHaveLength(RECENT_FILE_LIMIT);
+    });
+
+    it('clears without touching the histories', async () => {
+        await store.addFormat('{"a":1}');
+        await store.addRecentFile('file:///a.json');
+        await store.clearRecentFiles();
+
+        expect(store.getRecentFiles()).toEqual([]);
+        expect(store.getFormatHistory()).toHaveLength(1);
+    });
+});
+
+/*
+ * Pinning is the user saying an entry matters more than its age does, so it
+ * has to survive both caps -- otherwise the promise is empty.
+ */
+describe('pinning', () => {
+    const doc = (bytes: number, seed: number) => `${seed}`.padEnd(bytes, 'x');
+
+    it('survives the entry cap', async () => {
+        const store = storeWith({ maxEntries: 3 });
+        await store.addFormat('keep me');
+        await store.setFormatPinned(0, true);
+
+        for (let i = 0; i < 10; i++) {
+            await store.addFormat(`{"i":${i}}`);
+        }
+
+        expect(store.getFormatHistory().some(entry => entry.json === 'keep me')).toBe(true);
+    });
+
+    it('survives the byte budget', async () => {
+        const store = storeWith({ maxTotalSize: 10_000, maxEntrySize: 4000 });
+        await store.addFormat(doc(3000, 0));
+        await store.setFormatPinned(0, true);
+
+        for (let i = 1; i < 10; i++) {
+            await store.addFormat(doc(3000, i));
+        }
+
+        expect(store.getFormatHistory().some(entry => entry.json.startsWith('0'))).toBe(true);
+    });
+
+    it('survives the document being formatted again', async () => {
+        const store = storeWith();
+        await store.addFormat('{"a":1}');
+        await store.setFormatPinned(0, true);
+        await store.addFormat('{"a":1}');
+
+        expect(store.getFormatHistory()[0].pinned).toBe(true);
+    });
+
+    it('unpins again', async () => {
+        const store = storeWith();
+        await store.addFormat('{"a":1}');
+        await store.setFormatPinned(0, true);
+        await store.setFormatPinned(0, false);
+
+        expect(store.getFormatHistory()[0].pinned).toBeUndefined();
+    });
+
+    /* Without a cap the budget could fill entirely with unevictable entries. */
+    it('refuses to pin more than the cap allows', async () => {
+        const store = storeWith();
+        for (let i = 0; i < PIN_LIMIT + 5; i++) {
+            await store.addFormat(`{"i":${i}}`);
+        }
+        for (let i = 0; i < PIN_LIMIT + 5; i++) {
+            await store.setFormatPinned(i, true);
+        }
+
+        expect(store.getFormatHistory().filter(entry => entry.pinned)).toHaveLength(PIN_LIMIT);
+    });
+
+    it('counts pins across both kinds against the same cap', async () => {
+        const store = storeWith();
+        for (let i = 0; i < PIN_LIMIT; i++) {
+            await store.addFormat(`{"i":${i}}`);
+            await store.setFormatPinned(0, true);
+        }
+        await store.addDiff('a', 'b');
+        await store.setDiffPinned(0, true);
+
+        expect(store.getDiffHistory()[0].pinned).toBeUndefined();
     });
 });
 
