@@ -21,7 +21,7 @@
 #visual-panel[data-empty] #tree-output,
 #visual-panel[data-empty] #graph-output,
 #visual-panel[data-empty] #visual-breadcrumb,
-#visual-panel[data-empty] .pane__actions .icon-btn {
+#visual-panel[data-empty] .pane__actions {
     display: none;
 }
 
@@ -225,20 +225,48 @@ body[data-mode='visual'] #input-panel[data-input='edit'] #input-view {
 
 /* ------------------------------------------------------------ Breadcrumb */
 
+/*
+ * The bar under the picture is about whichever node is selected: it says where
+ * that node lives, and it carries the actions that act on it. The three copy
+ * buttons used to sit in the pane header among the ones that reshape the whole
+ * document, where nothing said they needed a selection at all -- and where they
+ * were three of twelve. Next to the path they read as belonging to it, and they
+ * appear only once there is something to copy.
+ */
 .breadcrumb {
     display: flex;
     align-items: center;
     gap: var(--jb-sp-2);
     flex-shrink: 0;
     height: var(--jb-h-header);
-    padding: 0 var(--jb-sp-4);
+    padding: 0 var(--jb-sp-2) 0 var(--jb-sp-4);
     border-bottom: 1px solid var(--jb-border);
     background-color: var(--jb-bg);
     color: var(--jb-fg-muted);
     font-family: var(--jb-font-mono);
     font-size: var(--jb-fs-sm);
-    overflow-x: auto;
     white-space: nowrap;
+}
+
+.breadcrumb__path {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+.breadcrumb__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-1);
+    flex-shrink: 0;
+}
+
+/* Nothing selected means nothing for these to copy. */
+.breadcrumb[data-selected='false'] .breadcrumb__actions {
+    visibility: hidden;
 }
 
 .breadcrumb__segment--leaf {

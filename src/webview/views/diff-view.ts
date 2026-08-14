@@ -11,6 +11,7 @@ import { JSONFormatter } from '../formatter';
 import { DocumentPane } from '../ui/document-pane';
 import { byId, delegate, escapeHtml, on, qs, qsa } from '../ui/dom';
 import { Icons } from '../ui/icons';
+import { PaneFlag } from '../ui/pane-flag';
 import { PanelGroup } from '../ui/panels';
 import { Splitter } from '../ui/splitter';
 import { setTip } from '../ui/tooltip';
@@ -56,6 +57,30 @@ export class DiffView {
 
     private panels: PanelGroup | null = null;
     private readonly splitters: Splitter[] = [];
+
+    /**
+     * Says so when the change list describes documents that have since been
+     * edited. Comparing is the expensive half and is left to the reader, so a
+     * list can easily outlive the text it was computed from.
+     */
+    private readonly staleness = new PaneFlag({
+        panelId: 'diff-result-panel',
+        buttonId: 'diff-flag',
+        onAct: () => this.compare()
+    });
+
+    /**
+     * Says so when the original holds changes this panel applied.
+     *
+     * Applying a change rewrites the original pane in place, and until it is
+     * saved that rewritten document exists only here -- which is worth saying
+     * out loud next to the pane it happened to.
+     */
+    private readonly unsaved = new PaneFlag({
+        panelId: 'left-json-panel',
+        buttonId: 'left-json-flag',
+        onAct: () => this.saveSide('left')
+    });
 
     /** Notifies the shell that the status model changed. */
     public onStatusChange: (status: StatusModel) => void = () => undefined;
@@ -200,6 +225,9 @@ export class DiffView {
 
         field.value = json;
         this.clearResults();
+        if (side === 'left') {
+            this.markUnsaved(false);
+        }
         this.formatSide(side);
 
         const title = byId(`${side}-json-panel`)?.querySelector('.pane__title');
@@ -273,6 +301,17 @@ export class DiffView {
         }
         this.panes.get(side)?.setDocument(null);
         this.describeSide(side, 0);
+
+        // A list of changes between two documents stops being true the moment
+        // either of them is edited.
+        if (this.diffs.length > 0) {
+            this.staleness.raise(
+                'Out of date',
+                'stale',
+                'These documents have changed since they were compared. Compare them again.',
+                'mod+enter'
+            );
+        }
     }
 
     private ensurePane(side: Side): DocumentPane {
@@ -351,6 +390,9 @@ export class DiffView {
             this.rightJson = null;
         }
         this.markSideStale(side);
+        if (side === 'left') {
+            this.markUnsaved(false);
+        }
     }
 
     // --------------------------------------------------------------- compare
@@ -362,6 +404,10 @@ export class DiffView {
         if (!leftEl || !rightEl || !output) {
             return;
         }
+
+        // Whatever comes of this, the list is about to describe the panes as
+        // they stand.
+        this.staleness.lower();
 
         const leftRaw = leftEl.value.trim();
         const rightRaw = rightEl.value.trim();
@@ -765,7 +811,10 @@ export class DiffView {
         try {
             this.leftJson = JSONDiff.applyDiffs(this.originalLeft, this.diffs);
             this.writeLeftJson();
+            // After comparing, since that regenerates the list from the
+            // rewritten original and would otherwise lower the badge.
             this.compare();
+            this.markUnsaved(true);
         } catch (error) {
             console.error('Error applying all diffs:', error);
         }
@@ -808,8 +857,22 @@ export class DiffView {
                 ? JSONDiff.applyDiffs(this.originalLeft, applied)
                 : this.originalLeft;
             this.writeLeftJson();
+            this.markUnsaved(applied.length > 0);
         } catch (error) {
             console.error('Error applying diffs:', error);
+        }
+    }
+
+    /** Raises or lowers the badge saying the original holds applied changes. */
+    private markUnsaved(unsaved: boolean): void {
+        if (unsaved) {
+            this.unsaved.raise(
+                'Unsaved',
+                'unsaved',
+                'The original holds changes applied here and saved nowhere else. Save it to a file.'
+            );
+        } else {
+            this.unsaved.lower();
         }
     }
 
@@ -853,6 +916,8 @@ export class DiffView {
         this.teardown.forEach(fn => fn());
         this.teardown.length = 0;
         this.panels?.dispose();
+        this.staleness.dispose();
+        this.unsaved.dispose();
         this.splitters.forEach(splitter => splitter.dispose());
         this.splitters.length = 0;
     }

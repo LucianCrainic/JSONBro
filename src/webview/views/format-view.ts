@@ -15,6 +15,7 @@ import { DocumentPane } from '../ui/document-pane';
 import { byId, on } from '../ui/dom';
 import type { Searchable } from '../ui/find-widget';
 import { Icons } from '../ui/icons';
+import { PaneFlag } from '../ui/pane-flag';
 import { PanelGroup } from '../ui/panels';
 import { ProblemsList } from '../ui/problems-list';
 import { Splitter } from '../ui/splitter';
@@ -48,6 +49,15 @@ export class FormatView {
     private splitter: Splitter | null = null;
     private panels: PanelGroup | null = null;
     private readonly problems: ProblemsList;
+    /**
+     * Says so when the output is older than the input.
+     *
+     * Formatting is deliberately something you ask for rather than something
+     * that happens as you type -- on a large document it is far too expensive
+     * to run on every keystroke -- which leaves the pane quietly showing a
+     * document that is one edit out of date. This is what admits that.
+     */
+    private readonly staleness: PaneFlag;
 
     /**
      * What the shell's find widget drives while this view is on screen.
@@ -95,6 +105,11 @@ export class FormatView {
 
         this.problems = new ProblemsList({
             onReveal: diagnostic => this.revealSourceLine(diagnostic.line)
+        });
+        this.staleness = new PaneFlag({
+            panelId: 'output-panel',
+            buttonId: 'output-flag',
+            onAct: () => this.format()
         });
 
         this.setupLayout();
@@ -230,6 +245,30 @@ export class FormatView {
             this.teardown.push(on(lineNumbers, 'click', () => this.toggleLineNumbers()));
         }
 
+        // Typing does not reformat, so the pane has to admit that what it is
+        // showing is no longer what the input says.
+        const input = byId<HTMLTextAreaElement>('input');
+        if (input) {
+            this.teardown.push(on(input, 'input', () => this.markStale()));
+        }
+    }
+
+    /**
+     * Notes that the formatted output no longer describes the input.
+     *
+     * Silent while there is nothing formatted: an empty pane already tells the
+     * whole story, and a pane that has never been asked to do anything is not
+     * out of date.
+     */
+    private markStale(): void {
+        if (this.doc) {
+            this.staleness.raise(
+                'Out of date',
+                'stale',
+                'The input has changed since this was formatted. Format it again.',
+                'mod+enter'
+            );
+        }
     }
 
     private toggleLineNumbers(): void {
@@ -246,12 +285,24 @@ export class FormatView {
 
     // ---------------------------------------------------------------- format
 
-    public format(): void {
+    /**
+     * Formats what is in the input box.
+     *
+     * `record` says whether the document is worth keeping in history. A format
+     * the reader asked for is; one the visual view triggers as they type is
+     * not -- that would fill the history with half-typed documents on the way
+     * to the one they meant.
+     */
+    public format(record = true): void {
         const inputEl = byId<HTMLTextAreaElement>('input');
         const output = byId('output');
         if (!inputEl || !output) {
             return;
         }
+
+        // Whatever comes of this, the pane is about to describe the input as
+        // it stands, so it is no longer behind it.
+        this.staleness.lower();
 
         const input = inputEl.value.trim();
         if (!input) {
@@ -273,9 +324,7 @@ export class FormatView {
             // Small documents finish in a few milliseconds; going through the
             // worker would cost more in round trip than it saves.
             this.present(formatHere(input, this.indentSize), input.length, token);
-            if (!this.loadingFromHistory) {
-                this.messenger.post({ command: 'addFormatHistory', json: input });
-            }
+            this.recordHistory(input, record);
             return;
         }
 
@@ -287,11 +336,16 @@ export class FormatView {
             })
             .then(outcome => {
                 this.present(outcome, input.length, token);
-                if (!this.loadingFromHistory) {
-                    this.messenger.post({ command: 'addFormatHistory', json: input });
-                }
+                this.recordHistory(input, record);
             })
             .catch(error => this.reportFailure(error, token));
+    }
+
+    /** Keeps a formatted document in history, unless it is not worth keeping. */
+    private recordHistory(input: string, record: boolean): void {
+        if (record && !this.loadingFromHistory) {
+            this.messenger.post({ command: 'addFormatHistory', json: input });
+        }
     }
 
     /**
@@ -609,6 +663,7 @@ export class FormatView {
         this.splitter?.dispose();
         this.panels?.dispose();
         this.problems.dispose();
+        this.staleness.dispose();
         this.pane?.dispose();
         this.worker.dispose();
     }

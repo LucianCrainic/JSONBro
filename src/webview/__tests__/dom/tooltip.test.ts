@@ -52,6 +52,25 @@ describe('TooltipHost', () => {
         expect(tip()!.textContent).toContain('Other');
     });
 
+    /*
+     * A real pointer leaving one button for the next fires mouseout before the
+     * neighbour's mouseover. Hiding on that mouseout would restart the delay for
+     * every button in a row, because "already showing" is what suppresses it.
+     */
+    it('does not wait again when the pointer leaves one control for another', () => {
+        const a = document.getElementById('a')!;
+        const b = document.getElementById('b')!;
+
+        hover(a);
+        jest.advanceTimersByTime(SHOW_DELAY_MS);
+
+        unhover(a, b);
+        hover(b, a);
+
+        expect(tip()!.hidden).toBe(false);
+        expect(tip()!.textContent).toContain('Other');
+    });
+
     it('ignores the pointer moving between a control and its own icon', () => {
         const button = document.getElementById('a')!;
         const glyph = document.getElementById('glyph')!;
@@ -64,6 +83,55 @@ describe('TooltipHost', () => {
 
         expect(tip()!.hidden).toBe(false);
         expect(host.current).toBe(button);
+    });
+
+    /*
+     * The pointer lands on a button's padding and slides onto its icon a few
+     * milliseconds later -- which is what happens every time anyone points at
+     * one. This used to cancel the tooltip outright and never reschedule it, and
+     * is why hover text seemed to work on some buttons but not others.
+     */
+    it('still shows when the pointer reaches the icon during the delay', () => {
+        const button = document.getElementById('a')!;
+        const glyph = document.getElementById('glyph')!;
+
+        hover(button);
+        jest.advanceTimersByTime(SHOW_DELAY_MS / 3);
+        unhover(button, glyph);
+        hover(glyph, button);
+
+        jest.advanceTimersByTime(SHOW_DELAY_MS);
+        expect(tip()!.hidden).toBe(false);
+        expect(host.current).toBe(button);
+    });
+
+    it('does not restart the delay when the pointer settles inside a control', () => {
+        const button = document.getElementById('a')!;
+        const glyph = document.getElementById('glyph')!;
+
+        hover(button);
+        // Two thirds of the way through, the pointer reaches the icon.
+        jest.advanceTimersByTime((SHOW_DELAY_MS * 2) / 3);
+        unhover(button, glyph);
+        hover(glyph, button);
+
+        // The remaining third is all it should still owe.
+        jest.advanceTimersByTime(SHOW_DELAY_MS / 3);
+        expect(tip()!.hidden).toBe(false);
+    });
+
+    it('switches to a neighbour reached during the delay', () => {
+        const a = document.getElementById('a')!;
+        const b = document.getElementById('b')!;
+
+        hover(a);
+        jest.advanceTimersByTime(SHOW_DELAY_MS / 2);
+        unhover(a, b);
+        hover(b, a);
+
+        jest.advanceTimersByTime(SHOW_DELAY_MS);
+        expect(tip()!.textContent).toContain('Other');
+        expect(host.current).toBe(b);
     });
 
     it('hides when the pointer leaves for something else', () => {
@@ -102,6 +170,35 @@ describe('TooltipHost', () => {
 
         jest.advanceTimersByTime(SHOW_DELAY_MS * 4);
         expect(tip()!.hidden).toBe(true);
+    });
+
+    /*
+     * A fixed box with `left` set is laid out inside the space remaining to its
+     * right, so measuring it where the previous tooltip sat reports the width it
+     * would have *there*. Every pane action button is at the right-hand edge of
+     * a header, so the second tooltip in a row came out a few characters wide
+     * and wrapped to one word per line. It has to be measured from the corner.
+     */
+    it('measures itself from the corner, not from where it last sat', () => {
+        const a = document.getElementById('a') as HTMLElement;
+        const b = document.getElementById('b') as HTMLElement;
+        const box = tip() as HTMLElement;
+
+        // The far right of a wide viewport, where a pane action button lives.
+        b.getBoundingClientRect = () =>
+            ({ left: 1240, right: 1264, top: 8, bottom: 32, width: 24, height: 24 }) as DOMRect;
+
+        const measured: string[] = [];
+        box.getBoundingClientRect = function () {
+            measured.push(this.style.left);
+            return { left: 0, right: 220, top: 0, bottom: 28, width: 220, height: 28 } as DOMRect;
+        };
+
+        hover(a);
+        jest.advanceTimersByTime(SHOW_DELAY_MS);
+        hover(b);
+
+        expect(measured[measured.length - 1]).toBe('0px');
     });
 
     it('renders a shortcut as separate keys', () => {
@@ -143,20 +240,36 @@ describe('formatShortcut', () => {
 describe('control coverage', () => {
     /**
      * The complaint that started this work was hovering a button and learning
-     * nothing, so the guarantee is checked rather than assumed. Visible text is
-     * deliberately not accepted as a substitute: a label says what a control is
-     * called, not what pressing it does.
+     * nothing, so the guarantee is checked rather than assumed.
+     *
+     * The guarantee is about controls that show only an icon. A menu item spells
+     * out what it does in words, which is the whole reason the crowded pane
+     * headers could shed buttons into menus; demanding hover text there as well
+     * would be demanding that the label be repeated back.
      */
-    it.each(['format', 'diff'] as const)('every %s control has hover text', mode => {
+    it.each(['format', 'diff'] as const)('every %s icon control has hover text', mode => {
         mountPanel(mode);
 
         const buttons = Array.from(document.querySelectorAll('button'));
-        const unexplained = buttons
+        const iconOnly = buttons.filter(button => (button.textContent ?? '').trim() === '');
+        const unexplained = iconOnly
             .filter(button => !button.dataset.tip)
             .map(button => button.id || button.className);
 
         expect(unexplained).toEqual([]);
-        expect(buttons.length).toBeGreaterThan(20);
+        expect(iconOnly.length).toBeGreaterThan(15);
+    });
+
+    /** A control that says what it does in words does not need to whisper it. */
+    it.each(['format', 'diff'] as const)('every %s menu item is named', mode => {
+        mountPanel(mode);
+
+        const unnamed = Array.from(document.querySelectorAll<HTMLElement>('.menu__item'))
+            .filter(item => !item.querySelector('.menu__label')?.textContent?.trim())
+            .map(item => item.id);
+
+        expect(unnamed).toEqual([]);
+        expect(document.querySelectorAll('.menu__item').length).toBeGreaterThan(0);
     });
 
     it('no control still relies on the native title tooltip', () => {

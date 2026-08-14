@@ -214,17 +214,22 @@ export class WebviewContentGenerator {
                 </section>
                 <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
                 <section id="output-panel" class="pane" data-empty="true" data-mode-only="format">
-                    ${this.paneHeader('Formatted', [
-                        this.iconButton({
-                            id: 'line-numbers-toggle',
-                            icon: 'list-ordered',
-                            label: 'Toggle line numbers',
-                            title: 'Toggle line numbers',
-                            classes: 'is-active',
-                            attrs: 'aria-pressed="true"'
-                        }),
-                        this.maximizeButton('output-panel')
-                    ], 'output-meta')}
+                    ${this.paneHeader(
+                        'Formatted',
+                        [
+                            this.iconButton({
+                                id: 'line-numbers-toggle',
+                                icon: 'list-ordered',
+                                label: 'Toggle line numbers',
+                                title: 'Toggle line numbers',
+                                classes: 'is-active',
+                                attrs: 'aria-pressed="true"'
+                            }),
+                            this.maximizeButton('output-panel')
+                        ],
+                        'output-meta',
+                        'output-flag'
+                    )}
                     <div class="pane__body">
                         <section id="problems" class="problems" role="status" hidden>
                             <button type="button" id="problems-toggle" class="problems__summary" aria-expanded="false" aria-controls="problems-list" data-tip="Show what was repaired while parsing">
@@ -250,14 +255,14 @@ export class WebviewContentGenerator {
                     ${this.paneHeader(
                         'Visual',
                         [
-                            this.shapeButton('tree', 'list-tree', 'Tree', 'Show an indented tree'),
-                            this.shapeButton('graph', 'type-hierarchy', 'Graph', 'Show boxes and links'),
-                            this.iconButton({
-                                id: 'visual-expand-depth',
-                                icon: 'list-selection',
-                                label: 'Expand two levels',
-                                title: 'Collapse everything below the second level'
-                            }),
+                            // Two ways of drawing one document, so they read as
+                            // one control with two positions rather than as two
+                            // unrelated buttons.
+                            `<div class="segmented" role="group" aria-label="Shape">
+                                ${this.shapeButton('tree', 'list-tree', 'Tree', 'Draw an indented tree')}
+                                ${this.shapeButton('graph', 'type-hierarchy', 'Graph', 'Draw boxes and links')}
+                            </div>`,
+                            this.divider(),
                             this.iconButton({
                                 id: 'visual-expand-all',
                                 icon: 'expand-all',
@@ -271,50 +276,62 @@ export class WebviewContentGenerator {
                                 title: 'Collapse every node'
                             }),
                             this.iconButton({
-                                id: 'graph-zoom-out',
-                                icon: 'zoom-out',
-                                label: 'Zoom out',
-                                title: 'Zoom out',
-                                attrs: 'data-shape-only="graph"'
-                            }),
-                            this.iconButton({
                                 id: 'graph-zoom-reset',
                                 icon: 'screen-normal',
-                                label: 'Reset the view',
+                                label: 'Fit the picture',
                                 title: 'Back to the starting zoom and position',
                                 attrs: 'data-shape-only="graph"'
                             }),
-                            this.iconButton({
-                                id: 'graph-zoom-in',
-                                icon: 'zoom-in',
-                                label: 'Zoom in',
-                                title: 'Zoom in',
-                                attrs: 'data-shape-only="graph"'
-                            }),
-                            this.iconButton({
-                                id: 'visual-copy-path',
-                                icon: 'symbol-key',
-                                label: 'Copy path',
-                                title: 'Copy the path of the selected node'
-                            }),
-                            this.iconButton({
-                                id: 'visual-copy-value',
-                                icon: 'copy',
-                                label: 'Copy value',
-                                title: 'Copy the value of the selected node'
-                            }),
-                            this.iconButton({
-                                id: 'visual-copy-subtree',
-                                icon: 'list-tree',
-                                label: 'Copy subtree',
-                                title: 'Copy the selected node and everything under it'
-                            }),
+                            this.menuButton('visual-menu', [
+                                this.menuItem({
+                                    id: 'visual-expand-depth',
+                                    icon: 'list-selection',
+                                    label: 'Expand two levels'
+                                }),
+                                this.menuItem({
+                                    id: 'graph-zoom-in',
+                                    icon: 'zoom-in',
+                                    label: 'Zoom in',
+                                    attrs: 'data-shape-only="graph"'
+                                }),
+                                this.menuItem({
+                                    id: 'graph-zoom-out',
+                                    icon: 'zoom-out',
+                                    label: 'Zoom out',
+                                    attrs: 'data-shape-only="graph"'
+                                })
+                            ]),
+                            this.divider(),
                             this.maximizeButton('visual-panel')
                         ],
-                        'visual-meta'
+                        'visual-meta',
+                        'visual-flag'
                     )}
                     <div class="pane__body">
-                        <nav id="visual-breadcrumb" class="breadcrumb" aria-label="Selected node"></nav>
+                        <nav id="visual-breadcrumb" class="breadcrumb" aria-label="Selected node" data-selected="false">
+                            <div id="visual-path" class="breadcrumb__path"></div>
+                            <div class="breadcrumb__actions">
+                                ${this.iconButton({
+                                    id: 'visual-copy-path',
+                                    icon: 'symbol-key',
+                                    label: 'Copy path',
+                                    title: 'Copy the path of this node',
+                                    key: 'mod+shift+c'
+                                })}
+                                ${this.menuButton('visual-node-menu', [
+                                    this.menuItem({
+                                        id: 'visual-copy-value',
+                                        icon: 'copy',
+                                        label: 'Copy value'
+                                    }),
+                                    this.menuItem({
+                                        id: 'visual-copy-subtree',
+                                        icon: 'list-tree',
+                                        label: 'Copy subtree'
+                                    })
+                                ])}
+                            </div>
+                        </nav>
                         <div id="tree-output" class="pane__content" role="tree" tabindex="0"></div>
                         <div id="graph-output" class="graph-viewport" tabindex="0"></div>
                         <div class="empty-state">
@@ -332,22 +349,27 @@ export class WebviewContentGenerator {
 
             <div id="diff-container" class="mode-container">
                 ${this.diffInputPane('left', 'Original', [
-                    this.iconButton({ id: 'copy-left-json', icon: 'copy', label: 'Copy original', title: 'Copy original to clipboard' }),
-                    this.iconButton({
+                    this.menuItem({
                         id: 'save-left-json',
                         icon: 'save',
-                        label: 'Save original',
-                        title: 'Save the original, with every applied change, to a file'
+                        label: 'Save to a file…'
                     }),
-                    this.iconButton({ id: 'clear-left-json', icon: 'clear-all', label: 'Clear original', title: 'Clear original' })
+                    this.menuItem({ id: 'copy-left-json', icon: 'copy', label: 'Copy' }),
+                    this.menuItem({ id: 'clear-left-json', icon: 'clear-all', label: 'Clear' })
                 ])}
                 <div id="diff-splitter-left" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
                 <section id="diff-result-panel" class="pane">
-                    ${this.paneHeader('Changes', [
-                        this.iconButton({ id: 'apply-all-diffs', icon: 'check-all', label: 'Apply all changes', title: 'Apply every change to the original', attrs: 'hidden' }),
-                        this.iconButton({ id: 'reject-all-diffs', icon: 'close-all', label: 'Reject all changes', title: 'Reject every change', attrs: 'hidden' }),
-                        this.maximizeButton('diff-result-panel')
-                    ], 'diff-meta')}
+                    ${this.paneHeader(
+                        'Changes',
+                        [
+                            this.iconButton({ id: 'apply-all-diffs', icon: 'check-all', label: 'Apply all changes', title: 'Apply every change to the original', attrs: 'hidden' }),
+                            this.iconButton({ id: 'reject-all-diffs', icon: 'close-all', label: 'Reject all changes', title: 'Reject every change', attrs: 'hidden' }),
+                            this.divider(),
+                            this.maximizeButton('diff-result-panel')
+                        ],
+                        'diff-meta',
+                        'diff-flag'
+                    )}
                     <div class="pane__body">
                         <div id="diff-filters" class="chips" role="group" aria-label="Filter changes" hidden>
                             ${this.filterChip('all', 'All')}
@@ -360,8 +382,8 @@ export class WebviewContentGenerator {
                 </section>
                 <div id="diff-splitter-right" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
                 ${this.diffInputPane('right', 'Modified', [
-                    this.iconButton({ id: 'copy-right-json', icon: 'copy', label: 'Copy modified', title: 'Copy modified to clipboard' }),
-                    this.iconButton({ id: 'clear-right-json', icon: 'clear-all', label: 'Clear modified', title: 'Clear modified' })
+                    this.menuItem({ id: 'copy-right-json', icon: 'copy', label: 'Copy' }),
+                    this.menuItem({ id: 'clear-right-json', icon: 'clear-all', label: 'Clear' })
                 ])}
             </div>
 
@@ -381,33 +403,36 @@ export class WebviewContentGenerator {
      * colouring, the gutter and folding come from -- the panes used to be bare
      * textareas with none of it.
      */
-    private diffInputPane(side: 'left' | 'right', title: string, actions: string[]): string {
+    private diffInputPane(side: 'left' | 'right', title: string, extras: string[]): string {
         const label = title.toLowerCase();
         const header = this.paneHeader(
             title,
             [
-                this.iconButton({
-                    id: `format-${side}-json`,
-                    icon: 'json',
-                    label: `Format ${label}`,
-                    title: `Format the ${label} document`
-                }),
-                this.iconButton({
-                    id: `open-${side}-json`,
-                    icon: 'go-to-file',
-                    label: `Open a file as the ${label}`,
-                    title: `Open a file as the ${label}`
-                }),
                 this.iconButton({
                     id: `edit-${side}-json`,
                     icon: 'edit',
                     label: `Edit ${label}`,
                     title: `Edit the ${label} document`
                 }),
-                ...actions,
+                this.iconButton({
+                    id: `format-${side}-json`,
+                    icon: 'json',
+                    label: `Format ${label}`,
+                    title: `Format the ${label} document`
+                }),
+                this.menuButton(`${side}-json-menu`, [
+                    this.menuItem({
+                        id: `open-${side}-json`,
+                        icon: 'go-to-file',
+                        label: 'Open a file…'
+                    }),
+                    ...extras
+                ]),
+                this.divider(),
                 this.maximizeButton(`${side}-json-panel`)
             ],
-            `${side}-json-meta`
+            `${side}-json-meta`,
+            `${side}-json-flag`
         );
 
         return `<section id="${side}-json-panel" class="pane" data-view="edit">
@@ -425,7 +450,7 @@ export class WebviewContentGenerator {
             icon,
             label,
             title,
-            classes: `shape-btn${shape === 'tree' ? ' is-active' : ''}`,
+            classes: `segmented__btn shape-btn${shape === 'tree' ? ' is-active' : ''}`,
             attrs: `data-visual-shape="${shape}" aria-pressed="${shape === 'tree'}"`
         });
     }
@@ -450,14 +475,80 @@ export class WebviewContentGenerator {
      * Pane title bar. Actions live here rather than floating over the content,
      * so adding one is appending to a flex row instead of picking a new offset.
      */
-    private paneHeader(title: string, actions: string[], metaId?: string): string {
+    private paneHeader(
+        title: string,
+        actions: string[],
+        metaId?: string,
+        flagId?: string
+    ): string {
         const meta = metaId ? `<span class="pane__meta" id="${metaId}"></span>` : '';
         return `<header class="pane__header">
                         <span class="pane__title">${title}</span>
                         ${meta}
+                        ${flagId ? this.paneFlag(flagId) : ''}
                         <span class="pane__spacer"></span>
                         <div class="pane__actions">${actions.join('')}</div>
                     </header>`;
+    }
+
+    /**
+     * The badge a pane raises when it is showing an older document than the
+     * input holds, or holding edits that exist nowhere else.
+     *
+     * It is a button, not a label: the sentence explaining what is wrong and
+     * the control that puts it right are the same object, so noticing the
+     * problem and fixing it is one movement. The text and the tooltip are
+     * filled in at runtime by `PaneFlag`, which knows which case it is.
+     */
+    private paneFlag(id: string): string {
+        // The tip is a placeholder: `PaneFlag` replaces it with the sentence
+        // for whichever case raised the badge, along with the keystroke that
+        // does the same thing.
+        return `<button type="button" id="${id}" class="pane__flag" hidden${this.tip(
+            'Bring this pane up to date'
+        )}>
+                            <span class="codicon codicon-refresh pane__flag-icon" aria-hidden="true"></span>
+                            <span class="pane__flag-text"></span>
+                        </button>`;
+    }
+
+    /** Separates one group of pane actions from the next. */
+    private divider(): string {
+        return '<span class="pane__divider" aria-hidden="true"></span>';
+    }
+
+    /**
+     * A `⋯` button and the menu it opens.
+     *
+     * The items are ordinary buttons with ordinary ids, so a view binds one
+     * exactly as it bound the header button it replaced -- moving an action out
+     * of a crowded header and into a menu is a change here and nowhere else.
+     */
+    private menuButton(menuId: string, items: string[]): string {
+        return `<div class="menu-anchor">
+                            <button class="icon-btn" type="button" data-menu="${menuId}" aria-haspopup="menu" aria-expanded="false" aria-label="More actions"${this.tip(
+                                'More actions'
+                            )}><span class="codicon codicon-ellipsis" aria-hidden="true"></span></button>
+                            <div class="menu" id="${menuId}" role="menu" hidden>${items.join('')}</div>
+                        </div>`;
+    }
+
+    /** One line of a menu: an icon, a name, and the keystroke if there is one. */
+    private menuItem(options: {
+        id: string;
+        icon: string;
+        label: string;
+        key?: string;
+        attrs?: string;
+    }): string {
+        const keys = options.key
+            ? `<span class="menu__keys" data-keys="${options.key}"></span>`
+            : '';
+        return `<button type="button" id="${options.id}" class="menu__item" role="menuitem"${
+            options.attrs ? ` ${options.attrs}` : ''
+        }><span class="codicon codicon-${
+            options.icon
+        }" aria-hidden="true"></span><span class="menu__label">${options.label}</span>${keys}</button>`;
     }
 
     /** A chip that narrows the change list to one kind of change. */
