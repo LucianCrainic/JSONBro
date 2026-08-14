@@ -6,12 +6,19 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { WebviewContentGenerator } from './webview-content';
 import { JSONBroActivityBarProvider } from './activity-bar-provider';
+import type { HostToWebview } from './shared/messages';
 
 export class WebviewProvider {
     private context: vscode.ExtensionContext;
     private contentGenerator: WebviewContentGenerator;
     private activityBarProvider: JSONBroActivityBarProvider;
     private existingPanels: Map<string, vscode.WebviewPanel> = new Map();
+
+    /** Panels whose webview has reported that it is listening. */
+    private readyPanels: Set<string> = new Set();
+
+    /** Messages waiting for a panel that has not signalled ready yet. */
+    private pendingMessages: Map<string, HostToWebview[]> = new Map();
 
     constructor(context: vscode.ExtensionContext, activityBarProvider: JSONBroActivityBarProvider) {
         this.context = context;
@@ -49,53 +56,54 @@ export class WebviewProvider {
      * Loads JSON from format history into the format panel
      */
     public loadFormatHistory(json: string): void {
-        const existingPanel = this.existingPanels.get('format');
-        if (existingPanel) {
-            existingPanel.webview.postMessage({
-                command: 'loadJson',
-                json: json
-            });
-            existingPanel.reveal();
-        } else {
-            this.showFormatPanel();
-            // Wait a bit for the panel to load, then send the message
-            setTimeout(() => {
-                const panel = this.existingPanels.get('format');
-                if (panel) {
-                    panel.webview.postMessage({
-                        command: 'loadJson',
-                        json: json
-                    });
-                }
-            }, 100);
-        }
+        this.sendToPanel('format', { command: 'loadJson', json });
     }
 
     /**
      * Loads JSON from diff history into the diff panel
      */
     public loadDiffHistory(leftJson: string, rightJson: string): void {
-        const existingPanel = this.existingPanels.get('diff');
+        this.sendToPanel('diff', { command: 'loadDiff', leftJson, rightJson });
+    }
+
+    /**
+     * Delivers a message to a panel, creating it first if necessary.
+     *
+     * A freshly created webview cannot receive messages until its script has
+     * run, so anything sent before then is queued and flushed when the webview
+     * reports ready. Previously this was a fixed 100ms delay, which dropped the
+     * message on a slow load and delayed it needlessly on a fast one.
+     */
+    private sendToPanel(mode: 'format' | 'diff', message: HostToWebview): void {
+        const existingPanel = this.existingPanels.get(mode);
+
+        if (existingPanel && this.readyPanels.has(mode)) {
+            existingPanel.webview.postMessage(message);
+            existingPanel.reveal();
+            return;
+        }
+
+        const queue = this.pendingMessages.get(mode) ?? [];
+        queue.push(message);
+        this.pendingMessages.set(mode, queue);
+
         if (existingPanel) {
-            existingPanel.webview.postMessage({
-                command: 'loadDiff',
-                leftJson: leftJson,
-                rightJson: rightJson
-            });
             existingPanel.reveal();
         } else {
-            this.showDiffPanel();
-            // Wait a bit for the panel to load, then send the message
-            setTimeout(() => {
-                const panel = this.existingPanels.get('diff');
-                if (panel) {
-                    panel.webview.postMessage({
-                        command: 'loadDiff',
-                        leftJson: leftJson,
-                        rightJson: rightJson
-                    });
-                }
-            }, 100);
+            this.showPanel(mode);
+        }
+    }
+
+    /** Delivers anything queued for a panel that has just become ready. */
+    private flushPendingMessages(mode: 'format' | 'diff'): void {
+        const panel = this.existingPanels.get(mode);
+        const queue = this.pendingMessages.get(mode);
+        if (!panel || !queue) {
+            return;
+        }
+        this.pendingMessages.delete(mode);
+        for (const message of queue) {
+            panel.webview.postMessage(message);
         }
     }
 
@@ -115,13 +123,17 @@ export class WebviewProvider {
                 retainContextWhenHidden: true,
                 localResourceRoots: [
                     vscode.Uri.joinPath(this.context.extensionUri, 'out'),
-                    vscode.Uri.joinPath(this.context.extensionUri, 'node_modules')
+                    vscode.Uri.joinPath(this.context.extensionUri, 'media')
                 ]
             }
         );
 
-        // Set JSON file icon for the panel
-        panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'images', 'json-file-icon.svg');
+        // The tab icon renders outside the webview, so it cannot pick up theme
+        // colours through CSS -- VS Code needs a variant per theme kind.
+        panel.iconPath = {
+            light: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'json-file-icon-light.svg'),
+            dark: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'json-file-icon-dark.svg')
+        };
 
         // Track the panel
         this.existingPanels.set(mode, panel);
@@ -129,6 +141,8 @@ export class WebviewProvider {
         // Remove from tracking when disposed
         panel.onDidDispose(() => {
             this.existingPanels.delete(mode);
+            this.readyPanels.delete(mode);
+            this.pendingMessages.delete(mode);
         });
 
         panel.webview.html = this.contentGenerator.getWebviewContent(panel.webview, mode);
@@ -137,6 +151,10 @@ export class WebviewProvider {
         panel.webview.onDidReceiveMessage(
             message => {
                 switch (message.command) {
+                    case 'ready':
+                        this.readyPanels.add(mode);
+                        this.flushPendingMessages(mode);
+                        break;
                     case 'showError':
                         vscode.window.showErrorMessage(message.text);
                         break;

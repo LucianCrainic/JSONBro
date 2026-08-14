@@ -1,7 +1,20 @@
 /**
- * Generates webview HTML content
+ * Generates webview HTML content.
+ *
+ * Styles live in media/*.css and are linked as webview resources; this file is
+ * responsible only for the document shell, the CSP and the body markup.
  */
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
+
+/** Stylesheets, in cascade order. tokens must come first. */
+const STYLESHEETS = [
+    'tokens.css',
+    'base.css',
+    'components.css',
+    'format.css',
+    'diff.css'
+];
 
 export class WebviewContentGenerator {
     private context: vscode.ExtensionContext;
@@ -21,1135 +34,272 @@ export class WebviewContentGenerator {
 
         const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
+        // No 'unsafe-inline': the markup below carries no style attributes, and
+        // mode visibility is driven by data-mode on <body> instead.
+        const csp = [
+            `default-src 'none'`,
+            `style-src ${webview.cspSource}`,
+            `font-src ${webview.cspSource}`,
+            `img-src ${webview.cspSource} data:`,
+            `script-src 'nonce-${nonce}'`
+        ].join('; ');
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+    <meta http-equiv="Content-Security-Policy" content="${csp};">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
-    ${this.getStyles()}
+    ${this.getStyleLinks(webview)}
 </head>
-<body data-initial-mode="${mode}">
+<body data-mode="${mode}">
     ${this.getBodyContent(mode)}
     <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
     }
 
-    private getStyles(): string {
-        return `<style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui;
-                margin: 0;
-                padding: 0;
-                color: var(--vscode-editor-foreground);
-                background-color: var(--vscode-sideBar-background);
-                display: flex;
-                flex-direction: column;
-                height: 100vh;
-                overflow: hidden;
-            }
-
-            #toolbar {
-                padding: 12px 10px;
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                border-bottom: 1px solid var(--vscode-editorGroup-border);
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: 8px;
-                min-height: 48px;
-                box-sizing: border-box;
-            }
-
-            #toolbar-left, #toolbar-center {
-                display: flex;
-                gap: 8px;
-            }
-
-            .mode-container {
-                display: flex;
-                flex: 1;
-                overflow: hidden;
-                position: relative;
-                padding: 16px;
-            }
-
-            #format-container {
-                /* Default format mode styles */
-            }
-
-            #diff-container {
-                /* Three-pane layout for diff mode */
-                gap: 4px;
-            }
-
-            #input-panel {
-                min-width: 200px;
-                max-width: calc(100% - 220px);
-                width: 50%;
-                display: flex;
-                flex-direction: column;
-                position: relative;
-            }
-
-            #input-panel.panel-maximized {
-                max-width: none;
-            }
-
-            #output-panel {
-                flex: 1;
-                min-width: 200px;
-                display: flex;
-                flex-direction: column;
-                position: relative;
-            }
-
-            #input, #output {
-                flex: 1;
-                padding: 16px;
-                padding-top: 40px;
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 8px;
-                background-color: var(--vscode-editor-background);
-                color: var(--vscode-editor-foreground);
-                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-                font-size: 13px;
-                resize: none;
-                outline: none;
-                transition: all 0.2s ease;
-            }
-
-            #output {
-                overflow-y: auto;
-                white-space: pre-wrap;
-            }
-
-            #splitter {
-                width: 8px;
-                background-color: transparent;
-                cursor: col-resize;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                position: relative;
-                margin: 0 4px;
-            }
-
-            #splitter.hidden {
-                display: none;
-            }
-
-            #splitter::before {
-                content: '';
-                width: 2px;
-                height: 40px;
-                background-color: var(--vscode-editorGroup-border);
-                border-radius: 1px;
-                opacity: 0.5;
-                transition: opacity 0.2s ease;
-            }
-
-            #splitter:hover::before {
-                opacity: 1;
-                background-color: var(--vscode-focusBorder);
-            }
-
-            #splitter.dragging::before {
-                opacity: 1;
-                background-color: var(--vscode-focusBorder);
-            }
-
-            /* Add visual feedback during drag */
-            body.dragging {
-                cursor: col-resize !important;
-            }
-
-            body.dragging * {
-                cursor: col-resize !important;
-            }
-
-            /* Diff Mode Styles */
-            #left-json-panel, #right-json-panel, #diff-result-panel {
-                flex: 1;
-                min-width: 200px;
-                display: flex;
-                flex-direction: column;
-                transition: flex 0.3s ease;
-                position: relative;
-            }
-
-            /* Maximized panel states */
-            .panel-maximized {
-                flex: 1 !important;
-            }
-
-            .panel-minimized {
-                display: none !important;
-            }
-
-            .panel-header {
-                display: none;
-            }
-
-            .maximize-btn {
-                position: absolute;
-                top: 8px;
-                right: 8px;
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                border: 1px solid var(--vscode-editorGroup-border);
-                color: var(--vscode-icon-foreground);
-                cursor: pointer;
-                padding: 8px;
-                border-radius: 4px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                opacity: 0.6;
-                transition: all 0.2s ease;
-                z-index: 100;
-                width: 32px;
-                height: 32px;
-                pointer-events: auto;
-            }
-
-            .panel-control-btn {
-                position: absolute;
-                top: 8px;
-                right: 48px;
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                border: 1px solid var(--vscode-editorGroup-border);
-                color: var(--vscode-icon-foreground);
-                cursor: pointer;
-                padding: 8px;
-                border-radius: 4px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                opacity: 0.6;
-                transition: all 0.2s ease;
-                z-index: 100;
-                width: 32px;
-                height: 32px;
-                pointer-events: auto;
-            }
-
-            /* Multiple panel control buttons - arrange them in a row */
-            #left-json-panel .panel-control-btn:nth-of-type(1) {
-                right: 88px; /* copy button */
-            }
-
-            #left-json-panel .panel-control-btn:nth-of-type(2) {
-                right: 48px; /* clear button */
-            }
-
-            #diff-result-panel .panel-control-btn:nth-of-type(1) {
-                right: 88px; /* apply all button */
-            }
-
-            #diff-result-panel .panel-control-btn:nth-of-type(2) {
-                right: 48px; /* reject all button */
-            }
-
-            #right-json-panel .panel-control-btn:nth-of-type(1) {
-                right: 48px; /* clear button */
-            }
-
-            .maximize-btn:hover,
-            .panel-control-btn:hover {
-                background-color: var(--vscode-toolbar-hoverBackground);
-                opacity: 1;
-            }
-
-            .maximize-btn:active,
-            .panel-control-btn:active {
-                background-color: var(--vscode-toolbar-activeBackground);
-            }
-
-            .panel-control-btn.active {
-                opacity: 1;
-                background-color: var(--vscode-button-secondaryBackground);
-                color: var(--vscode-button-secondaryForeground);
-            }
-
-            .panel-control-btn.active:hover {
-                background-color: var(--vscode-button-secondaryHoverBackground);
-            }
-
-            /* Special styling for apply/reject all buttons */
-            .panel-control-btn.apply-all-btn {
-                background-color: var(--vscode-button-background);
-                color: var(--vscode-button-foreground);
-                opacity: 0.8;
-            }
-
-            .panel-control-btn.apply-all-btn:hover {
-                background-color: var(--vscode-button-hoverBackground);
-                opacity: 1;
-            }
-
-            .panel-control-btn.reject-all-btn {
-                background-color: transparent;
-                opacity: 0.6;
-            }
-
-            .panel-control-btn.reject-all-btn:hover {
-                opacity: 1;
-            }
-
-            #left-json, #right-json {
-                flex: 1;
-                padding: 16px;
-                padding-top: 40px;
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 8px;
-                background-color: var(--vscode-editor-background);
-                color: var(--vscode-editor-foreground);
-                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-                font-size: 13px;
-                resize: none;
-                outline: none;
-            }
-
-            #diff-output {
-                flex: 1;
-                padding: 12px;
-                padding-top: 40px;
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 8px;
-                background-color: var(--vscode-editor-background);
-                color: var(--vscode-editor-foreground);
-                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-                font-size: 13px;
-                overflow-y: auto;
-                white-space: pre-wrap;
-            }
-
-            #diff-output > * {
-                margin-top: 0;
-            }
-
-
-
-            /* Diff Result Styles */
-            .diff-result {
-                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-                font-size: 11px;
-                line-height: 1.3;
-                margin: 0;
-                padding: 0;
-            }
-
-            .diff-result.no-changes {
-                text-align: center;
-                padding: 16px;
-                margin: 0;
-                color: var(--vscode-testing-iconPassed);
-                font-size: 12px;
-            }
-
-            .diff-items {
-                margin: 0;
-                padding: 0;
-            }
-
-            .diff-items > * {
-                margin-top: 0;
-            }
-
-            .diff-items > *:first-child {
-                margin-top: 0 !important;
-            }
-
-            .diff-item {
-                margin-bottom: 0;
-                padding: 1px 6px;
-                border-radius: 2px;
-                border-left: 2px solid;
-                display: flex;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: 2px;
-            }
-
-            .diff-item:first-child {
-                padding-top: 1px;
-            }
-
-            .diff-item.diff-modified {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .diff-item:first-child {
-                margin-top: 0;
-            }
-
-            .expandable-value {
-                cursor: pointer;
-                text-decoration: underline;
-                text-decoration-style: dotted;
-                opacity: 0.8;
-            }
-
-            .expandable-value:hover {
-                opacity: 1;
-                background-color: var(--vscode-toolbar-hoverBackground);
-                padding: 1px 2px;
-                border-radius: 2px;
-            }
-
-            .diff-item.diff-added {
-                background-color: var(--vscode-diffEditor-insertedTextBackground);
-                border-left-color: var(--vscode-gitDecoration-addedResourceForeground);
-            }
-
-            .diff-item.diff-removed {
-                background-color: var(--vscode-diffEditor-removedTextBackground);
-                border-left-color: var(--vscode-gitDecoration-deletedResourceForeground);
-            }
-
-            .diff-item.diff-modified {
-                background-color: var(--vscode-diffEditor-border);
-                border-left-color: var(--vscode-gitDecoration-modifiedResourceForeground);
-            }
-
-            .diff-path {
-                font-weight: 600;
-                margin-bottom: 0;
-                font-size: 10px;
-                opacity: 0.9;
-                color: var(--vscode-descriptionForeground);
-            }
-
-            .diff-value {
-                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-                font-size: 10px;
-                padding: 1px 3px;
-                border-radius: 2px;
-                margin: 1px 0;
-                word-break: break-all;
-            }
-
-            .diff-value.old-value {
-                background-color: var(--vscode-diffEditor-removedTextBackground);
-                color: var(--vscode-gitDecoration-deletedResourceForeground);
-            }
-
-            .diff-value.new-value {
-                background-color: var(--vscode-diffEditor-insertedTextBackground);
-                color: var(--vscode-gitDecoration-addedResourceForeground);
-            }
-
-            .diff-values {
-                display: flex;
-                flex-direction: column;
-                gap: 1px;
-            }
-
-            .diff-inline-change {
-                margin-top: 0;
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                font-size: 10px;
-            }
-
-            .diff-inline-change .diff-value {
-                margin: 0;
-            }
-
-            .diff-error {
-                color: var(--vscode-errorForeground);
-                padding: 16px;
-                text-align: center;
-            }
-
-            /* Diff Item Actions */
-            .diff-action-btn {
-                background-color: var(--vscode-button-secondaryBackground);
-                color: var(--vscode-button-secondaryForeground);
-                border: 1px solid var(--vscode-editorGroup-border);
-                padding: 4px;
-                cursor: pointer;
-                border-radius: 3px;
-                font-size: 11px;
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                height: 24px;
-                min-width: 24px;
-                box-sizing: border-box;
-                transition: all 0.2s ease;
-            }
-
-            .diff-action-btn:hover {
-                background-color: var(--vscode-button-secondaryHoverBackground);
-            }
-
-            .diff-action-btn:active {
-                transform: scale(0.95);
-            }
-
-            .diff-action-btn svg {
-                width: 12px;
-                height: 12px;
-            }
-
-            .diff-item-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                width: 100%;
-                gap: 8px;
-            }
-
-            .diff-item-actions {
-                display: flex;
-                gap: 4px;
-                opacity: 0;
-                transition: opacity 0.2s ease;
-            }
-
-            .diff-item:hover .diff-item-actions {
-                opacity: 1;
-            }
-
-            .diff-item.diff-applied {
-                opacity: 0.5;
-                background-color: var(--vscode-editor-background);
-            }
-
-            .diff-item.diff-applied .diff-item-actions {
-                opacity: 0.3;
-            }
-
-            .diff-item.diff-rejected {
-                opacity: 0.3;
-                text-decoration: line-through;
-            }
-
-            .diff-item.diff-rejected .diff-item-actions {
-                opacity: 0.3;
-            }
-
-            button {
-                background-color: var(--vscode-button-background);
-                color: var(--vscode-button-foreground);
-                border: none;
-                padding: 8px 12px;
-                cursor: pointer;
-                border-radius: 3px;
-                font-size: 12px;
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                height: 32px;
-                box-sizing: border-box;
-            }
-
-            button:hover {
-                background-color: var(--vscode-button-hoverBackground);
-            }
-
-            button.active {
-                background-color: var(--vscode-button-secondaryBackground);
-                color: var(--vscode-button-secondaryForeground);
-            }
-
-            button.active:hover {
-                background-color: var(--vscode-button-secondaryHoverBackground);
-            }
-
-            /* Mode Switcher */
-            #mode-switcher {
-                display: flex;
-                background-color: var(--vscode-editorGroupHeader-tabsBackground);
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 3px;
-                overflow: hidden;
-                margin-right: 8px;
-            }
-
-            .mode-btn {
-                background-color: transparent;
-                color: var(--vscode-tab-inactiveForeground);
-                border: none;
-                border-right: 1px solid var(--vscode-editorGroup-border);
-                padding: 8px 12px;
-                cursor: pointer;
-                font-size: 12px;
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                height: 32px;
-                box-sizing: border-box;
-                transition: all 0.2s ease;
-            }
-
-            .mode-btn:last-child {
-                border-right: none;
-            }
-
-            .mode-btn:hover {
-                background-color: var(--vscode-tab-hoverBackground);
-                color: var(--vscode-tab-activeForeground);
-            }
-
-            .mode-btn.active {
-                background-color: var(--vscode-tab-activeBackground);
-                color: var(--vscode-tab-activeForeground);
-            }
-
-            /* Toggle Button (for strict diff mode) */
-            .toggle-btn {
-                padding: 6px 12px;
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 3px;
-                background-color: var(--vscode-button-secondaryBackground);
-                color: var(--vscode-button-secondaryForeground);
-                transition: all 0.2s;
-            }
-
-            .toggle-btn:hover {
-                background-color: var(--vscode-button-secondaryHoverBackground);
-            }
-
-            .toggle-btn.active {
-                background-color: var(--vscode-button-background);
-                color: var(--vscode-button-foreground);
-                border-color: var(--vscode-button-background);
-            }
-
-            .toggle-btn.active:hover {
-                background-color: var(--vscode-button-hoverBackground);
-            }
-
-            /* Inline Search Container */
-            #search-container {
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                padding: 6px 8px;
-                background-color: var(--vscode-input-background);
-                border: 1px solid var(--vscode-editorGroup-border);
-                border-radius: 3px;
-                margin-right: 8px;
-                height: 32px;
-                box-sizing: border-box;
-            }
-
-            #search-container #search-input {
-                background: none;
-                border: none;
-                color: var(--vscode-input-foreground);
-                font-size: 12px;
-                outline: none;
-                width: 150px;
-                padding: 2px 4px;
-            }
-
-            #search-container #search-input::placeholder {
-                color: var(--vscode-input-placeholderForeground);
-            }
-
-            #search-container button {
-                background: none;
-                border: none;
-                padding: 2px 4px;
-                margin: 0;
-                border-radius: 2px;
-                min-width: auto;
-            }
-
-            #search-container button:hover {
-                background-color: var(--vscode-toolbar-hoverBackground);
-            }
-
-            #search-container button:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-
-            #search-container #search-info {
-                font-size: 11px;
-                color: var(--vscode-descriptionForeground);
-                margin: 0 4px;
-                white-space: nowrap;
-            }
-
-            #search-container .icon {
-                width: 12px;
-                height: 12px;
-            }
-
-            .icon {
-                width: 14px;
-                height: 14px;
-                stroke: currentColor;
-                fill: none;
-                stroke-width: 2;
-            }
-
-            /* JSON Syntax Highlighting */
-            .string { color: var(--vscode-debugTokenExpression-string); }
-            .number { color: var(--vscode-debugTokenExpression-number); }
-            .boolean { color: var(--vscode-debugTokenExpression-boolean); }
-            .null { color: var(--vscode-debugTokenExpression-name); }
-            .key { 
-                color: var(--vscode-debugTokenExpression-name); 
-                font-weight: bold;
-            }
-            .bracket, .brace { color: var(--vscode-editor-foreground); }
-            
-            .json-array, .json-object {
-                display: inline;
-            }
-
-            .fold-arrow {
-                cursor: pointer;
-                user-select: none;
-                -webkit-user-select: none;
-                -moz-user-select: none;
-                -ms-user-select: none;
-                display: inline-block;
-                width: 1em;
-                font-size: 0.8em;
-                color: var(--vscode-foreground);
-                opacity: 0.6;
-                transition: opacity 0.15s ease, transform 0.15s ease;
-                margin-right: 0.3em;
-            }
-
-            .fold-arrow::before {
-                content: attr(data-arrow);
-            }
-
-            .fold-arrow:hover {
-                opacity: 1;
-            }
-
-            .fold-arrow.folded {
-                transform: rotate(-90deg);
-            }
-
-            .foldable-content {
-                display: inline;
-            }
-
-            .foldable-content.hidden {
-                display: none;
-            }
-
-            .fold-ellipsis {
-                opacity: 0.5;
-                color: var(--vscode-descriptionForeground);
-                margin-left: 0.3em;
-            }
-
-            ul {
-                list-style: none;
-                list-style-type: none;
-                padding-left: 1.5em;
-                margin: 0;
-                display: block;
-            }
-
-            li {
-                display: block;
-                margin: 0;
-                padding: 0;
-                list-style: none;
-                list-style-type: none;
-            }
-            
-            li::before {
-                content: none;
-                display: none;
-            }
-            
-            li::marker {
-                content: none;
-                display: none;
-            }
-            
-            /* Add commas after items except the last one */
-            li:not(:last-child)::after {
-                content: ',';
-            }
-
-            .json-items {
-                display: block;
-                padding-left: 1.5em;
-                margin: 0;
-            }
-
-            .json-line {
-                display: block;
-                margin: 0;
-                padding: 0;
-                line-height: 1.6;
-                font-size: 13px;
-            }
-
-            .comma {
-                color: var(--vscode-editor-foreground);
-            }
-
-            .colon {
-                color: var(--vscode-editor-foreground);
-            }
-
-            /* Line Numbers Container */
-            .json-container {
-                display: flex;
-                width: 100%;
-            }
-
-            .line-numbers {
-                flex-shrink: 0;
-                padding: 0 12px 0 0;
-                text-align: right;
-                color: var(--vscode-editorLineNumber-foreground);
-                user-select: none;
-                border-right: 1px solid var(--vscode-editorGroup-border);
-                background-color: var(--vscode-editor-background);
-            }
-
-            .json-content {
-                flex: 1;
-                padding-left: 12px;
-                overflow-x: auto;
-            }
-
-            /* Individual Line Number */
-            .line-numbers .line-number {
-                display: block;
-                padding: 0 8px;
-                line-height: 1.6;
-                font-size: 13px;
-                opacity: 0.7;
-                height: auto;
-            }
-
-            .line-numbers .line-number:hover {
-                opacity: 1;
-                color: var(--vscode-editorLineNumber-activeForeground);
-            }
-
-            /* Hide line numbers when disabled */
-            #output.hide-line-numbers .line-numbers {
-                display: none;
-            }
-
-            #output.hide-line-numbers .json-content {
-                padding-left: 0;
-            }
-
-            /* Search Styles */
-                flex-direction: column;
-                gap: 2px;
-            }
-
-            .left-preview, .right-preview {
-                font-family: 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
-                font-size: 10px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .left-preview {
-                color: var(--vscode-gitDecoration-modifiedResourceForeground);
-            }
-
-            .right-preview {
-                color: var(--vscode-gitDecoration-addedResourceForeground);
-            }
-
-            /* Search Highlighting */
-            .search-highlight {
-                background-color: var(--vscode-editor-findMatchBackground);
-                border: 1px solid var(--vscode-editor-findMatchBorder);
-                border-radius: 2px;
-            }
-
-            .search-highlight.current {
-                background-color: var(--vscode-editor-findMatchHighlightBackground);
-                border-color: var(--vscode-editor-findMatchHighlightBorder);
-            }
-
-            /* Warning Notification */
-            .warning-notification {
-                position: absolute;
-                top: 48px;
-                left: 8px;
-                right: 48px;
-                background-color: var(--vscode-inputValidation-warningBackground);
-                border: 1px solid var(--vscode-inputValidation-warningBorder);
-                border-radius: 4px;
-                padding: 8px 12px;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                z-index: 10;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-                animation: slideDown 0.3s ease;
-            }
-
-            @keyframes slideDown {
-                from {
-                    opacity: 0;
-                    transform: translateY(-10px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
-            }
-
-            .warning-notification .warning-icon {
-                flex-shrink: 0;
-                stroke: var(--vscode-inputValidation-warningForeground);
-                fill: none;
-                stroke-width: 2;
-            }
-
-            .warning-notification .warning-message {
-                flex: 1;
-                color: var(--vscode-inputValidation-warningForeground);
-                font-size: 12px;
-                line-height: 1.4;
-            }
-
-            .warning-notification .dismiss-warning-btn {
-                background: none;
-                border: none;
-                padding: 4px;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: 3px;
-                opacity: 0.7;
-                transition: all 0.2s;
-                min-width: auto;
-                height: auto;
-            }
-
-            .warning-notification .dismiss-warning-btn:hover {
-                background-color: rgba(0, 0, 0, 0.1);
-                opacity: 1;
-            }
-
-            .warning-notification .dismiss-warning-btn svg {
-                stroke: var(--vscode-inputValidation-warningForeground);
-                fill: none;
-                stroke-width: 2;
-            }
-        </style>`;
+    /**
+     * Builds the <link> tags for the codicon font and every JSONBro stylesheet.
+     */
+    private getStyleLinks(webview: vscode.Webview): string {
+        const mediaUri = (...segments: string[]) =>
+            webview.asWebviewUri(
+                vscode.Uri.joinPath(this.context.extensionUri, 'media', ...segments)
+            );
+
+        const links = [
+            `<link rel="stylesheet" href="${mediaUri('codicons', 'codicon.css')}">`,
+            ...STYLESHEETS.map(name => `<link rel="stylesheet" href="${mediaUri(name)}">`)
+        ];
+
+        return links.join('\n    ');
     }
 
     private getBodyContent(mode: 'format' | 'diff' = 'format'): string {
         return `
             <div id="toolbar">
-                <div id="toolbar-left">
-                    <div id="mode-switcher">
-                        <button id="format-mode" class="mode-btn ${mode === 'format' ? 'active' : ''}" title="Format JSON">
-                            <svg class="icon" viewBox="0 0 24 24">
-                                <polyline points="16,18 22,12 16,6"></polyline>
-                                <polyline points="8,6 2,12 8,18"></polyline>
-                            </svg>
-                            Format
-                        </button>
-                        <button id="diff-mode" class="mode-btn ${mode === 'diff' ? 'active' : ''}" title="Compare JSON">
-                            <svg class="icon" viewBox="0 0 24 24">
-                                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-                                <path d="M9 12h6"></path>
-                                <path d="M12 9v6"></path>
-                            </svg>
-                            Diff
-                        </button>
+                <div class="toolbar__group">
+                    <div id="mode-switcher" role="tablist" aria-label="View">
+                        ${this.modeTab('format-mode', 'json', 'Format', mode === 'format')}
+                        ${this.modeTab('diff-mode', 'git-compare', 'Diff', mode === 'diff')}
                     </div>
-                    <button id="action-btn" title="${mode === 'format' ? 'Format JSON' : 'Compare JSON'}">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            ${mode === 'format' 
-                                ? '<polyline points="16,18 22,12 16,6"></polyline><polyline points="8,6 2,12 8,18"></polyline>'
-                                : '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M9 12h6"></path><path d="M12 9v6"></path>'
-                            }
-                        </svg>
+                    <button id="action-btn" class="btn btn--primary" title="${
+                        mode === 'format' ? 'Format JSON' : 'Compare JSON'
+                    }">
+                        <span class="codicon codicon-play" aria-hidden="true"></span>
                         <span id="action-text">${mode === 'format' ? 'Format' : 'Compare'}</span>
                     </button>
-                    <button id="strict-diff-toggle" class="toggle-btn" title="Strict diff mode: only compare keys from the left JSON, ignoring extra keys in the right JSON" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                        </svg>
-                        Strict
-                    </button>
+                    ${this.iconButton({
+                        id: 'strict-diff-toggle',
+                        icon: 'shield',
+                        label: 'Strict mode',
+                        title: 'Strict diff: only compare keys present in the original',
+                        attrs: 'data-mode-only="diff" aria-pressed="false"'
+                    })}
                 </div>
-                <div id="toolbar-center">
-                    <div id="search-container" style="display: none;">
-                        <input type="text" id="search-input" placeholder="Search in JSON..." />
-                        <button id="search-prev" title="Previous match">
-                            <svg class="icon" viewBox="0 0 24 24">
-                                <polyline points="15,18 9,12 15,6"></polyline>
-                            </svg>
-                        </button>
-                        <button id="search-next" title="Next match">
-                            <svg class="icon" viewBox="0 0 24 24">
-                                <polyline points="9,18 15,12 9,6"></polyline>
-                            </svg>
-                        </button>
-                        <span id="search-info">0 matches</span>
-                        <button id="search-close" title="Close search">
-                            <svg class="icon" viewBox="0 0 24 24">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
-                    </div>
-                    <button id="search-toggle" title="Search in formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
-                        </svg>
-                        Search
-                    </button>
-                    <button id="copy" title="Copy formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="m5,15H4a2,2 0 0,1 -2,-2V4a2,2 0 0,1 2,-2H13a2,2 0 0,1 2,2v1"></path>
-                        </svg>
-                        Copy
-                    </button>
-                    <button id="save" title="Save formatted JSON" style="display: ${mode === 'format' ? 'flex' : 'none'};">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <path d="m19,21H5a2,2 0 0,1 -2,-2V5a2,2 0 0,1 2,-2H14l5,5v11a2,2 0 0,1 -2,2z"></path>
-                            <polyline points="17,21 17,13 7,13 7,21"></polyline>
-                            <polyline points="7,3 7,8 15,8"></polyline>
-                        </svg>
-                        Save
-                    </button>
-                    <button id="clear" title="Clear input">
-                        <svg class="icon" viewBox="0 0 24 24">
-                            <polyline points="3,6 5,6 21,6"></polyline>
-                            <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                        </svg>
-                        Clear
-                    </button>
-                </div>
-            </div>
-            <!-- Format Mode Container -->
-            <div id="format-container" class="mode-container" style="display: ${mode === 'format' ? 'flex' : 'none'};">
-                <div id="input-panel">
-                    <button id="maximize-input" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="18" height="18">
-                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                        </svg>
-                    </button>
-                    <textarea id="input" placeholder="Enter your JSON here..."></textarea>
-                </div>
-                <div id="splitter" title="Drag to resize panes or double-click to reset to 50/50"></div>
-                <div id="output-panel">
-                    <button id="line-numbers-toggle" class="panel-control-btn active" title="Toggle line numbers">
-                        <svg viewBox="0 0 24 24" width="16" height="16">
-                            <line x1="3" y1="6" x2="6" y2="6" stroke="currentColor" stroke-width="2"></line>
-                            <line x1="10" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="2"></line>
-                            <line x1="3" y1="12" x2="6" y2="12" stroke="currentColor" stroke-width="2"></line>
-                            <line x1="10" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2"></line>
-                            <line x1="3" y1="18" x2="6" y2="18" stroke="currentColor" stroke-width="2"></line>
-                            <line x1="10" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2"></line>
-                        </svg>
-                    </button>
-                    <button id="maximize-output" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="18" height="18">
-                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                        </svg>
-                    </button>
-                    <div id="warning-notification" class="warning-notification" style="display: none;">
-                        <svg class="warning-icon" viewBox="0 0 24 24" width="16" height="16">
-                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                            <line x1="12" y1="9" x2="12" y2="13"></line>
-                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                        <span class="warning-message">JSON auto-corrected! The input had formatting issues. The corrected version is displayed below.</span>
-                        <button id="dismiss-warning" class="dismiss-warning-btn" title="Dismiss">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
-                    </div>
-                    <div id="output"></div>
+                <div class="toolbar__group">
+                    ${this.iconButton({
+                        id: 'search-toggle',
+                        icon: 'search',
+                        label: 'Find',
+                        title: 'Find in formatted JSON (Ctrl/Cmd+F)',
+                        attrs: 'data-mode-only="format"'
+                    })}
+                    ${this.iconButton({ id: 'copy', icon: 'copy', label: 'Copy', title: 'Copy to clipboard' })}
+                    ${this.iconButton({
+                        id: 'save',
+                        icon: 'save',
+                        label: 'Save',
+                        title: 'Save to a file',
+                        attrs: 'data-mode-only="format"'
+                    })}
+                    ${this.iconButton({ id: 'clear', icon: 'clear-all', label: 'Clear', title: 'Clear (Ctrl/Cmd+K)' })}
                 </div>
             </div>
 
-            <!-- Diff Mode Container -->
-            <div id="diff-container" class="mode-container" style="display: ${mode === 'diff' ? 'flex' : 'none'};">
-                <div id="left-json-panel">
-                    <button id="copy-left-json" class="panel-control-btn" title="Copy left JSON to clipboard">
-                        <svg viewBox="0 0 24 24" width="16" height="16">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" fill="none" stroke-width="2"></rect>
-                            <path d="m5,15H4a2,2 0 0,1 -2,-2V4a2,2 0 0,1 2,-2H13a2,2 0 0,1 2,2v1" stroke="currentColor" fill="none" stroke-width="2"></path>
-                        </svg>
-                    </button>
-                    <button id="clear-left-json" class="panel-control-btn" title="Clear left JSON">
-                        <svg viewBox="0 0 24 24" width="16" height="16">
-                            <polyline points="3,6 5,6 21,6" stroke="currentColor" fill="none" stroke-width="2"></polyline>
-                            <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2" stroke="currentColor" fill="none" stroke-width="2"></path>
-                        </svg>
-                    </button>
-                    <button id="maximize-left" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="18" height="18">
-                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                        </svg>
-                    </button>
-                    <textarea id="left-json" placeholder="Enter original JSON here..."></textarea>
-                </div>
-                <div id="diff-result-panel">
-                    <button id="apply-all-diffs" class="panel-control-btn apply-all-btn" title="Apply all differences to the left JSON" style="display: none;">
-                        <svg viewBox="0 0 24 24" width="16" height="16">
-                            <polyline points="20 6 9 17 4 12" stroke="currentColor" fill="none" stroke-width="2"></polyline>
-                        </svg>
-                    </button>
-                    <button id="reject-all-diffs" class="panel-control-btn reject-all-btn" title="Reject all differences" style="display: none;">
-                        <svg viewBox="0 0 24 24" width="16" height="16">
-                            <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" fill="none" stroke-width="2"></line>
-                            <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" fill="none" stroke-width="2"></line>
-                        </svg>
-                    </button>
-                    <button id="maximize-diff" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="18" height="18">
-                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                        </svg>
-                    </button>
-                    <div id="diff-output"></div>
-                </div>
-                <div id="right-json-panel">
-                    <button id="clear-right-json" class="panel-control-btn" title="Clear right JSON">
-                        <svg viewBox="0 0 24 24" width="16" height="16">
-                            <polyline points="3,6 5,6 21,6" stroke="currentColor" fill="none" stroke-width="2"></polyline>
-                            <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2" stroke="currentColor" fill="none" stroke-width="2"></path>
-                        </svg>
-                    </button>
-                    <button id="maximize-right" class="maximize-btn" title="Maximize panel">
-                        <svg viewBox="0 0 24 24" width="18" height="18">
-                            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                        </svg>
-                    </button>
-                    <textarea id="right-json" placeholder="Enter modified JSON here..."></textarea>
-                </div>
+            <div id="format-container" class="mode-container">
+                <section id="input-panel" class="pane">
+                    ${this.paneHeader('Input', [
+                        this.maximizeButton('input-panel')
+                    ])}
+                    <div class="pane__body">
+                        <textarea id="input" spellcheck="false" placeholder="Paste or type JSON here"></textarea>
+                    </div>
+                </section>
+                <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
+                <section id="output-panel" class="pane" data-empty="true">
+                    ${this.paneHeader('Formatted', [
+                        this.iconButton({
+                            id: 'line-numbers-toggle',
+                            icon: 'list-ordered',
+                            label: 'Toggle line numbers',
+                            title: 'Toggle line numbers',
+                            classes: 'is-active',
+                            attrs: 'aria-pressed="true"'
+                        }),
+                        this.maximizeButton('output-panel')
+                    ], 'output-meta')}
+                    <div class="pane__body">
+                        <div id="warning-notification" class="notice" role="status" hidden>
+                            <span class="codicon codicon-warning" aria-hidden="true"></span>
+                            <span class="notice__message"></span>
+                            ${this.iconButton({ id: 'dismiss-warning', icon: 'close', label: 'Dismiss', title: 'Dismiss' })}
+                        </div>
+                        <div id="find-widget" class="find-widget" role="search" hidden>
+                            <div class="find-widget__row">
+                                <div class="find-widget__field">
+                                    <input type="text" id="find-input" placeholder="Find" spellcheck="false" aria-label="Find in formatted JSON" />
+                                    ${this.iconButton({
+                                        id: 'find-match-case',
+                                        icon: 'case-sensitive',
+                                        label: 'Match case',
+                                        title: 'Match case',
+                                        classes: 'find-option',
+                                        attrs: 'data-find-option="matchCase" aria-pressed="false"'
+                                    })}
+                                    ${this.iconButton({
+                                        id: 'find-regex',
+                                        icon: 'regex',
+                                        label: 'Use regular expression',
+                                        title: 'Use regular expression',
+                                        classes: 'find-option',
+                                        attrs: 'data-find-option="regex" aria-pressed="false"'
+                                    })}
+                                </div>
+                                <span id="find-count" class="find-widget__count" role="status"></span>
+                                ${this.iconButton({ id: 'find-prev', icon: 'arrow-up', label: 'Previous match', title: 'Previous match (Shift+Enter)' })}
+                                ${this.iconButton({ id: 'find-next', icon: 'arrow-down', label: 'Next match', title: 'Next match (Enter)' })}
+                                ${this.iconButton({ id: 'find-close', icon: 'close', label: 'Close find', title: 'Close (Escape)' })}
+                            </div>
+                            <div class="find-widget__scopes" role="group" aria-label="Search scope">
+                                <button type="button" class="find-scope is-active" data-find-scope="all" aria-pressed="true">All</button>
+                                <button type="button" class="find-scope" data-find-scope="keys" aria-pressed="false">Keys</button>
+                                <button type="button" class="find-scope" data-find-scope="values" aria-pressed="false">Values</button>
+                            </div>
+                        </div>
+                        <div id="output" class="pane__content"></div>
+                        <div class="empty-state">
+                            <span class="codicon codicon-json empty-state__icon" aria-hidden="true"></span>
+                            <span class="empty-state__title">Paste JSON on the left to format it</span>
+                            <dl class="empty-state__keys">
+                                <dt><kbd data-mod></kbd> <kbd>&#9166;</kbd></dt><dd>Format</dd>
+                                <dt><kbd data-mod></kbd> <kbd>F</kbd></dt><dd>Find</dd>
+                                <dt><kbd data-mod></kbd> <kbd>M</kbd></dt><dd>Switch to Diff</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </section>
             </div>
+
+            <div id="diff-container" class="mode-container">
+                <section id="left-json-panel" class="pane">
+                    ${this.paneHeader('Original', [
+                        this.iconButton({ id: 'copy-left-json', icon: 'copy', label: 'Copy original', title: 'Copy original to clipboard' }),
+                        this.iconButton({ id: 'clear-left-json', icon: 'clear-all', label: 'Clear original', title: 'Clear original' }),
+                        this.maximizeButton('left-json-panel')
+                    ])}
+                    <div class="pane__body">
+                        <textarea id="left-json" spellcheck="false" placeholder="Paste the original JSON here"></textarea>
+                    </div>
+                </section>
+                <div id="diff-splitter-left" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
+                <section id="diff-result-panel" class="pane">
+                    ${this.paneHeader('Changes', [
+                        this.iconButton({ id: 'apply-all-diffs', icon: 'check-all', label: 'Apply all changes', title: 'Apply every change to the original', attrs: 'hidden' }),
+                        this.iconButton({ id: 'reject-all-diffs', icon: 'close-all', label: 'Reject all changes', title: 'Reject every change', attrs: 'hidden' }),
+                        this.maximizeButton('diff-result-panel')
+                    ], 'diff-meta')}
+                    <div class="pane__body">
+                        <div id="diff-filters" class="chips" role="group" aria-label="Filter changes" hidden>
+                            ${this.filterChip('all', 'All')}
+                            ${this.filterChip('added', 'Added', 'added')}
+                            ${this.filterChip('removed', 'Removed', 'removed')}
+                            ${this.filterChip('modified', 'Modified', 'modified')}
+                        </div>
+                        <div id="diff-output" class="pane__content"></div>
+                    </div>
+                </section>
+                <div id="diff-splitter-right" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
+                <section id="right-json-panel" class="pane">
+                    ${this.paneHeader('Modified', [
+                        this.iconButton({ id: 'clear-right-json', icon: 'clear-all', label: 'Clear modified', title: 'Clear modified' }),
+                        this.maximizeButton('right-json-panel')
+                    ])}
+                    <div class="pane__body">
+                        <textarea id="right-json" spellcheck="false" placeholder="Paste the modified JSON here"></textarea>
+                    </div>
+                </section>
+            </div>
+
+            <footer id="status-bar">
+                <div class="status__group" id="status-left"></div>
+                <div class="status__group" id="status-right"></div>
+            </footer>
         `;
     }
 
+    /** A tab in the Format/Diff switcher. */
+    private modeTab(id: string, icon: string, label: string, active: boolean): string {
+        return `<button id="${id}" class="mode-tab${active ? ' active' : ''}" role="tab" aria-selected="${active}">
+                            <span class="codicon codicon-${icon}" aria-hidden="true"></span>
+                            ${label}
+                        </button>`;
+    }
+
+    /**
+     * Pane title bar. Actions live here rather than floating over the content,
+     * so adding one is appending to a flex row instead of picking a new offset.
+     */
+    private paneHeader(title: string, actions: string[], metaId?: string): string {
+        const meta = metaId ? `<span class="pane__meta" id="${metaId}"></span>` : '';
+        return `<header class="pane__header">
+                        <span class="pane__title">${title}</span>
+                        ${meta}
+                        <span class="pane__spacer"></span>
+                        <div class="pane__actions">${actions.join('')}</div>
+                    </header>`;
+    }
+
+    /** A chip that narrows the change list to one kind of change. */
+    private filterChip(filter: string, label: string, tone = ''): string {
+        const classes = ['chip', tone ? `chip--${tone}` : '', filter === 'all' ? 'is-active' : '']
+            .filter(Boolean)
+            .join(' ');
+        return `<button type="button" class="${classes}" data-diff-filter="${filter}" aria-pressed="${filter === 'all'}">
+                                <span class="chip__label">${label}</span><span class="chip__count"></span>
+                            </button>`;
+    }
+
+    private maximizeButton(panelId: string): string {
+        return this.iconButton({
+            icon: 'screen-full',
+            label: 'Maximize panel',
+            title: 'Maximize panel',
+            attrs: `data-maximize="${panelId}"`
+        });
+    }
+
+    /**
+     * Icon-only button. The visible label is the icon, so the accessible name
+     * comes from aria-label and the icon itself is hidden from assistive tech.
+     */
+    private iconButton(options: {
+        id?: string;
+        icon: string;
+        label: string;
+        title: string;
+        classes?: string;
+        attrs?: string;
+    }): string {
+        const id = options.id ? ` id="${options.id}"` : '';
+        const classes = ['icon-btn', options.classes].filter(Boolean).join(' ');
+        const attrs = options.attrs ? ` ${options.attrs}` : '';
+        return `<button${id} class="${classes}" type="button" title="${options.title}" aria-label="${options.label}"${attrs}><span class="codicon codicon-${options.icon}" aria-hidden="true"></span></button>`;
+    }
+
     private getNonce(): string {
-        let text = '';
-        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        for (let i = 0; i < 32; i++) {
-            text += possible.charAt(Math.floor(Math.random() * possible.length));
-        }
-        return text;
+        return crypto.randomBytes(24).toString('base64');
     }
 }

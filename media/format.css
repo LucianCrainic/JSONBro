@@ -1,0 +1,124 @@
+/* Formatted JSON output: syntax colours, line-number gutter, folding, search. */
+
+/* ------------------------------------------------ JSON syntax highlighting */
+
+.string  { color: var(--jb-syntax-string); }
+.number  { color: var(--jb-syntax-number); }
+.boolean { color: var(--jb-syntax-boolean); }
+.null    { color: var(--jb-syntax-null); }
+
+.key {
+    color: var(--jb-syntax-key);
+    font-weight: 600;
+}
+
+.bracket,
+.brace,
+.comma,
+.colon {
+    color: var(--jb-syntax-punct);
+}
+
+.json-line {
+    display: block;
+    margin: 0;
+    padding: 0;
+    line-height: var(--jb-lh-code);
+}
+
+/* ---------------------------------------------------------------- Folding */
+
+.fold-arrow {
+    display: inline-block;
+    width: 1em;
+    margin-right: 0.3em;
+    color: var(--jb-fg-muted);
+    font-size: 0.8em;
+    cursor: pointer;
+    opacity: 0.6;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: opacity var(--jb-dur) var(--jb-ease),
+        transform var(--jb-dur) var(--jb-ease);
+}
+
+.fold-arrow::before {
+    content: attr(data-arrow);
+}
+
+.fold-arrow:hover {
+    opacity: 1;
+    color: var(--jb-fg);
+}
+
+.fold-arrow.folded {
+    transform: rotate(-90deg);
+}
+
+.foldable-content {
+    display: inline;
+}
+
+.foldable-content.hidden {
+    display: none;
+}
+
+.fold-ellipsis {
+    margin-left: 0.3em;
+    color: var(--jb-fg-subtle);
+}
+
+/* ----------------------------------------------------------- Line numbers */
+
+.json-container {
+    display: flex;
+    width: 100%;
+}
+
+.line-numbers {
+    flex-shrink: 0;
+    text-align: right;
+    color: var(--jb-gutter-fg);
+    user-select: none;
+    border-right: 1px solid var(--jb-border);
+}
+
+.line-numbers .line-number {
+    display: block;
+    padding: 0 var(--jb-sp-4) 0 0;
+    line-height: var(--jb-lh-code);
+    opacity: 0.7;
+}
+
+.line-numbers .line-number:hover {
+    opacity: 1;
+    color: var(--jb-gutter-fg-active);
+}
+
+.json-content {
+    flex: 1;
+    min-width: 0;
+    padding-left: var(--jb-sp-4);
+    overflow-x: auto;
+}
+
+#output.hide-line-numbers .line-numbers {
+    display: none;
+}
+
+#output.hide-line-numbers .json-content {
+    padding-left: 0;
+}
+
+/* ---------------------------------------------------- Search highlighting */
+
+.search-highlight {
+    background-color: var(--jb-find-other);
+    border: 1px solid var(--jb-find-other-border);
+    border-radius: 2px;
+}
+
+.search-highlight.current {
+    background-color: var(--jb-find-match);
+    border-color: var(--jb-find-match-border);
+}
