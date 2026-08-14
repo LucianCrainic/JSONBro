@@ -307,6 +307,29 @@ export class Shell {
             run: () => this.diffView.resetPanelSizes()
         });
 
+        // Walking the change list from the keyboard. These carry no modifier,
+        // so they defer to whatever the user is typing into.
+        const browsingChanges = () => inDiff() && this.diffView.changeListHasFocus;
+
+        this.shortcuts.register({
+            key: 'arrowdown',
+            when: browsingChanges,
+            description: 'Next change',
+            run: () => this.diffView.stepSelection(1)
+        });
+        this.shortcuts.register({
+            key: 'arrowup',
+            when: browsingChanges,
+            description: 'Previous change',
+            run: () => this.diffView.stepSelection(-1)
+        });
+        this.shortcuts.register({
+            key: 'enter',
+            when: browsingChanges,
+            description: 'Apply the selected change',
+            run: () => this.diffView.applySelection()
+        });
+
         this.shortcuts.start();
     }
 
