@@ -13,14 +13,14 @@ import {
     NODE_WIDTH,
     ROW_HEIGHT
 } from '../engine/graph-layout';
-import { closerLines, FoldState } from '../engine/line-index';
+import { FoldState, isCloserLine } from '../engine/line-index';
 import { lineForPath } from '../engine/path-index';
 import { PrettySink, type PrettyDocument } from '../engine/pretty-sink';
 import { parseInto } from '../engine/recovering-parser';
 
 function build(json: string): { doc: PrettyDocument; folds: FoldState } {
     const doc = parseInto(json, new PrettySink({ indent: 2 })).value;
-    return { doc, folds: new FoldState(doc.lines, { alwaysHidden: closerLines }) };
+    return { doc, folds: new FoldState(doc.lines, { alwaysHidden: isCloserLine }) };
 }
 
 const SAMPLE = JSON.stringify({
@@ -40,7 +40,9 @@ describe('layoutGraph', () => {
 
     it('never places a closing bracket', () => {
         const { doc, folds } = build(SAMPLE);
-        const closers = new Set(closerLines(doc.lines));
+        const closers = new Set(
+            [...Array(doc.lines.lineCount).keys()].filter(line => isCloserLine(doc.lines, line))
+        );
 
         for (const node of layoutGraph(doc, folds).nodes) {
             expect(closers.has(node.line)).toBe(false);

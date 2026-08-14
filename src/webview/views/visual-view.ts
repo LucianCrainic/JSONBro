@@ -10,7 +10,7 @@
  */
 import type { Diagnostic } from '../engine/diagnostics';
 import { DEFAULT_NODE_BUDGET, depthThatFits, layoutGraph } from '../engine/graph-layout';
-import { closerLines } from '../engine/line-index';
+import { isCloserLine, nodeCount } from '../engine/line-index';
 import { nodeAt, subtreeText, type NodeView } from '../engine/node-view';
 import { pathForLine } from '../engine/path-index';
 import { type PrettyDocument } from '../engine/pretty-sink';
@@ -99,7 +99,7 @@ export class VisualView {
         this.ensureGraph().setDocument(doc, this.pane?.foldState ?? null);
         this.setBreadcrumb([]);
 
-        this.nodeCount = doc.lines.lineCount - closerLines(doc.lines).length;
+        this.nodeCount = nodeCount(doc.lines);
         this.repairCount = diagnostics.length;
         this.publishStatus(this.describe());
     }
@@ -170,7 +170,7 @@ export class VisualView {
                 viewport: byId('tree-output') as HTMLElement,
                 // A `}` on its own is a line of the document but not a node of
                 // the tree, so a container is one row with children beneath it.
-                alwaysHidden: closerLines,
+                alwaysHidden: isCloserLine,
                 renderRow: context => this.renderRow(context),
                 // Folding from the tree has to reach the graph, which is laid
                 // out from the same state and cannot notice on its own.
@@ -392,12 +392,7 @@ export class VisualView {
             return;
         }
 
-        folds.collapseAll();
-        for (let line = 0; line < doc.lines.lineCount; line++) {
-            if (doc.lines.isFoldable(line) && doc.lines.depth(line) < depth) {
-                folds.toggle(line);
-            }
-        }
+        folds.collapseBelowDepth(depth);
         this.pane?.refresh();
         this.graph?.render();
     }

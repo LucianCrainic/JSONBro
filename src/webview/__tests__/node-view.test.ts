@@ -4,7 +4,7 @@
  * The tree does not parse anything of its own, so everything a node shows has
  * to be recoverable from the line index and the text beside it.
  */
-import { closerLines, FoldState, LineKind } from '../engine/line-index';
+import { FoldState, isCloserLine, LineKind, nodeCount } from '../engine/line-index';
 import { nodeAt, subtreeText } from '../engine/node-view';
 import { lineForPath } from '../engine/path-index';
 import { PrettySink, type PrettyDocument } from '../engine/pretty-sink';
@@ -131,26 +131,35 @@ describe('subtreeText', () => {
     });
 });
 
-describe('closerLines', () => {
-    it('finds every line holding only a closing bracket', () => {
-        const closers = closerLines(doc.lines);
+describe('recognising a closing bracket', () => {
+    const closers = () => {
+        const lines: number[] = [];
+        for (let line = 0; line < doc.lines.lineCount; line++) {
+            if (isCloserLine(doc.lines, line)) {
+                lines.push(line);
+            }
+        }
+        return lines;
+    };
 
-        expect(closers.length).toBeGreaterThan(0);
-        for (const line of closers) {
+    it('finds every line holding only a closing bracket', () => {
+        expect(closers().length).toBeGreaterThan(0);
+        for (const line of closers()) {
             expect(doc.lines.kind(line)).toBe(LineKind.Closer);
             expect(doc.text.slice(doc.lines.start(line), doc.lines.end(line, doc.text.length)).trim())
                 .toMatch(/^[}\]],?$/);
         }
     });
 
+    /* Three containers span several lines: the root, `tags` and `author`. */
     it('is what turns the line count into a node count', () => {
-        // Three containers span several lines: the root, `tags` and `author`.
-        expect(closerLines(doc.lines)).toHaveLength(3);
+        expect(closers()).toHaveLength(3);
+        expect(nodeCount(doc.lines)).toBe(doc.lines.lineCount - 3);
     });
 });
 
 describe('FoldState with always-hidden lines', () => {
-    const treeState = () => new FoldState(doc.lines, { alwaysHidden: closerLines });
+    const treeState = () => new FoldState(doc.lines, { alwaysHidden: isCloserLine });
 
     it('leaves the closing brackets out of the rows', () => {
         expect(treeState().visibleCount).toBe(doc.lines.lineCount - 3);
@@ -172,7 +181,9 @@ describe('FoldState with always-hidden lines', () => {
 
     it('reports a hidden closer as having no row', () => {
         const folds = treeState();
-        for (const closer of closerLines(doc.lines)) {
+        for (const closer of [...Array(doc.lines.lineCount).keys()].filter(l =>
+            isCloserLine(doc.lines, l)
+        )) {
             expect(folds.rowAt(closer)).toBe(-1);
         }
     });
