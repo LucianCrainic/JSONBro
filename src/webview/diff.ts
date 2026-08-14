@@ -29,11 +29,6 @@ export interface ApplicableDiffResult extends DiffResult {
  */
 export class JSONDiff {
     /**
-     * Wildcard character that matches any value
-     */
-    static readonly WILDCARD = '*';
-
-    /**
      * Diff operation types
      */
     static readonly DIFF_TYPES = {
@@ -44,13 +39,6 @@ export class JSONDiff {
     };
 
     /**
-     * Checks if a value is a wildcard
-     */
-    private static isWildcard(value: any): boolean {
-        return value === this.WILDCARD;
-    }
-
-    /**
      * Compares two JSON objects and returns diff results
      * @param oldValue The original/expected JSON value
      * @param newValue The new/actual JSON value
@@ -59,12 +47,6 @@ export class JSONDiff {
      */
     static compareJson(oldValue: any, newValue: any, path: string[] = [], strictMode: boolean = false): DiffResult[] {
         const diffs: DiffResult[] = [];
-
-        // Check for wildcard in oldValue (template/expected JSON)
-        if (this.isWildcard(oldValue)) {
-            // Wildcard matches any value, no diff
-            return diffs;
-        }
 
         // Handle null/undefined cases
         if (oldValue === null || oldValue === undefined) {
@@ -161,83 +143,34 @@ export class JSONDiff {
      */
     private static compareObjects(oldObj: any, newObj: any, path: string[], strictMode: boolean = false): DiffResult[] {
         const diffs: DiffResult[] = [];
-        
-        // Check if oldObj has wildcard key
-        const hasWildcard = this.WILDCARD in oldObj;
-        
-        if (hasWildcard) {
-            // When wildcard is present in expected (oldObj), 
-            // match it with any single key in actual (newObj)
-            const oldKeys = Object.keys(oldObj);
-            const newKeys = Object.keys(newObj);
-            
-            // Get non-wildcard keys from oldObj
-            const oldNonWildcardKeys = oldKeys.filter(k => k !== this.WILDCARD);
-            
-            // First, handle all non-wildcard keys from oldObj
-            for (const key of oldNonWildcardKeys) {
-                const currentPath = [...path, key];
-                
-                if (!(key in newObj)) {
-                    // Property removed
-                    diffs.push({
-                        type: JSONDiff.DIFF_TYPES.REMOVED,
-                        path: currentPath,
-                        oldValue: oldObj[key]
-                    });
-                } else {
-                    // Compare property values
-                    const propertyDiffs = this.compareJson(oldObj[key], newObj[key], currentPath, strictMode);
-                    diffs.push(...propertyDiffs);
-                }
-            }
-            
-            // Now handle the wildcard key
-            // The wildcard should match keys in newObj that aren't in oldNonWildcardKeys
-            const wildcardValue = oldObj[this.WILDCARD];
-            const newKeysNotInOld = newKeys.filter(k => !oldNonWildcardKeys.includes(k));
-            
-            for (const newKey of newKeysNotInOld) {
-                const currentPath = [...path, newKey];
-                // Compare the wildcard template value with the actual value
-                const propertyDiffs = this.compareJson(wildcardValue, newObj[newKey], currentPath, strictMode);
-                diffs.push(...propertyDiffs);
-            }
-            
-            // Check if there are any keys in oldObj that don't exist in newObj
-            // (excluding wildcard and keys already processed)
-            // This is already handled in the first loop above
-            
-        } else {
-            // Normal object comparison
-            const allKeys = strictMode 
-                ? new Set(Object.keys(oldObj))  // In strict mode, only check keys from oldObj
-                : new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
 
-            for (const key of allKeys) {
-                const currentPath = [...path, key];
-                
-                if (!(key in oldObj)) {
-                    // Property added (only report if not in strict mode)
-                    if (!strictMode) {
-                        diffs.push({
-                            type: JSONDiff.DIFF_TYPES.ADDED,
-                            path: currentPath,
-                            newValue: newObj[key]
-                        });
-                    }
-                } else if (!(key in newObj)) {
-                    // Property removed
+        const allKeys = strictMode
+            ? new Set(Object.keys(oldObj))  // In strict mode, only check keys from oldObj
+            : new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
+
+        for (const key of allKeys) {
+            const currentPath = [...path, key];
+
+            if (!(key in oldObj)) {
+                // Property added (only report if not in strict mode)
+                if (!strictMode) {
                     diffs.push({
-                        type: JSONDiff.DIFF_TYPES.REMOVED,
+                        type: JSONDiff.DIFF_TYPES.ADDED,
                         path: currentPath,
-                        oldValue: oldObj[key]
+                        newValue: newObj[key]
                     });
-                } else {
-                    // Compare property values
-                    const propertyDiffs = this.compareJson(oldObj[key], newObj[key], currentPath, strictMode);
-                    diffs.push(...propertyDiffs);
                 }
+            } else if (!(key in newObj)) {
+                // Property removed
+                diffs.push({
+                    type: JSONDiff.DIFF_TYPES.REMOVED,
+                    path: currentPath,
+                    oldValue: oldObj[key]
+                });
+            } else {
+                // Compare property values
+                const propertyDiffs = this.compareJson(oldObj[key], newObj[key], currentPath, strictMode);
+                diffs.push(...propertyDiffs);
             }
         }
 
