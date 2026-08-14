@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "compile:dev",
+      "group": "build",
+      "problemMatcher": ["$ts-webpack"],
+      "label": "npm: compile:dev",
+      "detail": "webpack --mode development"
+    },
+    {
+      "type": "npm",
+      "script": "watch",
+      "isBackground": true,
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$ts-webpack-watch"],
+      "label": "npm: watch",
+      "detail": "webpack --mode development --watch"
+    },
+    {
+      "type": "npm",
+      "script": "test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": [],
+      "label": "npm: test",
+      "detail": "jest"
+    }
+  ]
+}

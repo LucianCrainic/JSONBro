@@ -51,22 +51,22 @@ export class JSONFormatter {
         this.resetFoldId();
         const lines = this.formatJsonToLines(value, 0);
         
+        // data-line lets folding pair a content line with its gutter entry
+        // directly, instead of searching the line list for its position.
+        const contentHtml = lines.map((line, i) =>
+            `<div class="json-line" data-line="${i + 1}">${line}</div>`
+        ).join('');
+
         if (!this.showLineNumbers) {
             // Without line numbers, just render the content
-            return `<div class="json-content">${lines.map(line => 
-                `<div class="json-line">${line}</div>`
-            ).join('')}</div>`;
+            return `<div class="json-content">${contentHtml}</div>`;
         }
-        
+
         // With line numbers, create a two-column layout
-        const lineNumbersHtml = lines.map((_, i) => 
-            `<div class="line-number">${i + 1}</div>`
+        const lineNumbersHtml = lines.map((_, i) =>
+            `<div class="line-number" data-line="${i + 1}">${i + 1}</div>`
         ).join('');
-        
-        const contentHtml = lines.map(line => 
-            `<div class="json-line">${line}</div>`
-        ).join('');
-        
+
         return `<div class="json-container"><div class="line-numbers">${lineNumbersHtml}</div><div class="json-content">${contentHtml}</div></div>`;
     }
 

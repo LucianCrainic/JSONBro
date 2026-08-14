@@ -252,7 +252,10 @@ export class JSONDiff {
             const diffs = this.compareJson(oldValue, newValue, [], strictMode);
             
             if (diffs.length === 0) {
-                return '<div class="diff-result no-changes">No differences found - JSON objects are identical</div>';
+                return `<div class="diff-result no-changes">
+                    <span class="codicon codicon-check-all" aria-hidden="true"></span>
+                    <span>No differences — the documents are identical.</span>
+                </div>`;
             }
 
             return `<div class="diff-result"><div class="diff-items">${diffs.map((diff, index) => this.renderDiffItem(diff, index)).join('')}</div></div>`;
@@ -262,107 +265,102 @@ export class JSONDiff {
     }
 
     /**
-     * Renders a single diff item
+     * The apply/reject/undo controls attached to a change.
+     */
+    private static renderDiffActions(applyTitle: string): string {
+        const button = (cls: string, icon: string, title: string, hidden = false) =>
+            `<button class="diff-action-btn ${cls}" type="button" title="${title}" aria-label="${title}"${
+                hidden ? ' hidden' : ''
+            }><span class="codicon codicon-${icon}" aria-hidden="true"></span></button>`;
+
+        return `<div class="diff-item-actions">
+                                ${button('apply-diff-btn', 'check', applyTitle)}
+                                ${button('reject-diff-btn', 'close', 'Reject this change')}
+                                ${button('undo-diff-btn', 'discard', 'Undo', true)}
+                            </div>`;
+    }
+
+    /**
+     * Renders a single change.
+     *
+     * The data-* attributes are the contract the view reads back when the user
+     * applies or reverts a change, so they belong on the outer element.
      */
     private static renderDiffItem(diff: DiffResult, index: number): string {
-        const pathStr = diff.path.length > 0 ? diff.path.join('.') : 'root';
-        const diffClass = `diff-item diff-${diff.type}`;
-        const diffId = `diff-${index}`;
+        const attrs = [
+            `data-diff-id="diff-${index}"`,
+            `data-diff-type="${diff.type}"`,
+            `data-state="pending"`,
+            `data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}"`
+        ];
+        if (diff.newValue !== undefined) {
+            attrs.push(`data-diff-value="${this.escapeHtml(JSON.stringify(diff.newValue))}"`);
+        }
+        if (diff.oldValue !== undefined) {
+            attrs.push(`data-diff-old-value="${this.escapeHtml(JSON.stringify(diff.oldValue))}"`);
+        }
+
+        const glyphs: Record<string, string> = {
+            [this.DIFF_TYPES.ADDED]: 'diff-added',
+            [this.DIFF_TYPES.REMOVED]: 'diff-removed',
+            [this.DIFF_TYPES.MODIFIED]: 'diff-modified'
+        };
+        const glyph = glyphs[diff.type] ?? 'circle-filled';
+
+        const applyTitle =
+            diff.type === this.DIFF_TYPES.REMOVED
+                ? 'Apply this change (remove the property)'
+                : 'Apply this change to the original';
+
+        return `<div class="diff-item diff-${diff.type}" ${attrs.join(' ')}>
+                    <span class="codicon codicon-${glyph} diff-item__glyph" aria-hidden="true"></span>
+                    <div class="diff-item-header">
+                        ${this.renderPath(diff.path)}
+                        ${this.renderChange(diff)}
+                    </div>
+                    ${this.renderDiffActions(applyTitle)}
+                </div>`;
+    }
+
+    /**
+     * The path as breadcrumb segments with the leaf emphasised.
+     *
+     * A dotted path became unreadable once nesting got deep, and array indices
+     * were indistinguishable from object keys.
+     */
+    private static renderPath(path: string[]): string {
+        if (path.length === 0) {
+            return '<span class="diff-path"><span class="diff-path__leaf">root</span></span>';
+        }
+
+        const separator = '<span class="diff-path__sep" aria-hidden="true">›</span>';
+        const parts = path.map((segment, i) => {
+            const isIndex = /^\d+$/.test(segment);
+            const classes = [
+                i === path.length - 1 ? 'diff-path__leaf' : 'diff-path__segment',
+                isIndex ? 'diff-path__index' : ''
+            ]
+                .filter(Boolean)
+                .join(' ');
+            const text = isIndex ? `[${segment}]` : this.escapeHtml(segment);
+            return `<span class="${classes}">${text}</span>`;
+        });
+
+        return `<span class="diff-path">${parts.join(separator)}</span>`;
+    }
+
+    /** The old and/or new value carried by a change. */
+    private static renderChange(diff: DiffResult): string {
+        const oldValue = `<span class="diff-value old-value">${this.formatValue(diff.oldValue)}</span>`;
+        const newValue = `<span class="diff-value new-value">${this.formatValue(diff.newValue)}</span>`;
 
         switch (diff.type) {
             case this.DIFF_TYPES.ADDED:
-                const newVal = this.formatValue(diff.newValue);
-                return `
-                    <div class="${diffClass}" data-diff-id="${diffId}" data-diff-type="${diff.type}" data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}" data-diff-value="${this.escapeHtml(JSON.stringify(diff.newValue))}">
-                        <div class="diff-item-header">
-                            <span class="diff-path">+ ${pathStr}</span> = <span class="diff-value new-value">${newVal}</span>
-                            <div class="diff-item-actions">
-                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M3 7v6h6"></path>
-                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
+                return `<span class="diff-inline-change">${newValue}</span>`;
             case this.DIFF_TYPES.REMOVED:
-                const oldVal = this.formatValue(diff.oldValue);
-                return `
-                    <div class="${diffClass}" data-diff-id="${diffId}" data-diff-type="${diff.type}" data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}" data-diff-old-value="${this.escapeHtml(JSON.stringify(diff.oldValue))}">
-                        <div class="diff-item-header">
-                            <span class="diff-path">- ${pathStr}</span> = <span class="diff-value old-value">${oldVal}</span>
-                            <div class="diff-item-actions">
-                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON (remove this property)">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M3 7v6h6"></path>
-                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
-            case this.DIFF_TYPES.MODIFIED:
-                const oldModVal = this.formatValue(diff.oldValue);
-                const newModVal = this.formatValue(diff.newValue);
-                return `
-                    <div class="${diffClass}" data-diff-id="${diffId}" data-diff-type="${diff.type}" data-diff-path="${this.escapeHtml(JSON.stringify(diff.path))}" data-diff-old-value="${this.escapeHtml(JSON.stringify(diff.oldValue))}" data-diff-value="${this.escapeHtml(JSON.stringify(diff.newValue))}">
-                        <div class="diff-item-header">
-                            <div class="diff-path">~ ${pathStr}</div>
-                            <div class="diff-inline-change">
-                                <span class="diff-value old-value">${oldModVal}</span> → <span class="diff-value new-value">${newModVal}</span>
-                            </div>
-                            <div class="diff-item-actions">
-                                <button class="diff-action-btn apply-diff-btn" title="Apply this change to the left JSON">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn reject-diff-btn" title="Reject this change">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                </button>
-                                <button class="diff-action-btn undo-diff-btn" title="Undo" style="display: none;">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M3 7v6h6"></path>
-                                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
+                return `<span class="diff-inline-change">${oldValue}</span>`;
             default:
-                return '';
+                return `<span class="diff-inline-change">${oldValue}<span class="codicon codicon-arrow-right diff-arrow" aria-hidden="true"></span>${newValue}</span>`;
         }
     }
 

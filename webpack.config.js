@@ -1,4 +1,5 @@
 const path = require('path');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = [
   // Extension source
@@ -50,6 +51,22 @@ module.exports = [
       minimize: true
     },
     devtool: 'nosources-source-map',
+    plugins: [
+      // The codicon font ships inside the extension because .vscodeignore
+      // excludes node_modules, so it cannot be referenced from there at runtime.
+      new CopyWebpackPlugin({
+        patterns: [
+          {
+            from: path.resolve(__dirname, 'node_modules/@vscode/codicons/dist/codicon.css'),
+            to: path.resolve(__dirname, 'media/codicons/codicon.css')
+          },
+          {
+            from: path.resolve(__dirname, 'node_modules/@vscode/codicons/dist/codicon.ttf'),
+            to: path.resolve(__dirname, 'media/codicons/codicon.ttf')
+          }
+        ]
+      })
+    ],
     resolve: {
       extensions: ['.ts', '.js']
     },

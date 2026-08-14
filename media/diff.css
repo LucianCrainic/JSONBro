@@ -1,0 +1,273 @@
+/* Diff result list: items, paths, values, per-item actions. */
+
+.diff-result {
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-sm);
+    line-height: 1.4;
+    margin: 0;
+    padding: 0;
+}
+
+.diff-result.no-changes {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--jb-sp-3);
+    padding: var(--jb-sp-6);
+    color: var(--jb-ok);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-md);
+}
+
+.diff-items {
+    margin: 0;
+    padding: 0;
+}
+
+/* ------------------------------------------------------------------ Items */
+
+.diff-item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--jb-sp-3);
+    padding: var(--jb-sp-2) var(--jb-sp-5);
+    border-left: 2px solid transparent;
+}
+
+.diff-item:hover {
+    background-color: var(--jb-row-hover);
+}
+
+.diff-item__glyph {
+    font-size: 14px;
+    flex-shrink: 0;
+    align-self: center;
+}
+
+.diff-item.diff-added {
+    background-color: var(--jb-added-bg);
+    border-left-color: var(--jb-added);
+}
+
+.diff-item.diff-added .diff-item__glyph {
+    color: var(--jb-added);
+}
+
+.diff-item.diff-removed {
+    background-color: var(--jb-removed-bg);
+    border-left-color: var(--jb-removed);
+}
+
+.diff-item.diff-removed .diff-item__glyph {
+    color: var(--jb-removed);
+}
+
+.diff-item.diff-modified {
+    background-color: var(--jb-modified-bg);
+    border-left-color: var(--jb-modified);
+}
+
+.diff-item.diff-modified .diff-item__glyph {
+    color: var(--jb-modified);
+}
+
+/* Path above, values below: a single row forced long values to wrap into the
+   path and made neighbouring rows impossible to scan. */
+.diff-item-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--jb-sp-1);
+    flex: 1;
+    min-width: 0;
+}
+
+/* ------------------------------------------------------------------- Path */
+
+.diff-path {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 1px;
+    font-size: var(--jb-fs-sm);
+}
+
+.diff-path__segment {
+    color: var(--jb-fg-muted);
+}
+
+.diff-path__leaf {
+    color: var(--jb-fg);
+    font-weight: 600;
+}
+
+.diff-path__index {
+    opacity: 0.85;
+}
+
+.diff-path__sep {
+    color: var(--jb-fg-subtle);
+    padding: 0 1px;
+}
+
+/* ----------------------------------------------------------------- Values */
+
+.diff-inline-change {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--jb-sp-2);
+    min-width: 0;
+    font-size: var(--jb-fs-xs);
+}
+
+.diff-arrow {
+    font-size: 12px;
+    color: var(--jb-fg-subtle);
+    align-self: center;
+}
+
+.diff-value {
+    padding: 1px var(--jb-sp-2);
+    border-radius: 2px;
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-xs);
+    word-break: break-all;
+}
+
+.diff-value.old-value {
+    background-color: var(--jb-removed-bg);
+    color: var(--jb-removed);
+}
+
+.diff-item.diff-modified .diff-value.old-value {
+    text-decoration: line-through;
+}
+
+.diff-value.new-value {
+    background-color: var(--jb-added-bg);
+    color: var(--jb-added);
+}
+
+.expandable-value {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    opacity: 0.8;
+}
+
+.expandable-value:hover {
+    opacity: 1;
+    background-color: var(--jb-bg-hover);
+    border-radius: 2px;
+}
+
+.diff-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--jb-sp-3);
+    padding: var(--jb-sp-6);
+    color: var(--jb-fg-error);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-md);
+    text-align: center;
+}
+
+/* ---------------------------------------------------------------- Filters */
+
+/* Filtering is one attribute on the list; every row decides for itself. */
+#diff-output[data-filter='added'] .diff-item:not(.diff-added),
+#diff-output[data-filter='removed'] .diff-item:not(.diff-removed),
+#diff-output[data-filter='modified'] .diff-item:not(.diff-modified) {
+    display: none;
+}
+
+/* ---------------------------------------------------------------- Actions */
+
+.diff-item-actions {
+    display: flex;
+    gap: var(--jb-sp-1);
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--jb-dur) var(--jb-ease);
+}
+
+.diff-item:hover .diff-item-actions,
+.diff-item-actions:focus-within {
+    opacity: 1;
+}
+
+.diff-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--jb-radius-sm);
+    background-color: transparent;
+    color: var(--jb-fg-icon);
+    cursor: pointer;
+    transition: background-color var(--jb-dur) var(--jb-ease);
+}
+
+.diff-action-btn:hover {
+    background-color: var(--jb-bg-hover);
+}
+
+.diff-action-btn .codicon {
+    font-size: 14px;
+}
+
+.apply-diff-btn:hover {
+    color: var(--jb-added);
+}
+
+.reject-diff-btn:hover {
+    color: var(--jb-removed);
+}
+
+/* -------------------------------------------------------- Resolved states */
+
+/*
+ * One attribute carries the resolution, so the recorded state and what is on
+ * screen cannot drift apart the way parallel CSS classes allowed.
+ */
+.diff-item[data-state='applied'] {
+    opacity: 0.6;
+}
+
+.diff-item[data-state='rejected'] {
+    opacity: 0.45;
+}
+
+.diff-item[data-state='rejected'] .diff-path,
+.diff-item[data-state='rejected'] .diff-value {
+    text-decoration: line-through;
+}
+
+/* Resolved rows keep their actions visible so the undo is discoverable. */
+.diff-item[data-state='applied'] .diff-item-actions,
+.diff-item[data-state='rejected'] .diff-item-actions {
+    opacity: 1;
+}
+
+/* A dot marks the resolution, so the state survives themes where a dimmed
+   row is hard to distinguish from a normal one. */
+.diff-item[data-state='applied']::after,
+.diff-item[data-state='rejected']::after {
+    content: '';
+    align-self: center;
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 50%;
+}
+
+.diff-item[data-state='applied']::after {
+    background-color: var(--jb-added);
+}
+
+.diff-item[data-state='rejected']::after {
+    background-color: var(--jb-fg-subtle);
+}
