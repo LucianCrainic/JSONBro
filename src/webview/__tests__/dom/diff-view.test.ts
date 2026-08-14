@@ -215,6 +215,57 @@ describe('DiffView', () => {
         });
     });
 
+    /*
+     * Array positions are expressed in the coordinates of the document the
+     * comparison ran against. Applying rows one at a time used to mutate that
+     * document underneath the remaining rows, so their indices drifted.
+     */
+    describe('arrays', () => {
+        const left = () => JSON.parse(el<HTMLTextAreaElement>('left-json').value);
+
+        it('reports a head insertion as a single change', () => {
+            setInputs(JSON.stringify({ l: [1, 2, 3] }), JSON.stringify({ l: [0, 1, 2, 3] }));
+            view.compare();
+
+            expect(items()).toHaveLength(1);
+            expect(items()[0].dataset.diffType).toBe('added');
+        });
+
+        it('applies rows in any order to the same result', () => {
+            setInputs(JSON.stringify({ l: ['a', 'b', 'c'] }), JSON.stringify({ l: ['x', 'b', 'y'] }));
+            view.compare();
+
+            const rows = items();
+            for (const row of rows.reverse()) {
+                click('.apply-diff-btn', row);
+            }
+
+            expect(left()).toEqual({ l: ['x', 'b', 'y'] });
+        });
+
+        it('undoes one row without disturbing the others', () => {
+            setInputs(JSON.stringify({ l: [1, 2, 3, 4] }), JSON.stringify({ l: [1, 9, 3, 8] }));
+            view.compare();
+
+            const rows = items();
+            rows.forEach(row => click('.apply-diff-btn', row));
+            expect(left()).toEqual({ l: [1, 9, 3, 8] });
+
+            click('.undo-diff-btn', rows[0]);
+            expect(left()).toEqual({ l: [1, 2, 3, 8] });
+        });
+
+        it('keeps a key whose value became null', () => {
+            setInputs(JSON.stringify({ a: 1 }), JSON.stringify({ a: null }));
+            view.compare();
+
+            expect(items()[0].dataset.diffType).toBe('modified');
+
+            click('.apply-diff-btn', items()[0]);
+            expect(left()).toEqual({ a: null });
+        });
+    });
+
     describe('filters', () => {
         beforeEach(() => view.compare());
 

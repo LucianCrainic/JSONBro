@@ -2,7 +2,7 @@
  * The Diff view: original/modified inputs and the list of changes between them.
  */
 import { JSONDiff } from '../diff';
-import type { DiffResult, DiffType } from '../diff';
+import type { DiffResult } from '../diff';
 import { JSONParser } from '../json-parser';
 import { byId, delegate, escapeHtml, on, qsa } from '../ui/dom';
 import { Icons } from '../ui/icons';
@@ -19,6 +19,15 @@ export class DiffView {
     private readonly teardown: Array<() => void> = [];
 
     private leftJson: unknown = null;
+    /**
+     * The left document as it was when the comparison ran.
+     *
+     * Changes are always applied to this rather than to the running result:
+     * every path in `diffs` is expressed in its coordinates, so re-deriving
+     * the document from the set of applied changes keeps them meaningful no
+     * matter what order the user resolves rows in.
+     */
+    private originalLeft: unknown = null;
     private rightJson: unknown = null;
     private diffs: DiffResult[] = [];
     private states = new Map<string, DiffState>();
@@ -182,13 +191,16 @@ export class DiffView {
             this.states.clear();
             this.setFilter('all');
             this.leftJson = left;
+            this.originalLeft = left;
             this.rightJson = right;
             this.diffs = JSONDiff.compareJson(left, right, [], this.strict);
 
             leftEl.value = JSON.stringify(left, null, 2);
             rightEl.value = JSON.stringify(right, null, 2);
 
-            output.innerHTML = JSONDiff.renderJsonDiff(left, right, this.strict);
+            // Renders the comparison already in hand; it used to be computed a
+            // second time here, doubling the cost on large documents.
+            output.innerHTML = JSONDiff.renderDiffs(this.diffs);
 
             this.setBulkActionsVisible(this.diffs.length > 0);
             this.publishStatus(this.describe());
@@ -384,74 +396,22 @@ export class DiffView {
         );
     }
 
-    /** Reads the diff back off the DOM node that renders it. */
-    private readDiff(item: HTMLElement): DiffResult | null {
-        const rawPath = item.getAttribute('data-diff-path');
-        const type = item.getAttribute('data-diff-type');
-        if (!rawPath || !type) {
-            return null;
-        }
-        try {
-            const diff: DiffResult = {
-                type: type as DiffType,
-                path: JSON.parse(rawPath)
-            };
-            const newValue = item.getAttribute('data-diff-value');
-            const oldValue = item.getAttribute('data-diff-old-value');
-            if (newValue) {
-                diff.newValue = JSON.parse(newValue);
-            }
-            if (oldValue) {
-                diff.oldValue = JSON.parse(oldValue);
-            }
-            return diff;
-        } catch (error) {
-            console.error('Malformed diff data on element:', error);
-            return null;
-        }
-    }
-
     private applyOne(item: HTMLElement): void {
-        const diff = this.readDiff(item);
-        if (!diff || this.leftJson === null) {
-            return;
-        }
-        try {
-            this.leftJson = JSONDiff.applyDiff(this.leftJson, diff);
-            this.writeLeftJson();
-            this.setState(item, 'applied');
-        } catch (error) {
-            console.error('Error applying diff:', error);
-        }
+        this.setState(item, 'applied');
+        this.rebuildLeft();
     }
 
     private undoOne(item: HTMLElement): void {
-        const id = item.getAttribute('data-diff-id') ?? '';
-        const state = this.states.get(id) ?? 'pending';
-
-        if (state === 'applied') {
-            const diff = this.readDiff(item);
-            if (!diff || this.leftJson === null) {
-                return;
-            }
-            try {
-                this.leftJson = JSONDiff.revertDiff(this.leftJson, diff);
-                this.writeLeftJson();
-            } catch (error) {
-                console.error('Error reverting diff:', error);
-                return;
-            }
-        }
-
         this.setState(item, 'pending');
+        this.rebuildLeft();
     }
 
     private applyAll(): void {
-        if (this.leftJson === null || this.diffs.length === 0) {
+        if (this.originalLeft === null || this.diffs.length === 0) {
             return;
         }
         try {
-            this.leftJson = JSONDiff.applyDiffs(this.leftJson, this.diffs);
+            this.leftJson = JSONDiff.applyDiffs(this.originalLeft, this.diffs);
             this.writeLeftJson();
             this.compare();
         } catch (error) {
@@ -471,6 +431,33 @@ export class DiffView {
         }
         for (const item of Array.from(output.querySelectorAll('.diff-item'))) {
             this.setState(item as HTMLElement, 'rejected');
+        }
+        this.rebuildLeft();
+    }
+
+    /**
+     * Re-derives the left document from the original plus every applied change.
+     *
+     * Doing it this way -- rather than mutating on apply and un-mutating on
+     * undo -- means the result cannot drift from the recorded states, and
+     * array positions stay valid however many rows have been resolved.
+     */
+    private rebuildLeft(): void {
+        if (this.originalLeft === null) {
+            return;
+        }
+
+        const applied = this.diffs.filter(
+            (_, index) => this.states.get(`diff-${index}`) === 'applied'
+        );
+
+        try {
+            this.leftJson = applied.length > 0
+                ? JSONDiff.applyDiffs(this.originalLeft, applied)
+                : this.originalLeft;
+            this.writeLeftJson();
+        } catch (error) {
+            console.error('Error applying diffs:', error);
         }
     }
 
