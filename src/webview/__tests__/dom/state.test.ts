@@ -1,4 +1,4 @@
-import { MAX_PERSISTED_INPUT } from '../../state';
+import { MAX_PERSISTED_INPUT, MAX_PERSISTED_TOTAL } from '../../state';
 import { mountPanel } from './helpers/fixture';
 import type { Mode, PanelState } from '../../../shared/messages';
 
@@ -105,6 +105,26 @@ describe('panel state', () => {
 
             expect(host.read()?.input).toBeUndefined();
             expect(host.read()?.mode).toBe('format');
+        });
+
+        /* A diff panel holds three documents, so capping each field alone let
+           it persist three times the number that cap advertised. */
+        it('keeps the three fields inside one combined budget', () => {
+            const host = installVsCodeApi(undefined);
+            boot('diff');
+
+            const big = 'x'.repeat(MAX_PERSISTED_INPUT);
+            typeInto('left-json', big);
+            typeInto('right-json', big);
+            typeInto('input', big);
+            jest.runOnlyPendingTimers();
+
+            const saved = host.read();
+            const total = [saved?.input, saved?.leftJson, saved?.rightJson]
+                .filter((value): value is string => typeof value === 'string')
+                .reduce((sum, value) => sum + value.length, 0);
+
+            expect(total).toBeLessThanOrEqual(MAX_PERSISTED_TOTAL);
         });
 
         it('records the mode when it changes', () => {

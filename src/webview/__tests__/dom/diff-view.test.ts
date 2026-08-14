@@ -1,9 +1,24 @@
 import { DiffView } from '../../views/diff-view';
 import { Messenger } from '../../ui/messaging';
 import { mountPanel } from './helpers/fixture';
+import type { Settings } from '../../../shared/messages';
 
 const LEFT = JSON.stringify({ keep: 1, changed: 'before', gone: true });
 const RIGHT = JSON.stringify({ keep: 1, changed: 'after', added: 42 });
+
+/** The defaults, for tests that need to vary one of them. */
+const SETTINGS: Settings = {
+    showLineNumbers: true,
+    indentSize: 2,
+    strictDiff: false,
+    defaultPaneRatio: 0.5,
+    autoFormatOnPaste: false,
+    searchScope: 'all',
+    matchEditorTheme: true,
+    maxInlineSize: 2 * 1024 * 1024,
+    diffMaxDocumentSize: 25 * 1024 * 1024,
+    diffArrayAlignBudget: 1_000_000
+};
 
 function setInputs(left: string, right: string): void {
     (document.getElementById('left-json') as HTMLTextAreaElement).value = left;
@@ -62,6 +77,194 @@ describe('DiffView', () => {
         expect(document.querySelector('.diff-error')).toBeNull();
         expect(items().length).toBeGreaterThan(0);
         expect(view.getStatus().right?.map(segment => segment.text).join(' ')).toContain('repair');
+    });
+
+    /*
+     * The input panes were bare textareas: no colouring, no gutter, no folding,
+     * and comparing normalised them with a hard-coded two-space indent while
+     * the format view honoured the user's setting.
+     */
+    describe('the input panes', () => {
+        const shows = (side: 'left' | 'right') => el(`${side}-json-panel`).dataset.view;
+        const rows = (side: 'left' | 'right') =>
+            document.querySelectorAll(`#${side}-json-view .json-line`);
+
+        it('switches both panes to the rendered view when comparing', () => {
+            view.compare();
+
+            expect(shows('left')).toBe('view');
+            expect(shows('right')).toBe('view');
+            expect(rows('left').length).toBeGreaterThan(1);
+            expect(rows('right').length).toBeGreaterThan(1);
+        });
+
+        it('colours the rendered output', () => {
+            view.compare();
+
+            expect(document.querySelectorAll('#left-json-view .key').length).toBeGreaterThan(0);
+            expect(document.querySelectorAll('#left-json-view .string').length).toBeGreaterThan(0);
+        });
+
+        it('goes back to the editable text and returns', () => {
+            view.compare();
+
+            el('edit-left-json').click();
+            expect(shows('left')).toBe('edit');
+
+            el('edit-left-json').click();
+            expect(shows('left')).toBe('view');
+        });
+
+        it('drops the rendered copy once the text is edited', () => {
+            view.compare();
+
+            const field = el<HTMLTextAreaElement>('left-json');
+            field.value = '{"other":1}';
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+
+            // Showing the previous render beside newly typed text would lie
+            // about what the pane holds.
+            expect(shows('left')).toBe('edit');
+            expect(rows('left')).toHaveLength(0);
+        });
+
+        it('formats one side on its own, leaving the other alone', () => {
+            el<HTMLTextAreaElement>('left-json').value = '{"a":{"b":1}}';
+            el('format-left-json').click();
+
+            expect(shows('left')).toBe('view');
+            // `{`, `"a": {`, `"b": 1`, `}`, `}`
+            expect(rows('left')).toHaveLength(5);
+            expect(shows('right')).toBe('edit');
+        });
+
+        it('formats a broken document and says what it repaired', () => {
+            el<HTMLTextAreaElement>('left-json').value = "{'a': True,}";
+            el('format-left-json').click();
+
+            expect(shows('left')).toBe('view');
+            expect(el('left-json-meta').textContent).toMatch(/repair/);
+        });
+
+        it('stays editable when there is nothing to format', () => {
+            el<HTMLTextAreaElement>('left-json').value = '';
+            el('edit-left-json').click();
+
+            expect(shows('left')).toBe('edit');
+        });
+
+        it('honours the indent setting rather than a hard-coded two spaces', () => {
+            view.applySettings({ ...SETTINGS, indentSize: 4 });
+            setInputs(JSON.stringify({ a: { b: 1 } }), JSON.stringify({ a: { b: 2 } }));
+            view.compare();
+
+            expect(el<HTMLTextAreaElement>('left-json').value).toContain('\n    "a"');
+        });
+    });
+
+    /*
+     * `data-diff-path` has been written onto every row since the change list
+     * was built, and nothing ever read it back: clicking a change did nothing
+     * at all, because the panes had no way to turn a path into a position.
+     */
+    describe('selecting a change', () => {
+        const selectedIn = (side: 'left' | 'right') =>
+            document.querySelector<HTMLElement>(`#${side}-json-view .json-line.is-selected`);
+
+        const rowFor = (path: string) =>
+            items().find(item => item.dataset.diffPath === path) as HTMLElement;
+
+        it('marks the row and highlights the line in both panes', () => {
+            view.compare();
+            rowFor('["changed"]').click();
+
+            expect(rowFor('["changed"]').classList).toContain('is-selected');
+            expect(selectedIn('left')?.textContent).toContain('"before"');
+            expect(selectedIn('right')?.textContent).toContain('"after"');
+        });
+
+        it('moves the highlight when another change is picked', () => {
+            view.compare();
+            rowFor('["changed"]').click();
+            rowFor('["gone"]').click();
+
+            expect(document.querySelectorAll('.diff-item.is-selected')).toHaveLength(1);
+            expect(selectedIn('left')?.textContent).toContain('"gone"');
+        });
+
+        /*
+         * Something added has no line in the original, so pointing at the
+         * container it belongs to beats doing nothing at all.
+         */
+        it('falls back to the enclosing container on the side that lacks it', () => {
+            view.compare();
+            rowFor('["added"]').click();
+
+            expect(selectedIn('right')?.textContent).toContain('"added"');
+            // The original has no `added`, so its root is highlighted instead.
+            expect(selectedIn('left')?.textContent).toContain('{');
+        });
+
+        it('finds an element inserted into the middle of an array', () => {
+            setInputs(
+                JSON.stringify({ items: ['a', 'c'] }),
+                JSON.stringify({ items: ['a', 'b', 'c'] })
+            );
+            view.compare();
+            items()[0].click();
+
+            expect(selectedIn('right')?.textContent).toContain('"b"');
+            // `arrayAnchor` puts it against the neighbour it goes before,
+            // rather than against the array as a whole.
+            expect(selectedIn('left')?.textContent).toContain('"c"');
+        });
+
+        it('steps through the list with the keyboard', () => {
+            view.compare();
+
+            view.stepSelection(1);
+            const first = document.querySelector('.diff-item.is-selected');
+            view.stepSelection(1);
+
+            expect(document.querySelector('.diff-item.is-selected')).not.toBe(first);
+        });
+
+        it('wraps around at the end of the list', () => {
+            view.compare();
+
+            // The first step selects row 0, so `length` steps land on the last.
+            for (let i = 0; i < items().length; i++) {
+                view.stepSelection(1);
+            }
+            view.stepSelection(1);
+
+            expect(document.querySelector('.diff-item.is-selected')).toBe(items()[0]);
+        });
+
+        it('applies the selected change from the keyboard', () => {
+            view.compare();
+            view.stepSelection(1);
+            view.applySelection();
+
+            expect(
+                document.querySelector<HTMLElement>('.diff-item.is-selected')?.dataset.state
+            ).toBe('applied');
+        });
+
+        /* Stealing the arrow keys would make the input panes unusable. */
+        it('leaves the arrow keys alone while a pane is being typed into', () => {
+            view.compare();
+            el<HTMLTextAreaElement>('left-json').focus();
+
+            expect(view.changeListHasFocus).toBe(false);
+        });
+
+        it('claims them once focus is out of the text', () => {
+            view.compare();
+            el<HTMLTextAreaElement>('left-json').blur();
+
+            expect(view.changeListHasFocus).toBe(true);
+        });
     });
 
     describe('change rows', () => {

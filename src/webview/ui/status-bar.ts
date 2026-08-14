@@ -49,7 +49,7 @@ export class StatusBar {
 
 function renderSegment(segment: StatusSegment): string {
     const tone = segment.tone && segment.tone !== 'default' ? ` status__item--${segment.tone}` : '';
-    const title = segment.title ? ` title="${escapeHtml(segment.title)}"` : '';
+    const title = segment.title ? ` data-tip="${escapeHtml(segment.title)}"` : '';
     const icon = segment.icon
         ? `<span class="codicon codicon-${segment.icon}" aria-hidden="true"></span>`
         : '';

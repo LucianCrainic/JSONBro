@@ -7,7 +7,23 @@ import * as os from 'os';
 import { WebviewContentGenerator } from './webview-content';
 import { JSONBroActivityBarProvider } from './activity-bar-provider';
 import { readSettings } from './settings';
-import type { HostToWebview, Mode } from './shared/messages';
+import { resolveSyntaxColors } from './theme/token-colors';
+import { vscodeThemeSource } from './theme/vscode-theme-source';
+import type { DiffSide, HostToWebview, Mode } from './shared/messages';
+
+/** The file dialog both the format and the diff paths open. */
+async function pickJsonFile(openLabel: string): Promise<vscode.Uri | undefined> {
+    const picked = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        openLabel,
+        filters: { 'JSON Files': ['json', 'jsonl', 'ndjson', 'txt'], 'All Files': ['*'] }
+    });
+    return picked?.[0];
+}
+
+function nameOf(file: vscode.Uri): string {
+    return file.path.split('/').pop() ?? 'file';
+}
 
 export class WebviewProvider {
     private context: vscode.ExtensionContext;
@@ -66,6 +82,24 @@ export class WebviewProvider {
         for (const mode of this.existingPanels.keys()) {
             this.sendToPanel(mode as Mode, { command: 'settings', settings });
         }
+        void this.broadcastThemeColors();
+    }
+
+    /**
+     * Pushes the active theme's JSON colours to every open panel.
+     *
+     * Reading a theme file is I/O, so this never blocks the handshake: panels
+     * paint with the contributed defaults and are repainted when the answer
+     * arrives.
+     */
+    public async broadcastThemeColors(): Promise<void> {
+        const colors = readSettings().matchEditorTheme
+            ? await resolveSyntaxColors(vscodeThemeSource())
+            : {};
+
+        for (const mode of this.existingPanels.keys()) {
+            this.sendToPanel(mode as Mode, { command: 'themeColors', colors });
+        }
     }
 
     private webviewOptions(): vscode.WebviewOptions & vscode.WebviewPanelOptions {
@@ -117,14 +151,8 @@ export class WebviewProvider {
      * so a very large document never crosses postMessage and never has to fit
      * in a textarea.
      */
-    public async openJsonFile(): Promise<void> {
-        const picked = await vscode.window.showOpenDialog({
-            canSelectMany: false,
-            openLabel: 'Open in JSONBro',
-            filters: { 'JSON Files': ['json', 'jsonl', 'ndjson', 'txt'], 'All Files': ['*'] }
-        });
-
-        const file = picked?.[0];
+    public async openJsonFile(uri?: vscode.Uri): Promise<void> {
+        const file = uri ?? (await pickJsonFile('Open in JSONBro'));
         if (!file) {
             return;
         }
@@ -148,8 +176,63 @@ export class WebviewProvider {
         this.sendToPanel('format', {
             command: 'openUrl',
             url: panel.webview.asWebviewUri(file).toString(),
-            label: file.path.split('/').pop() ?? 'file'
+            label: nameOf(file)
         });
+    }
+
+    /**
+     * Loads a file into one side of the comparison.
+     *
+     * Read here rather than streamed into the panel's worker, which is how the
+     * format path works: comparing needs both documents as values anyway, so
+     * streaming would buy nothing and the diff ceiling already bounds the size.
+     */
+    public async loadDiffSide(side: DiffSide, uri?: vscode.Uri): Promise<void> {
+        const file = uri ?? (await pickJsonFile(`Use as the ${side === 'left' ? 'original' : 'modified'}`));
+        if (!file) {
+            return;
+        }
+
+        const json = await this.readForDiff(file);
+        if (json === null) {
+            return;
+        }
+
+        this.sendToPanel('diff', {
+            command: 'loadDiffSide',
+            side,
+            json,
+            label: nameOf(file)
+        });
+    }
+
+    /** Loads two files as the two sides and leaves comparing to the user. */
+    public async compareFiles(left: vscode.Uri, right: vscode.Uri): Promise<void> {
+        await this.loadDiffSide('left', left);
+        await this.loadDiffSide('right', right);
+    }
+
+    /** Reads a file, refusing one too large for the comparison to handle. */
+    private async readForDiff(file: vscode.Uri): Promise<string | null> {
+        const limit = readSettings().diffMaxDocumentSize;
+
+        try {
+            const stat = await vscode.workspace.fs.stat(file);
+            if (stat.size > limit) {
+                vscode.window.showWarningMessage(
+                    `${nameOf(file)} is too large to compare. Raise jsonbro.diff.maxDocumentSize to try anyway.`
+                );
+                return null;
+            }
+            return Buffer.from(await vscode.workspace.fs.readFile(file)).toString('utf8');
+        } catch (error) {
+            vscode.window.showErrorMessage(
+                `Could not read ${nameOf(file)}: ${
+                    error instanceof Error ? error.message : 'unknown error'
+                }`
+            );
+            return null;
+        }
     }
 
     /**
@@ -257,6 +340,7 @@ export class WebviewProvider {
                             settings: readSettings()
                         });
                         this.flushPendingMessages(mode);
+                        void this.broadcastThemeColors();
                         break;
                     case 'showError':
                         vscode.window.showErrorMessage(message.text);
@@ -272,6 +356,9 @@ export class WebviewProvider {
                         break;
                     case 'saveFormattedJson':
                         this.saveFormattedJsonToFile(message.content);
+                        break;
+                    case 'pickDiffFile':
+                        void this.loadDiffSide(message.side);
                         break;
                 }
             },

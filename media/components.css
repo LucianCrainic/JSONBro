@@ -279,17 +279,9 @@ body[data-mode='diff'] [data-mode-only='format'] {
     flex-shrink: 0;
 }
 
-/* Actions stay quiet until the pane is engaged with, but never invisible to
-   keyboard users or while toggled on. */
-.pane__actions .icon-btn {
-    opacity: 0.7;
-}
-
-.pane:hover .pane__actions .icon-btn,
-.pane__actions .icon-btn:focus-visible,
-.pane__actions .icon-btn.is-active {
-    opacity: 1;
-}
+/* Pane actions used to fade to 0.7 until the pane was hovered. Dimming the
+   only affordance that says what a pane can do made them easy to miss, so
+   they now read at full strength and lean on the tooltip for explanation. */
 
 .pane__body {
     position: relative;
@@ -347,9 +339,20 @@ body[data-mode='diff'] [data-mode-only='format'] {
  * absolutely positioned window would be offset by it, and a horizontal pad
  * would clip the long lines that need to scroll sideways.
  */
-#output {
+#output,
+.doc-view {
     padding: var(--jb-sp-2) 0;
     white-space: pre;
+}
+
+/*
+ * Each diff input pane holds both a textarea and a rendered view of the same
+ * document, and shows one at a time. Which one is a single attribute on the
+ * section, so nothing in script has to touch element visibility.
+ */
+.pane[data-view='edit'] .doc-view,
+.pane[data-view='view'] textarea {
+    display: none;
 }
 
 .pane__content.is-error {
@@ -720,4 +723,58 @@ kbd {
 
 .status__item--modified {
     color: var(--jb-modified);
+}
+
+/* --------------------------------------------------------------- tooltip */
+
+/* Drawn by the panel rather than by the browser: the native `title` waits
+   about a second, is clipped by the webview's iframe near an edge, and cannot
+   show a keyboard shortcut. Positioned from script, so only the offsets are
+   set inline -- every colour still comes from a token. */
+.tooltip {
+    position: fixed;
+    z-index: 100;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-3);
+    max-width: 320px;
+    padding: var(--jb-sp-2) var(--jb-sp-3);
+    border: 1px solid var(--jb-border-widget);
+    border-radius: var(--jb-radius-md);
+    background: var(--jb-bg-widget);
+    box-shadow: var(--jb-shadow);
+    color: var(--jb-fg);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-sm);
+    line-height: 1.4;
+    /* The pointer must never land on the tooltip: that would count as leaving
+       the control and flicker it away. */
+    pointer-events: none;
+}
+
+.tooltip[hidden] {
+    display: none;
+}
+
+.tooltip__text {
+    white-space: normal;
+}
+
+.tooltip__keys {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--jb-sp-1);
+}
+
+.tooltip__keys kbd {
+    padding: 0 var(--jb-sp-2);
+    border: 1px solid var(--jb-border);
+    border-radius: var(--jb-radius-sm);
+    background: var(--jb-bg-chrome);
+    color: var(--jb-fg-muted);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-xs);
+    line-height: 16px;
 }

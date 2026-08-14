@@ -56,12 +56,22 @@
     --jb-added: var(--vscode-gitDecoration-addedResourceForeground);
     --jb-removed: var(--vscode-gitDecoration-deletedResourceForeground);
     --jb-modified: var(--vscode-gitDecoration-modifiedResourceForeground);
-    --jb-added-bg: var(--vscode-diffEditor-insertedTextBackground);
-    --jb-removed-bg: var(--vscode-diffEditor-removedTextBackground);
-    /* Modified rows carry their meaning in the left rail and the old/new value
-       chips. Filling them too -- the old code reused diffEditor-border, a line
-       colour -- painted a grey band that read as a selection in light themes. */
-    --jb-modified-bg: transparent;
+    /* The theme's own diff shading first, then the colour this extension
+       contributes. Themes that leave the diffEditor colours near-transparent
+       used to leave the value chips with no fill at all. */
+    --jb-added-bg: var(
+        --vscode-diffEditor-insertedTextBackground,
+        var(--vscode-jsonbro-addedBackground)
+    );
+    --jb-removed-bg: var(
+        --vscode-diffEditor-removedTextBackground,
+        var(--vscode-jsonbro-removedBackground)
+    );
+    /* Modified was `transparent`, which left the most common kind of change as
+       the only one with no fill. It has its own contributed colour rather than
+       reusing diffEditor-border -- that is a line colour, and as a fill it
+       painted a grey band that read as a selection in light themes. */
+    --jb-modified-bg: var(--vscode-jsonbro-modifiedBackground);
     --jb-ok: var(--vscode-testing-iconPassed);
 
     /* Find */
@@ -84,13 +94,40 @@
     --jb-marker-error: var(--vscode-editorError-foreground);
     --jb-marker-info: var(--vscode-editorInfo-foreground);
 
-    /* JSON syntax */
-    --jb-syntax-string: var(--vscode-debugTokenExpression-string);
-    --jb-syntax-number: var(--vscode-debugTokenExpression-number);
-    --jb-syntax-boolean: var(--vscode-debugTokenExpression-boolean);
-    --jb-syntax-null: var(--vscode-debugTokenExpression-name);
-    --jb-syntax-key: var(--vscode-debugTokenExpression-name);
-    --jb-syntax-punct: var(--vscode-editor-foreground);
+    /* JSON syntax.
+       Three layers, most faithful first. --jb-theme-* is set from script with
+       the colours read out of the user's actual colour theme, so the output
+       matches the editor beside it. Failing that, the colours this extension
+       contributes apply -- those are real theme colours, so a user can
+       override them per theme. The debugTokenExpression values are what the
+       panel used to use on its own; they survive only as the last resort,
+       because almost no theme defines them and they made every theme look
+       alike. Note null and key resolve apart now: they were the same
+       variable, so a null was indistinguishable from a property name. */
+    --jb-syntax-string: var(
+        --jb-theme-string,
+        var(--vscode-jsonbro-syntaxString, var(--vscode-debugTokenExpression-string))
+    );
+    --jb-syntax-number: var(
+        --jb-theme-number,
+        var(--vscode-jsonbro-syntaxNumber, var(--vscode-debugTokenExpression-number))
+    );
+    --jb-syntax-boolean: var(
+        --jb-theme-boolean,
+        var(--vscode-jsonbro-syntaxBoolean, var(--vscode-debugTokenExpression-boolean))
+    );
+    --jb-syntax-null: var(
+        --jb-theme-null,
+        var(--vscode-jsonbro-syntaxNull, var(--vscode-debugTokenExpression-boolean))
+    );
+    --jb-syntax-key: var(
+        --jb-theme-key,
+        var(--vscode-jsonbro-syntaxKey, var(--vscode-debugTokenExpression-name))
+    );
+    --jb-syntax-punct: var(
+        --jb-theme-punctuation,
+        var(--vscode-jsonbro-syntaxPunctuation, var(--vscode-editor-foreground))
+    );
     --jb-gutter-fg: var(--vscode-editorLineNumber-foreground);
     --jb-gutter-fg-active: var(--vscode-editorLineNumber-activeForeground);
 
@@ -140,5 +177,4 @@ body.vscode-high-contrast,
 body.vscode-high-contrast-light {
     --jb-border: var(--vscode-contrastBorder);
     --jb-shadow: none;
-    --jb-modified-bg: transparent;
 }

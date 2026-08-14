@@ -52,7 +52,15 @@ async function handle(message: PanelToWorker): Promise<void> {
             },
             // The index columns move rather than copy; the text cannot,
             // since strings are not transferable.
-            [lines.starts.buffer, lines.depths.buffer, lines.foldEnds.buffer]
+            [
+                lines.starts.buffer,
+                lines.depths.buffer,
+                lines.foldEnds.buffer,
+                lines.kinds.buffer,
+                lines.childCounts.buffer,
+                lines.keyStarts.buffer,
+                lines.keyLengths.buffer
+            ]
         );
     } catch (error) {
         post({

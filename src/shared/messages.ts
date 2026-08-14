@@ -12,8 +12,13 @@ export type WebviewToHost =
     | { command: 'addFormatHistory'; json: string }
     | { command: 'addDiffHistory'; leftJson: string; rightJson: string }
     | { command: 'saveFormattedJson'; content: string }
+    /** Asks the host to choose a file to load into one side of the diff. */
+    | { command: 'pickDiffFile'; side: DiffSide }
     | { command: 'showError'; text: string }
     | { command: 'showInfo'; text: string };
+
+/** Which document of a comparison something refers to. */
+export type DiffSide = 'left' | 'right';
 
 /** Messages the extension host sends to the webview. */
 export type HostToWebview =
@@ -21,7 +26,26 @@ export type HostToWebview =
     | { command: 'loadDiff'; leftJson: string; rightJson: string }
     | { command: 'settings'; settings: Settings }
     /** Format a file the panel's worker should read for itself. */
-    | { command: 'openUrl'; url: string; label: string };
+    | { command: 'openUrl'; url: string; label: string }
+    /** Put a document into one side of the comparison. */
+    | { command: 'loadDiffSide'; side: DiffSide; json: string; label: string }
+    /** JSON syntax colours read from the user's active colour theme. */
+    | { command: 'themeColors'; colors: SyntaxColors };
+
+/**
+ * The colour of each part of a JSON document, as the active theme paints it.
+ *
+ * Every field is optional: a theme that says nothing about a role leaves it to
+ * the colour JSONBro contributes for it.
+ */
+export interface SyntaxColors {
+    key?: string;
+    string?: string;
+    number?: string;
+    boolean?: string;
+    null?: string;
+    punctuation?: string;
+}
 
 /** The two things the panel can be doing. */
 export type Mode = 'format' | 'diff';
@@ -40,6 +64,8 @@ export interface Settings {
     defaultPaneRatio: number;
     autoFormatOnPaste: boolean;
     searchScope: SearchScopeSetting;
+    /** Colour JSON the way the active theme colours it in the editor. */
+    matchEditorTheme: boolean;
     /** Above this many characters, the panel stops treating input as pasteable. */
     maxInlineSize: number;
     /** Above this, comparing is refused rather than attempted. */
