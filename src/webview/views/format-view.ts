@@ -21,6 +21,7 @@ import { Splitter } from '../ui/splitter';
 import { VirtualList } from '../ui/virtual-list';
 import { formatBytes, plural, type StatusModel } from '../ui/status-bar';
 import type { Messenger } from '../ui/messaging';
+import type { Settings } from '../../shared/messages';
 
 export class FormatView {
     private readonly messenger: Messenger;
@@ -39,6 +40,7 @@ export class FormatView {
     private matchesByLine = new Map<number, SearchMatch[]>();
 
     private loadingFromHistory = false;
+    private indentSize = 2;
     private status: StatusModel = {};
 
     private splitter: Splitter | null = null;
@@ -249,7 +251,7 @@ export class FormatView {
         // Formatting goes straight from the parse to text, never building a
         // value for the document -- which is what lets a very large file be
         // formatted at all.
-        const { value, diagnostics } = parseInto(input, new PrettySink());
+        const { value, diagnostics } = parseInto(input, new PrettySink({ indent: this.indentSize }));
 
         this.doc = value;
         this.folds = new FoldState(value.lines);
@@ -379,6 +381,37 @@ export class FormatView {
         if (panel) {
             panel.dataset.empty = String(empty);
         }
+    }
+
+    public get showLineNumbers(): boolean {
+        return JSONFormatter.getShowLineNumbers();
+    }
+
+    public setShowLineNumbers(show: boolean): void {
+        if (show === JSONFormatter.getShowLineNumbers()) {
+            return;
+        }
+        this.toggleLineNumbers();
+    }
+
+    /** Applies the user's configuration. */
+    public applySettings(settings: Settings): void {
+        this.setShowLineNumbers(settings.showLineNumbers);
+        this.indentSize = settings.indentSize;
+        this.setSplitRatio(settings.defaultPaneRatio);
+        this.find.setDefaultScope(settings.searchScope);
+
+        if (this.doc) {
+            this.format();
+        }
+    }
+
+    /**
+     * Puts back input carried through a reload, without recording it as a new
+     * history entry -- it was already recorded when it was first formatted.
+     */
+    public restore(json: string): void {
+        this.load(json);
     }
 
     /** Loads JSON from history without echoing it back as a new history entry. */
