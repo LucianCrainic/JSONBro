@@ -50,13 +50,18 @@ describe('DiffView', () => {
         expect(el('apply-all-diffs').hidden).toBe(true);
     });
 
-    it('reports an error without leaving bulk actions visible', () => {
-        view.compare();
-        setInputs('{ not json', RIGHT);
+    /*
+     * Broken input is repaired rather than rejected, so a comparison still
+     * happens -- but the reader is told, since a difference could then be an
+     * artefact of a repair rather than a real change.
+     */
+    it('compares repaired input and says that it repaired it', () => {
+        setInputs("{'a': 1,", RIGHT);
         view.compare();
 
-        expect(document.querySelector('.diff-error')).not.toBeNull();
-        expect(el('reject-all-diffs').hidden).toBe(true);
+        expect(document.querySelector('.diff-error')).toBeNull();
+        expect(items().length).toBeGreaterThan(0);
+        expect(view.getStatus().right?.map(segment => segment.text).join(' ')).toContain('repair');
     });
 
     describe('change rows', () => {

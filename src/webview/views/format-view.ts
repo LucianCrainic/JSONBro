@@ -1,12 +1,14 @@
 /**
  * The Format view: input textarea, formatted output, folding and search.
  */
+import type { Diagnostic } from '../engine/diagnostics';
 import { JSONFormatter } from '../formatter';
 import { JSONParser } from '../json-parser';
 import { byId, delegate, on } from '../ui/dom';
 import { FindWidget } from '../ui/find-widget';
 import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
+import { ProblemsList } from '../ui/problems-list';
 import { Splitter } from '../ui/splitter';
 import { formatBytes, plural, type StatusModel } from '../ui/status-bar';
 import type { Messenger } from '../ui/messaging';
@@ -16,11 +18,13 @@ export class FormatView {
     private readonly teardown: Array<() => void> = [];
 
     private currentJson: unknown = null;
+    private diagnostics: Diagnostic[] = [];
     private loadingFromHistory = false;
     private status: StatusModel = {};
 
     private splitter: Splitter | null = null;
     private panels: PanelGroup | null = null;
+    private readonly problems: ProblemsList;
     public readonly find: FindWidget;
 
     /** Notifies the shell that the status model changed. */
@@ -28,6 +32,10 @@ export class FormatView {
 
     constructor(messenger: Messenger) {
         this.messenger = messenger;
+
+        this.problems = new ProblemsList({
+            onReveal: diagnostic => this.revealLine(diagnostic.line)
+        });
 
         this.find = new FindWidget({
             target: () => byId('output'),
@@ -90,10 +98,6 @@ export class FormatView {
             this.teardown.push(on(lineNumbers, 'click', () => this.toggleLineNumbers()));
         }
 
-        const dismiss = byId('dismiss-warning');
-        if (dismiss) {
-            this.teardown.push(on(dismiss, 'click', () => this.hideWarning()));
-        }
     }
 
     private toggleLineNumbers(): void {
@@ -125,65 +129,63 @@ export class FormatView {
         const input = inputEl.value.trim();
         if (!input) {
             this.currentJson = null;
+            this.diagnostics = [];
             output.innerHTML = '';
             this.setEmpty(true);
-            this.hideWarning();
+            this.problems.clear();
             this.publishStatus({});
             return;
         }
 
-        try {
-            const { parsed, wasStructurallyFixed } = JSONParser.parseWithStatus(input);
-            this.currentJson = parsed;
+        // Parsing no longer throws: broken input is repaired as far as it can
+        // be and the repairs are reported, so there is always something to
+        // show. That is the point -- the tool should fix JSON, not just judge it.
+        const { parsed, diagnostics } = JSONParser.parseWithStatus(input);
+        this.currentJson = parsed;
+        this.diagnostics = diagnostics;
 
-            output.classList.remove('is-error');
-            output.innerHTML = JSONFormatter.renderJson(parsed);
-            output.classList.toggle('hide-line-numbers', !JSONFormatter.getShowLineNumbers());
-            this.setEmpty(false);
+        output.classList.remove('is-error');
+        output.innerHTML = JSONFormatter.renderJson(parsed);
+        output.classList.toggle('hide-line-numbers', !JSONFormatter.getShowLineNumbers());
+        this.setEmpty(false);
 
-            if (wasStructurallyFixed) {
-                this.showWarning();
-            } else {
-                this.hideWarning();
-            }
+        this.problems.show(diagnostics);
+        this.publishStatus(this.describe(parsed, input, diagnostics));
+        this.find.refresh();
 
-            this.publishStatus(this.describe(parsed, input, wasStructurallyFixed));
-            this.find.refresh();
-
-            if (!this.loadingFromHistory) {
-                this.messenger.post({ command: 'addFormatHistory', json: input });
-            }
-        } catch (error) {
-            this.currentJson = null;
-            const message =
-                error instanceof Error
-                    ? JSONParser.getParseErrorMessage(input, error)
-                    : 'Unknown parsing error';
-
-            output.classList.add('is-error');
-            output.textContent = message;
-            this.setEmpty(false);
-            this.hideWarning();
-            this.publishStatus({
-                left: [{ text: 'Invalid JSON', icon: Icons.error, tone: 'error', title: message }]
-            });
+        if (!this.loadingFromHistory) {
+            this.messenger.post({ command: 'addFormatHistory', json: input });
         }
     }
 
     /** Facts about the formatted document, for the status bar. */
-    private describe(parsed: unknown, source: string, autoCorrected: boolean): StatusModel {
+    private describe(parsed: unknown, source: string, diagnostics: Diagnostic[]): StatusModel {
         const lines = JSON.stringify(parsed, null, 2).split('\n').length;
         const bytes = new Blob([source]).size;
+        const repairs = diagnostics.filter(diagnostic => diagnostic.severity !== 'info').length;
 
         return {
             left: [
-                { text: 'Valid JSON', icon: Icons.valid, tone: 'ok' },
+                repairs > 0
+                    ? { text: 'Repaired', icon: Icons.warning, tone: 'warn' }
+                    : { text: 'Valid JSON', icon: Icons.valid, tone: 'ok' },
                 { text: plural(lines, 'line') },
                 { text: formatBytes(bytes) }
             ],
-            right: autoCorrected
-                ? [{ text: 'Auto-corrected', icon: Icons.warning, tone: 'warn' }]
-                : []
+            right:
+                diagnostics.length > 0
+                    ? [
+                          {
+                              text: plural(diagnostics.length, 'fix'),
+                              icon: Icons.warning,
+                              tone: repairs > 0 ? 'warn' : undefined,
+                              title: diagnostics
+                                  .slice(0, 5)
+                                  .map(d => `Line ${d.line}: ${d.message}`)
+                                  .join('\n')
+                          }
+                      ]
+                    : []
         };
     }
 
@@ -229,8 +231,9 @@ export class FormatView {
             output.innerHTML = '';
         }
         this.currentJson = null;
+        this.diagnostics = [];
         this.find.reset();
-        this.hideWarning();
+        this.problems.clear();
         this.setEmpty(true);
         this.publishStatus({});
     }
@@ -266,27 +269,30 @@ export class FormatView {
         }
     }
 
-    // --------------------------------------------------------------- warning
+    // -------------------------------------------------------------- problems
 
-    private showWarning(): void {
-        const warning = byId('warning-notification');
-        if (!warning) {
+    /**
+     * Brings a source line into view.
+     *
+     * The repair positions refer to the *input*, which is the text the reader
+     * would edit, so this scrolls the input rather than the output.
+     */
+    private revealLine(line: number): void {
+        const input = byId<HTMLTextAreaElement>('input');
+        if (!input) {
             return;
         }
-        const message = warning.querySelector('.notice__message');
-        if (message) {
-            message.textContent =
-                'The input had errors that were corrected automatically. ' +
-                'What you see below is the repaired JSON.';
-        }
-        warning.hidden = false;
-    }
 
-    private hideWarning(): void {
-        const warning = byId('warning-notification');
-        if (warning) {
-            warning.hidden = true;
-        }
+        const offset = nthLineOffset(input.value, line);
+        input.focus();
+        input.setSelectionRange(offset, offset);
+
+        // No scrollIntoView on a textarea position, so approximate by height.
+        const totalLines = input.value.split('\n').length || 1;
+        input.scrollTop = Math.max(
+            0,
+            (input.scrollHeight * (line - 1)) / totalLines - input.clientHeight / 2
+        );
     }
 
     // --------------------------------------------------------------- folding
@@ -398,7 +404,21 @@ export class FormatView {
         this.splitter?.dispose();
         this.panels?.dispose();
         this.find.dispose();
+        this.problems.dispose();
     }
+}
+
+/** The character offset at which 1-based `line` starts in `text`. */
+function nthLineOffset(text: string, line: number): number {
+    let offset = 0;
+    for (let i = 1; i < line; i++) {
+        const next = text.indexOf('\n', offset);
+        if (next === -1) {
+            return offset;
+        }
+        offset = next + 1;
+    }
+    return offset;
 }
 
 /** Recovers the underlying JSON text from a selection of rendered output. */

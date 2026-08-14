@@ -5,3 +5,5 @@ out
 
 # Copied from @vscode/codicons by webpack; see webpack.config.js
 media/codicons/
+.preview/
+.claude/launch.json
