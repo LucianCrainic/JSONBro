@@ -439,6 +439,7 @@ export class Shell {
         });
         this.messenger.on('settings', message => this.applySettings(message.settings));
         this.messenger.on('themeColors', message => this.applyThemeColors(message.colors));
+        this.messenger.on('setMode', message => this.setMode(message.mode));
         this.messenger.on('openUrl', message => {
             this.setMode('format');
             this.formatView.openUrl(message.url, message.label);

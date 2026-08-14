@@ -17,7 +17,7 @@ export const COLUMN_WIDTH = 220;
 /** Vertical distance between two nodes in the same column. */
 export const ROW_HEIGHT = 44;
 
-export const NODE_WIDTH = 190;
+export const NODE_WIDTH = 210;
 export const NODE_HEIGHT = 32;
 
 /**

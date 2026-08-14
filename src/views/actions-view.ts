@@ -23,6 +23,12 @@ const ACTIONS: Action[] = [
         icon: 'symbol-property'
     },
     {
+        label: 'Visualise JSON',
+        tooltip: 'Open a panel and draw a document as a tree or a graph',
+        command: 'jsonbro.visualiseJson',
+        icon: 'type-hierarchy'
+    },
+    {
         label: 'Compare JSON',
         tooltip: 'Open a panel to compare two documents',
         command: 'jsonbro.diffJson',

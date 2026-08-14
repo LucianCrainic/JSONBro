@@ -1,8 +1,8 @@
 /**
- * The tree view.
+ * The visual view, in both of its shapes.
  *
  * It parses nothing of its own -- it renders the document the format view
- * produced -- so these drive it through the shell the way a user would.
+ * produced -- so these drive it the way a user would.
  */
 import { Messenger } from '../../ui/messaging';
 import { PrettySink } from '../../engine/pretty-sink';
@@ -378,6 +378,57 @@ describe('VisualView shapes', () => {
         view.setDocument(null);
 
         expect(gnodes()).toHaveLength(0);
+    });
+});
+
+/*
+ * In this mode the left pane shows the formatted document rather than the box
+ * it was pasted into: here it is something to read, and editing it would leave
+ * the picture describing older text.
+ */
+describe('the source beside the picture', () => {
+    let view: VisualView;
+
+    const sourceRows = () => document.querySelectorAll('#input-view .json-line');
+
+    beforeEach(() => {
+        mountPanel('format');
+        view = new VisualView(new Messenger());
+    });
+
+    afterEach(() => {
+        view.dispose();
+    });
+
+    it('renders the same document as formatted lines', () => {
+        show(view);
+        expect(sourceRows().length).toBeGreaterThan(1);
+    });
+
+    it('colours it, rather than showing plain text', () => {
+        show(view);
+        expect(document.querySelectorAll('#input-view .key').length).toBeGreaterThan(0);
+    });
+
+    it('has no editable field of its own', () => {
+        show(view);
+        expect(document.querySelector('#input-view textarea')).toBeNull();
+    });
+
+    it('follows the selection, so the text and the picture agree', () => {
+        show(view);
+        rowFor('first').click();
+
+        expect(document.querySelector('#input-view .json-line.is-selected')?.textContent).toContain(
+            'first'
+        );
+    });
+
+    it('empties with the document', () => {
+        show(view);
+        view.setDocument(null);
+
+        expect(sourceRows()).toHaveLength(0);
     });
 });
 

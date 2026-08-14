@@ -172,6 +172,7 @@ export class DiffView {
                 this.messenger.post({ command: 'pickDiffFile', side })
             );
             bind(`copy-${side}-json`, () => this.copySide(side));
+            bind(`save-${side}-json`, () => this.saveSide(side));
             bind(`clear-${side}-json`, () => {
                 this.clearSide(side);
                 this.clearResults();
@@ -314,6 +315,19 @@ export class DiffView {
         const right = byId<HTMLTextAreaElement>('right-json')?.value.trim();
         if (left && right) {
             this.compare();
+        }
+    }
+
+    /**
+     * Writes a side out to a file.
+     *
+     * The original is rewritten as changes are applied, so this saves the
+     * document as it now stands -- which is the point of applying them.
+     */
+    private saveSide(side: Side): void {
+        const content = byId<HTMLTextAreaElement>(`${side}-json`)?.value;
+        if (content?.trim()) {
+            this.messenger.post({ command: 'saveFormattedJson', content });
         }
     }
 

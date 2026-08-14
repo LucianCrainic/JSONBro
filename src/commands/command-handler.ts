@@ -31,6 +31,11 @@ export class CommandHandler {
             () => this.diffJson()
         );
 
+        const visualiseJsonCommand = vscode.commands.registerCommand(
+            'jsonbro.visualiseJson',
+            () => this.webviewProvider.showVisualPanel()
+        );
+
         const openFromActivityBarCommand = vscode.commands.registerCommand(
             'jsonbro.openFromActivityBar',
             () => this.openFromActivityBar()
@@ -129,7 +134,8 @@ export class CommandHandler {
 
         context.subscriptions.push(
             formatJsonCommand, 
-            diffJsonCommand, 
+            diffJsonCommand,
+            visualiseJsonCommand,
             openFromActivityBarCommand,
             loadFormatHistoryCommand,
             loadDiffHistoryCommand,

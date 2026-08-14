@@ -28,8 +28,31 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 2.5;
 
-/** Characters of a value shown inside a node before it is clipped. */
-const VALUE_BUDGET = 18;
+/**
+ * How many characters each half of a node's box may use.
+ *
+ * The key is drawn from the left and the value from the right, so without a
+ * budget a long key and a long value meet in the middle and overprint each
+ * other -- which is exactly what a node holding a long description did. The
+ * clip path below is the guarantee that nothing escapes the box; these keep
+ * the two halves from reaching each other inside it.
+ *
+ * Derived from the box rather than picked, so widening a node widens what fits
+ * in it. The per-character widths are measured from the rendered font: the key
+ * is bold and therefore wider than the value.
+ */
+const KEY_CHAR_WIDTH = 7.4;
+const VALUE_CHAR_WIDTH = 6.8;
+const TEXT_PADDING = 10;
+/** Blank space kept between the two halves so they never appear to touch. */
+const TEXT_GAP = 14;
+
+const HALF_WIDTH = (NODE_WIDTH - TEXT_PADDING * 2 - TEXT_GAP) / 2;
+const KEY_BUDGET = Math.floor(HALF_WIDTH / KEY_CHAR_WIDTH);
+const VALUE_BUDGET = Math.floor(HALF_WIDTH / VALUE_CHAR_WIDTH);
+
+/** One clip per box, shared by every node: they are all the same size. */
+const CLIP_ID = 'jb-graph-node-clip';
 
 export interface GraphCanvasOptions {
     viewport: HTMLElement;
@@ -179,18 +202,21 @@ export class GraphCanvas {
             .join('');
 
         const nodes = layout.nodes.map(node => this.nodeMarkup(node)).join('');
-        return `<g class="graph__edges">${edges}</g><g class="graph__nodes">${nodes}</g>`;
+
+        // Defined once and referenced by every node. A clip path applies in the
+        // coordinates of the element using it, and each node carries its own
+        // transform, so one definition clips all of them to their own box.
+        const defs = `<defs><clipPath id="${CLIP_ID}"><rect width="${NODE_WIDTH}" height="${NODE_HEIGHT}" rx="4" /></clipPath></defs>`;
+
+        return `${defs}<g class="graph__edges">${edges}</g><g class="graph__nodes">${nodes}</g>`;
     }
 
     private nodeMarkup(node: GraphNode): string {
         const doc = this.doc as PrettyDocument;
         const view = nodeAt(doc, node.line);
 
-        const label = view.key || (node.line === 0 ? 'root' : '');
-        const value =
-            view.type === 'object' || view.type === 'array'
-                ? view.preview
-                : clip(view.preview, VALUE_BUDGET);
+        const label = clip(view.key || (node.line === 0 ? 'root' : ''), KEY_BUDGET);
+        const value = clip(view.preview, VALUE_BUDGET);
 
         // A collapsed container says how much is folded away, so the reader can
         // tell a node worth opening from one that holds a single value.
@@ -206,12 +232,17 @@ export class GraphCanvas {
         return `<g class="graph__node graph__node--${view.type}${
             node.line === this.selected ? ' is-selected' : ''
         }" data-graph-line="${node.line}" transform="translate(${node.x} ${node.y})"
-                    role="treeitem" aria-level="${node.depth + 1}">
+                    role="treeitem" aria-level="${node.depth + 1}"
+                    data-tip="${escapeHtml(
+                        describeNode(view.key || (node.line === 0 ? 'root' : ''), view.preview)
+                    )}">
                     <rect width="${NODE_WIDTH}" height="${NODE_HEIGHT}" rx="4" />
-                    <text class="graph__label" x="10" y="20">${escapeHtml(label)}</text>
-                    <text class="graph__value" x="${NODE_WIDTH - 10}" y="20" text-anchor="end">${escapeHtml(
-                        value
-                    )}</text>
+                    <g clip-path="url(#${CLIP_ID})">
+                        <text class="graph__label" x="${TEXT_PADDING}" y="20">${escapeHtml(label)}</text>
+                        <text class="graph__value" x="${NODE_WIDTH - TEXT_PADDING}" y="20" text-anchor="end">${escapeHtml(
+                            value
+                        )}</text>
+                    </g>
                </g>${twisty}`;
     }
 
@@ -344,6 +375,11 @@ export class GraphCanvas {
 
 function clip(text: string, budget: number): string {
     return text.length > budget ? `${text.slice(0, budget - 1)}…` : text;
+}
+
+/** The full text of a node, for the tooltip that shows what was clipped. */
+function describeNode(key: string, value: string): string {
+    return key ? `${key}: ${value}` : value;
 }
 
 function clamp(value: number, min: number, max: number): number {

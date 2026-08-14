@@ -181,8 +181,15 @@ export class FormatView {
         const before = byId('input-panel');
         const after = byId('output-panel');
 
+        // The formatted output and the visual view share this slot, one per
+        // mode, so the sash is told about both and resizes whichever is up.
+        const visual = byId('visual-panel');
         if (container && handle && before && after) {
-            this.splitter = new Splitter({ handle, before, after });
+            this.splitter = new Splitter({
+                handle,
+                before,
+                after: visual ? [after, visual] : after
+            });
             this.panels = new PanelGroup({
                 container,
                 // The tree shares this container and this sash, so it takes

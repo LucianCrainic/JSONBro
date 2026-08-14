@@ -29,6 +29,10 @@
         "title": "JSONBro: Diff JSON"
       },
       {
+        "command": "jsonbro.visualiseJson",
+        "title": "JSONBro: Visualise JSON"
+      },
+      {
         "command": "jsonbro.openFile",
         "title": "JSONBro: Open JSON File",
         "icon": "$(go-to-file)"
@@ -502,6 +506,11 @@
         "command": "jsonbro.openFile",
         "key": "ctrl+alt+o",
         "mac": "cmd+alt+o"
+      },
+      {
+        "command": "jsonbro.visualiseJson",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v"
       }
     ],
     "viewsWelcome": [

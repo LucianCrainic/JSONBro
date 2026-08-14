@@ -29,6 +29,17 @@
     display: none;
 }
 
+/*
+ * In this mode the input pane shows the formatted document rather than the box
+ * it was pasted into: here it is something to read, and editing it would leave
+ * the picture describing older text. Switching back to Format brings the
+ * editable box back.
+ */
+#input-view {
+    padding: var(--jb-sp-2) 0;
+    white-space: pre;
+}
+
 /* The shape switch reads as one control, so its two halves sit together. */
 .shape-btn.is-active {
     background-color: var(--jb-neutral);

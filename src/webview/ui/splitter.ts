@@ -6,7 +6,16 @@ import { on } from './dom';
 export interface SplitterOptions {
     handle: HTMLElement;
     before: HTMLElement;
-    after: HTMLElement;
+    /**
+     * The pane on the far side of the handle.
+     *
+     * Several may be given when the row swaps one pane for another by mode --
+     * the format row shows either the formatted text or the visual view in the
+     * same slot. The first one actually on screen is the one resized; sizing a
+     * hidden pane instead makes the sash appear to work backwards, since the
+     * width being redistributed is not the width the reader can see.
+     */
+    after: HTMLElement | HTMLElement[];
     /** Smallest either pane may become, in pixels. */
     minSize?: number;
 }
@@ -19,7 +28,9 @@ export interface SplitterOptions {
  * two neighbours already occupy, and leaves every other pane alone.
  */
 export class Splitter {
-    private readonly options: Required<SplitterOptions>;
+    private readonly options: Required<Omit<SplitterOptions, 'after'>> & {
+        after: HTMLElement[];
+    };
     private readonly teardown: Array<() => void> = [];
     private dragging = false;
     private startX = 0;
@@ -28,7 +39,8 @@ export class Splitter {
     constructor(options: SplitterOptions) {
         this.options = {
             minSize: 160,
-            ...options
+            ...options,
+            after: Array.isArray(options.after) ? options.after : [options.after]
         };
 
         const { handle } = this.options;
@@ -49,9 +61,14 @@ export class Splitter {
         this.applyWidths(beforeWidth, available - beforeWidth);
     }
 
+    /** Whichever pane after the handle is currently on screen. */
+    private get after(): HTMLElement {
+        return this.options.after.find(pane => pane.offsetWidth > 0) ?? this.options.after[0];
+    }
+
     /** Drops explicit sizing so the panes fall back to their CSS flex rules. */
     public reset(): void {
-        for (const pane of [this.options.before, this.options.after]) {
+        for (const pane of [this.options.before, ...this.options.after]) {
             pane.style.width = '';
             pane.style.flexBasis = '';
             pane.style.flexGrow = '';
@@ -66,7 +83,7 @@ export class Splitter {
 
     /** The width the two neighbours currently share between them. */
     private availableWidth(): number {
-        return this.options.before.offsetWidth + this.options.after.offsetWidth;
+        return this.options.before.offsetWidth + this.after.offsetWidth;
     }
 
     /**
@@ -89,10 +106,19 @@ export class Splitter {
 
         this.pin(this.options.before, (beforeWidth / row) * 100);
 
-        if (this.isLastPane(this.options.after)) {
-            this.fill(this.options.after);
+        const after = this.after;
+        if (this.isLastPane(after)) {
+            this.fill(after);
         } else {
-            this.pin(this.options.after, (afterWidth / row) * 100);
+            this.pin(after, (afterWidth / row) * 100);
+        }
+
+        // Panes that swap in for this one by mode must not keep a stale width,
+        // or switching mode would show the sash in the wrong place.
+        for (const alternative of this.options.after) {
+            if (alternative !== after) {
+                alternative.style.cssText = '';
+            }
         }
     }
 
