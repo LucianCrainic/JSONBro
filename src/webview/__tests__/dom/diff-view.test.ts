@@ -50,13 +50,18 @@ describe('DiffView', () => {
         expect(el('apply-all-diffs').hidden).toBe(true);
     });
 
-    it('reports an error without leaving bulk actions visible', () => {
-        view.compare();
-        setInputs('{ not json', RIGHT);
+    /*
+     * Broken input is repaired rather than rejected, so a comparison still
+     * happens -- but the reader is told, since a difference could then be an
+     * artefact of a repair rather than a real change.
+     */
+    it('compares repaired input and says that it repaired it', () => {
+        setInputs("{'a': 1,", RIGHT);
         view.compare();
 
-        expect(document.querySelector('.diff-error')).not.toBeNull();
-        expect(el('reject-all-diffs').hidden).toBe(true);
+        expect(document.querySelector('.diff-error')).toBeNull();
+        expect(items().length).toBeGreaterThan(0);
+        expect(view.getStatus().right?.map(segment => segment.text).join(' ')).toContain('repair');
     });
 
     describe('change rows', () => {
@@ -212,6 +217,57 @@ describe('DiffView', () => {
             expect(JSON.parse(el<HTMLTextAreaElement>('left-json').value)).toEqual(
                 JSON.parse(el<HTMLTextAreaElement>('right-json').value)
             );
+        });
+    });
+
+    /*
+     * Array positions are expressed in the coordinates of the document the
+     * comparison ran against. Applying rows one at a time used to mutate that
+     * document underneath the remaining rows, so their indices drifted.
+     */
+    describe('arrays', () => {
+        const left = () => JSON.parse(el<HTMLTextAreaElement>('left-json').value);
+
+        it('reports a head insertion as a single change', () => {
+            setInputs(JSON.stringify({ l: [1, 2, 3] }), JSON.stringify({ l: [0, 1, 2, 3] }));
+            view.compare();
+
+            expect(items()).toHaveLength(1);
+            expect(items()[0].dataset.diffType).toBe('added');
+        });
+
+        it('applies rows in any order to the same result', () => {
+            setInputs(JSON.stringify({ l: ['a', 'b', 'c'] }), JSON.stringify({ l: ['x', 'b', 'y'] }));
+            view.compare();
+
+            const rows = items();
+            for (const row of rows.reverse()) {
+                click('.apply-diff-btn', row);
+            }
+
+            expect(left()).toEqual({ l: ['x', 'b', 'y'] });
+        });
+
+        it('undoes one row without disturbing the others', () => {
+            setInputs(JSON.stringify({ l: [1, 2, 3, 4] }), JSON.stringify({ l: [1, 9, 3, 8] }));
+            view.compare();
+
+            const rows = items();
+            rows.forEach(row => click('.apply-diff-btn', row));
+            expect(left()).toEqual({ l: [1, 9, 3, 8] });
+
+            click('.undo-diff-btn', rows[0]);
+            expect(left()).toEqual({ l: [1, 2, 3, 8] });
+        });
+
+        it('keeps a key whose value became null', () => {
+            setInputs(JSON.stringify({ a: 1 }), JSON.stringify({ a: null }));
+            view.compare();
+
+            expect(items()[0].dataset.diffType).toBe('modified');
+
+            click('.apply-diff-btn', items()[0]);
+            expect(left()).toEqual({ a: null });
         });
     });
 

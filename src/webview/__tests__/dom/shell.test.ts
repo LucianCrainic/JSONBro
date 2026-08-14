@@ -141,12 +141,18 @@ describe('Shell', () => {
             expect(statusText('left')).toMatch(/\d+ B/);
         });
 
-        it('reports a parse failure', () => {
+        /*
+         * Broken input is repaired and shown rather than rejected, so there is
+         * no "invalid" state left to report -- only what had to be fixed.
+         */
+        it('formats broken input instead of refusing it', () => {
             start('format');
             el<HTMLTextAreaElement>('input').value = '{"a": }';
             el('action-btn').click();
 
-            expect(statusText('left')).toContain('Invalid JSON');
+            expect(statusText('left')).toContain('Repaired');
+            expect(el('output').textContent).toContain('"a"');
+            expect(el('output-panel').dataset.empty).toBe('false');
         });
 
         it('flags structurally repaired input', () => {
@@ -156,17 +162,30 @@ describe('Shell', () => {
             el<HTMLTextAreaElement>('input').value = '{"a":1 "b":2}';
             el('action-btn').click();
 
-            expect(statusText('right')).toContain('Auto-corrected');
-            expect(el('warning-notification').hidden).toBe(false);
+            expect(statusText('left')).toContain('Repaired');
+            expect(statusText('right')).toMatch(/\d+ fix/);
+            expect(el('problems').hidden).toBe(false);
+            expect(el('problems-title').textContent).toContain('repaired');
         });
 
-        it('stays quiet for cosmetic fixes', () => {
+        it('reports a cosmetic fix without calling it a problem', () => {
             start('format');
             el<HTMLTextAreaElement>('input').value = "{'a':1}";
             el('action-btn').click();
 
+            // Still valid: rewriting quotes did not change what the document says.
+            expect(statusText('left')).toContain('Valid JSON');
+            expect(el('problems').hidden).toBe(false);
+            expect(el('problems-title').textContent).toContain('change');
+        });
+
+        it('says nothing at all when the input needed no repair', () => {
+            start('format');
+            el<HTMLTextAreaElement>('input').value = '{"a":1}';
+            el('action-btn').click();
+
             expect(statusText('right')).toBe('');
-            expect(el('warning-notification').hidden).toBe(true);
+            expect(el('problems').hidden).toBe(true);
         });
 
         it('counts changes by kind in diff mode', () => {

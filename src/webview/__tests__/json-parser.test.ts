@@ -410,89 +410,158 @@ describe('JSONParser', () => {
         });
     });
 
-    describe('parseFlexible - Should throw errors for unfixable JSON', () => {
-        it('should throw for completely invalid syntax', () => {
-            const input = 'this is not json at all';
-            expect(() => JSONParser.parseFlexible(input)).toThrow();
+    /*
+     * Input that cannot be made sense of no longer throws. The parser recovers
+     * as far as it can and reports what it did, so the panel can still show
+     * something and say why it looks the way it does.
+     */
+    describe('parseFlexible - Unfixable input still yields a document', () => {
+        it('reads bare prose as a string rather than throwing', () => {
+            expect(JSONParser.parseFlexible('this is not json at all')).toBe('this');
         });
 
-        it('should throw for unmatched quotes inside strings', () => {
-            const input = '{"name": "John}';
-            expect(() => JSONParser.parseFlexible(input)).toThrow();
+        it('closes a string that was never closed', () => {
+            expect(JSONParser.parseFlexible('{"name": "John}')).toEqual({ name: 'John}' });
         });
 
-        it('throws descriptive error when parsing invalid JSON fails twice', () => {
-            const malformed = "{'name': 'Dana', 'invalid': +++}";
-            expect(() => JSONParser.parseFlexible(malformed)).toThrow(SyntaxError);
+        it('recovers from a run of stray punctuation', () => {
+            const parsed = JSONParser.parseFlexible("{'name': 'Dana', 'invalid': +++}");
+            expect(parsed).toEqual({ name: 'Dana', invalid: null });
+        });
+
+        it('returns null for an empty document', () => {
+            expect(JSONParser.parseFlexible('')).toBeNull();
+            expect(JSONParser.parseFlexible('   \n  ')).toBeNull();
+        });
+    });
+
+    /*
+     * The repair passes this replaced ran regular expressions over the whole
+     * document, so they rewrote the insides of strings as readily as the
+     * syntax around them. These are the exact inputs that used to be
+     * corrupted; the values must come through untouched.
+     */
+    describe('parseFlexible - String contents are never rewritten', () => {
+        it('leaves Python-looking words inside a string alone', () => {
+            const parsed = JSONParser.parseFlexible(`{'note': "True story about None"}`);
+            expect(parsed).toEqual({ note: 'True story about None' });
+        });
+
+        it('leaves a colon inside a string alone', () => {
+            expect(JSONParser.parseFlexible('{a: "x, b: 1"}')).toEqual({ a: 'x, b: 1' });
+        });
+
+        it('leaves a comma before a bracket inside a string alone', () => {
+            expect(JSONParser.parseFlexible('{a: "ends with , ]"}')).toEqual({
+                a: 'ends with , ]'
+            });
+        });
+
+        it('keeps braces and quotes that live inside string values', () => {
+            const parsed = JSONParser.parseFlexible(`{key: '{"nested": "json"}'}`);
+            expect(parsed).toEqual({ key: '{"nested": "json"}' });
+        });
+
+        it('keeps a lone apostrophe in a double-quoted string', () => {
+            expect(JSONParser.parseFlexible(`{"t": "it's fine",}`)).toEqual({ t: "it's fine" });
+        });
+    });
+
+    /*
+     * Repairs used to run as separate sequential passes, so a document with
+     * two different problems could fail even though each one alone was
+     * handled. Recovering inside a single parse fixes that.
+     */
+    describe('parseFlexible - Combined problems in one document', () => {
+        it('handles a trailing comma and a missing brace together', () => {
+            expect(JSONParser.parseFlexible('{"a": 1,')).toEqual({ a: 1 });
+        });
+
+        it('handles a missing comma and a missing bracket together', () => {
+            expect(JSONParser.parseFlexible('[1 2 3')).toEqual([1, 2, 3]);
+        });
+
+        it('handles a missing colon', () => {
+            expect(JSONParser.parseFlexible('{"a" 1}')).toEqual({ a: 1 });
+        });
+
+        it('fills in a property that has no value', () => {
+            expect(JSONParser.parseFlexible('{"a": }')).toEqual({ a: null });
+        });
+
+        it('strips comments', () => {
+            const input = `{
+                // the name
+                "a": 1, /* inline */ "b": 2
+            }`;
+            expect(JSONParser.parseFlexible(input)).toEqual({ a: 1, b: 2 });
+        });
+    });
+
+    describe('diagnostics', () => {
+        const kinds = (input: string) =>
+            JSONParser.parseWithStatus(input).diagnostics.map(d => d.kind);
+
+        it('names each repair', () => {
+            expect(kinds("{'a': 1}")).toContain('single-quotes');
+            expect(kinds('{a: 1}')).toContain('unquoted-key');
+            expect(kinds('{"a": True}')).toContain('python-literal');
+            expect(kinds('["a" "b"]')).toContain('missing-comma');
+            expect(kinds('{"a": 1')).toContain('unclosed-container');
+            expect(kinds('{"a" 1}')).toContain('missing-colon');
+            expect(kinds('{"a": "x}')).toContain('unterminated-string');
+            expect(kinds('// hi\n{}')).toContain('comment');
+        });
+
+        it('says nothing about JSON that needs no repair', () => {
+            expect(kinds('{"a": [1, 2], "b": null}')).toEqual([]);
+        });
+
+        it('points at the line the problem is on', () => {
+            const input = '{\n  "a": 1\n  "b": 2\n}';
+            const missing = JSONParser.parseWithStatus(input).diagnostics.find(
+                d => d.kind === 'missing-comma'
+            );
+
+            expect(missing?.line).toBe(3);
+        });
+
+        it('reports repairs in the order they appear in the source', () => {
+            const { diagnostics } = JSONParser.parseWithStatus("{a: 1, 'b': True,}");
+            const offsets = diagnostics.map(d => d.offset);
+
+            expect(offsets).toEqual([...offsets].sort((x, y) => x - y));
+            expect(diagnostics.length).toBeGreaterThan(1);
+        });
+
+        it('flags a duplicate property without dropping the later value', () => {
+            const { parsed, diagnostics } = JSONParser.parseWithStatus('{"a": 1, "a": 2}');
+
+            expect(parsed).toEqual({ a: 2 });
+            expect(diagnostics.map(d => d.kind)).toContain('duplicate-key');
+        });
+
+        it('separates cosmetic repairs from structural ones', () => {
+            expect(JSONParser.parseWithStatus("{'a': 1}").wasStructurallyFixed).toBe(false);
+            expect(JSONParser.parseWithStatus('{"a": 1').wasStructurallyFixed).toBe(true);
         });
     });
 
     describe('getParseErrorMessage', () => {
-        it('should suggest fixing single quotes', () => {
-            const input = "{'name': 'John'}";
-            const error = new Error('Unexpected token');
-            const message = JSONParser.getParseErrorMessage(input, error);
-            expect(message).toContain('double quotes');
-            expect(message).toContain('single quotes');
+        it('lists what was repaired, with line numbers', () => {
+            const message = JSONParser.getParseErrorMessage('{\n  "a": 1\n  "b": 2');
+
+            expect(message).toContain('Line 3');
+            expect(message).toContain('comma');
         });
 
-        it('should suggest quoting property names', () => {
-            const input = '{name: "John"}';
-            const error = new Error('Unexpected token');
-            const message = JSONParser.getParseErrorMessage(input, error);
-            expect(message).toContain('Property names should be quoted');
-        });
+        it('falls back to the underlying error when nothing was repaired', () => {
+            const message = JSONParser.getParseErrorMessage('{"a": 1}', new Error('boom'));
 
-        it('should suggest fixing Python booleans', () => {
-            const input = '{"active": True}';
-            const error = new Error('Unexpected token');
-            const message = JSONParser.getParseErrorMessage(input, error);
-            expect(message).toContain('lowercase boolean');
-        });
-
-        it('should suggest fixing None', () => {
-            const input = '{"value": None}';
-            const error = new Error('Unexpected token');
-            const message = JSONParser.getParseErrorMessage(input, error);
-            expect(message).toContain("Replace 'None' with 'null'");
-        });
-
-        it('should suggest removing trailing commas', () => {
-            const input = '{"name": "John",}';
-            const error = new Error('Unexpected token');
-            const message = JSONParser.getParseErrorMessage(input, error);
-            expect(message).toContain('trailing commas');
-        });
-
-        it('should detect mismatched braces', () => {
-            const input = '{"name": "John"';
-            const error = new Error('Unexpected end');
-            const message = JSONParser.getParseErrorMessage(input, error);
-            expect(message).toContain('Mismatched braces');
-        });
-
-        it('should detect mismatched brackets', () => {
-            const input = '[1, 2, 3';
-            const error = new Error('Unexpected end');
-            const message = JSONParser.getParseErrorMessage(input, error);
-            expect(message).toContain('Mismatched brackets');
-        });
-
-        it('suggests fixes for common mistakes', () => {
-            const malformed = "{'name': Dana, trailing: true,}";
-            let parseError: Error;
-            try {
-                JSON.parse(malformed);
-            } catch (error) {
-                parseError = error as Error;
-            }
-            const message = JSONParser.getParseErrorMessage(malformed, parseError!);
-            expect(message).toContain('Invalid JSON');
-            expect(message).toContain('Try using double quotes');
-            expect(message).toContain('Property names should be quoted');
-            expect(message).toContain('Remove trailing commas');
+            expect(message).toContain('boom');
         });
     });
+
     
     describe('parseWithStatus - Determines when warnings are needed', () => {
         it('should NOT set wasStructurallyFixed for valid JSON', () => {

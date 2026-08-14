@@ -75,6 +75,15 @@
     --jb-warn-border: var(--vscode-inputValidation-warningBorder);
     --jb-warn-fg: var(--vscode-inputValidation-warningForeground);
 
+    /* Standalone severity accents, for marks that sit on the editor
+       background rather than on a validation panel. The inputValidation
+       colours above are the text colour *for* that panel -- in Light Modern
+       the warning one is near-black, so using it as an accent made warnings
+       indistinguishable from ordinary text. */
+    --jb-marker-warn: var(--vscode-editorWarning-foreground);
+    --jb-marker-error: var(--vscode-editorError-foreground);
+    --jb-marker-info: var(--vscode-editorInfo-foreground);
+
     /* JSON syntax */
     --jb-syntax-string: var(--vscode-debugTokenExpression-string);
     --jb-syntax-number: var(--vscode-debugTokenExpression-number);

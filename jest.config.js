@@ -15,11 +15,10 @@ module.exports = {
       ...shared,
       displayName: 'node',
       testEnvironment: 'node',
-      testMatch: [
-        '**/__tests__/diff.test.ts',
-        '**/__tests__/json-parser.test.ts',
-        '**/__tests__/formatter.test.ts',
-      ],
+      // Everything directly under __tests__; the single `*` does not cross a
+      // slash, so the jsdom suites in __tests__/dom stay with the other project.
+      // Listing the files individually meant a new engine suite ran nowhere.
+      testMatch: ['**/__tests__/*.test.ts'],
     },
     {
       ...shared,

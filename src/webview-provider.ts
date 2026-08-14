@@ -6,7 +6,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { WebviewContentGenerator } from './webview-content';
 import { JSONBroActivityBarProvider } from './activity-bar-provider';
-import type { HostToWebview } from './shared/messages';
+import { readSettings } from './settings';
+import type { HostToWebview, Mode } from './shared/messages';
 
 export class WebviewProvider {
     private context: vscode.ExtensionContext;
@@ -20,10 +21,67 @@ export class WebviewProvider {
     /** Messages waiting for a panel that has not signalled ready yet. */
     private pendingMessages: Map<string, HostToWebview[]> = new Map();
 
+    /** A folder a panel must be able to read, set when opening a file from it. */
+    private extraResourceRoot: vscode.Uri | undefined;
+
     constructor(context: vscode.ExtensionContext, activityBarProvider: JSONBroActivityBarProvider) {
         this.context = context;
         this.contentGenerator = new WebviewContentGenerator(context);
         this.activityBarProvider = activityBarProvider;
+    }
+
+    /**
+     * Brings panels back after a window reload.
+     *
+     * VS Code offers the panel it had; without a serializer registered it
+     * simply discards it, which is why nothing survived a reload before.
+     */
+    public registerSerializer(): vscode.Disposable {
+        const provider = this;
+
+        const register = (mode: Mode, viewType: string) =>
+            vscode.window.registerWebviewPanelSerializer(viewType, {
+                async deserializeWebviewPanel(panel: vscode.WebviewPanel): Promise<void> {
+                    provider.adopt(mode, panel);
+                }
+            });
+
+        return vscode.Disposable.from(
+            register('format', 'jsonbro.formatJson'),
+            register('diff', 'jsonbro.diffJson')
+        );
+    }
+
+    /** Takes over a panel VS Code restored, wiring it up as if new. */
+    private adopt(mode: Mode, panel: vscode.WebviewPanel): void {
+        panel.webview.options = this.webviewOptions();
+        this.existingPanels.set(mode, panel);
+        this.attach(mode, panel);
+        panel.webview.html = this.contentGenerator.getWebviewContent(panel.webview, mode);
+    }
+
+    /** Pushes the current configuration to every open panel. */
+    public broadcastSettings(): void {
+        const settings = readSettings();
+        for (const mode of this.existingPanels.keys()) {
+            this.sendToPanel(mode as Mode, { command: 'settings', settings });
+        }
+    }
+
+    private webviewOptions(): vscode.WebviewOptions & vscode.WebviewPanelOptions {
+        const roots = [
+            vscode.Uri.joinPath(this.context.extensionUri, 'out'),
+            vscode.Uri.joinPath(this.context.extensionUri, 'media')
+        ];
+        if (this.extraResourceRoot) {
+            roots.push(this.extraResourceRoot);
+        }
+
+        return {
+            enableScripts: true,
+            retainContextWhenHidden: true,
+            localResourceRoots: roots
+        };
     }
 
     /**
@@ -50,6 +108,48 @@ export class WebviewProvider {
         } else {
             this.showFormatPanel();
         }
+    }
+
+    /**
+     * Opens a JSON file in the format panel without reading it here.
+     *
+     * The panel's worker streams the file itself from a webview resource URI,
+     * so a very large document never crosses postMessage and never has to fit
+     * in a textarea.
+     */
+    public async openJsonFile(): Promise<void> {
+        const picked = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            openLabel: 'Open in JSONBro',
+            filters: { 'JSON Files': ['json', 'jsonl', 'ndjson', 'txt'], 'All Files': ['*'] }
+        });
+
+        const file = picked?.[0];
+        if (!file) {
+            return;
+        }
+
+        // A file can only be handed to the webview as a URI if its folder is a
+        // permitted resource root, so widen the roots before asking for one.
+        this.extraResourceRoot = vscode.Uri.joinPath(file, '..');
+
+        let panel = this.existingPanels.get('format');
+        if (panel) {
+            panel.webview.options = this.webviewOptions();
+        } else {
+            this.showPanel('format');
+            panel = this.existingPanels.get('format');
+        }
+
+        if (!panel) {
+            return;
+        }
+
+        this.sendToPanel('format', {
+            command: 'openUrl',
+            url: panel.webview.asWebviewUri(file).toString(),
+            label: file.path.split('/').pop() ?? 'file'
+        });
     }
 
     /**
@@ -118,14 +218,7 @@ export class WebviewProvider {
             panelId,
             title,
             vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-                localResourceRoots: [
-                    vscode.Uri.joinPath(this.context.extensionUri, 'out'),
-                    vscode.Uri.joinPath(this.context.extensionUri, 'media')
-                ]
-            }
+            this.webviewOptions()
         );
 
         // The tab icon renders outside the webview, so it cannot pick up theme
@@ -137,7 +230,13 @@ export class WebviewProvider {
 
         // Track the panel
         this.existingPanels.set(mode, panel);
+        this.attach(mode, panel);
 
+        panel.webview.html = this.contentGenerator.getWebviewContent(panel.webview, mode);
+    }
+
+    /** Wires the lifecycle and message handling shared by new and restored panels. */
+    private attach(mode: 'format' | 'diff', panel: vscode.WebviewPanel): void {
         // Remove from tracking when disposed
         panel.onDidDispose(() => {
             this.existingPanels.delete(mode);
@@ -145,14 +244,18 @@ export class WebviewProvider {
             this.pendingMessages.delete(mode);
         });
 
-        panel.webview.html = this.contentGenerator.getWebviewContent(panel.webview, mode);
-
         // Handle messages from the webview
         panel.webview.onDidReceiveMessage(
             message => {
                 switch (message.command) {
                     case 'ready':
                         this.readyPanels.add(mode);
+                        // Settings first, so the panel is configured before it
+                        // acts on anything that was queued for it.
+                        panel.webview.postMessage({
+                            command: 'settings',
+                            settings: readSettings()
+                        });
                         this.flushPendingMessages(mode);
                         break;
                     case 'showError':

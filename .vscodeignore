@@ -1,12 +1,18 @@
 # Development files
 .vscode/**
 .vscode-test/**
+.claude/**
 src/**
 .gitignore
 .gitattributes
 tsconfig*.json
+jest.config.js
 webpack.config.js
 .eslintrc.json
+
+# Preview pages written by the visual-check harness. Gitignored, but vsce
+# packages untracked files unless they are named here.
+.preview/**
 
 # Build files (keep only the bundled output)
 out/src/**
