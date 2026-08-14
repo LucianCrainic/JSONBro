@@ -6,6 +6,7 @@
  * the webview where no one could see or change them.
  */
 import * as vscode from 'vscode';
+import { DEFAULT_LIMITS, type HistoryLimits } from './history-store';
 import type { Settings } from './shared/messages';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -15,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
     defaultPaneRatio: 0.5,
     autoFormatOnPaste: false,
     searchScope: 'all',
+    matchEditorTheme: true,
     maxInlineSize: 2 * 1024 * 1024,
     diffMaxDocumentSize: 25 * 1024 * 1024,
     diffArrayAlignBudget: 1_000_000
@@ -34,6 +36,7 @@ export function readSettings(): Settings {
         ),
         autoFormatOnPaste: config.get('autoFormatOnPaste', DEFAULT_SETTINGS.autoFormatOnPaste),
         searchScope: config.get('search.defaultScope', DEFAULT_SETTINGS.searchScope),
+        matchEditorTheme: config.get('matchEditorTheme', DEFAULT_SETTINGS.matchEditorTheme),
         maxInlineSize: config.get('maxInlineSize', DEFAULT_SETTINGS.maxInlineSize),
         diffMaxDocumentSize: config.get(
             'diff.maxDocumentSize',
@@ -42,6 +45,28 @@ export function readSettings(): Settings {
         diffArrayAlignBudget: config.get(
             'diff.arrayAlignBudget',
             DEFAULT_SETTINGS.diffArrayAlignBudget
+        )
+    };
+}
+
+/**
+ * How much history the user is willing to keep.
+ *
+ * Read on every write rather than cached, so lowering a limit takes effect at
+ * the next save instead of after a restart.
+ */
+export function readHistoryLimits(): HistoryLimits {
+    const config = vscode.workspace.getConfiguration('jsonbro');
+
+    return {
+        maxEntries: Math.max(0, config.get('history.maxEntries', DEFAULT_LIMITS.maxEntries)),
+        maxEntrySize: Math.max(
+            1024,
+            config.get('history.maxEntrySize', DEFAULT_LIMITS.maxEntrySize)
+        ),
+        maxTotalSize: Math.max(
+            1024,
+            config.get('history.maxTotalSize', DEFAULT_LIMITS.maxTotalSize)
         )
     };
 }

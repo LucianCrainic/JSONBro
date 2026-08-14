@@ -324,7 +324,7 @@ export class JSONDiff {
      */
     private static renderDiffActions(applyTitle: string): string {
         const button = (cls: string, icon: string, title: string, hidden = false) =>
-            `<button class="diff-action-btn ${cls}" type="button" title="${title}" aria-label="${title}"${
+            `<button class="diff-action-btn ${cls}" type="button" data-tip="${title}" aria-label="${title}"${
                 hidden ? ' hidden' : ''
             }><span class="codicon codicon-${icon}" aria-hidden="true"></span></button>`;
 
@@ -438,7 +438,7 @@ export class JSONDiff {
             // Truncate long strings for compact display
             if (!isExpanded && escaped.length > 60) {
                 const fullValue = this.escapeHtml(JSON.stringify(value));
-                return `<span class="expandable-value" data-full="${fullValue}" title="Click to expand">"${escaped.substring(0, 57)}..."</span>`;
+                return `<span class="expandable-value" data-full="${fullValue}" data-tip="Click to expand">"${escaped.substring(0, 57)}..."</span>`;
             }
             return `"${escaped}"`;
         }
@@ -452,10 +452,10 @@ export class JSONDiff {
                 // For larger objects, show a summary
                 const fullValue = this.escapeHtml(JSON.stringify(value, null, 2));
                 if (Array.isArray(value)) {
-                    return `<span class="expandable-value" data-full="${fullValue}" title="Click to expand">[Array with ${value.length} items]</span>`;
+                    return `<span class="expandable-value" data-full="${fullValue}" data-tip="Click to expand">[Array with ${value.length} items]</span>`;
                 } else {
                     const keys = Object.keys(value);
-                    return `<span class="expandable-value" data-full="${fullValue}" title="Click to expand">{Object with ${keys.length} properties}</span>`;
+                    return `<span class="expandable-value" data-full="${fullValue}" data-tip="Click to expand">{Object with ${keys.length} properties}</span>`;
                 }
             } catch {
                 return '[Object]';

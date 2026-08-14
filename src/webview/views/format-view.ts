@@ -8,17 +8,16 @@ import {
     type SearchMatch,
     type SearchOptions
 } from '../engine/document-search';
-import { FoldState } from '../engine/line-index';
 import { PrettySink, type PrettyDocument } from '../engine/pretty-sink';
 import { parseInto } from '../engine/recovering-parser';
 import { JSONFormatter } from '../formatter';
-import { byId, delegate, on } from '../ui/dom';
+import { DocumentPane } from '../ui/document-pane';
+import { byId, on } from '../ui/dom';
 import { FindWidget } from '../ui/find-widget';
 import { Icons } from '../ui/icons';
 import { PanelGroup } from '../ui/panels';
 import { ProblemsList } from '../ui/problems-list';
 import { Splitter } from '../ui/splitter';
-import { VirtualList } from '../ui/virtual-list';
 import { DocumentWorkerClient, formatHere } from '../worker/client';
 import { formatBytes, plural, type StatusModel } from '../ui/status-bar';
 import type { Messenger } from '../ui/messaging';
@@ -28,10 +27,8 @@ export class FormatView {
     private readonly messenger: Messenger;
     private readonly teardown: Array<() => void> = [];
 
-    /** The formatted document: text plus where its lines are. */
-    private doc: PrettyDocument | null = null;
-    private folds: FoldState | null = null;
-    private list: VirtualList | null = null;
+    /** The viewport showing the formatted document. */
+    private pane: DocumentPane | null = null;
 
     private diagnostics: Diagnostic[] = [];
     private matches: SearchMatch[] = [];
@@ -68,7 +65,7 @@ export class FormatView {
             // Opening find used to be a silent no-op until something had been
             // formatted. Format first instead, so the control always responds.
             ensureSearchable: () => {
-                if (this.doc === null) {
+                if (!this.doc) {
                     this.format();
                 }
                 return this.doc !== null;
@@ -87,7 +84,6 @@ export class FormatView {
         this.setupLayout();
         this.setupControls();
         this.setupCopyInterception();
-        this.setupFolding();
     }
 
     // ---------------------------------------------------------------- search
@@ -105,7 +101,7 @@ export class FormatView {
         this.matchesTruncated = result.truncated;
         this.matchIndex = result.matches.length > 0 ? 0 : -1;
         this.indexMatches();
-        this.list?.refresh();
+        this.pane?.refresh();
 
         if (this.matchIndex === 0) {
             this.revealMatch();
@@ -147,25 +143,14 @@ export class FormatView {
         this.matchIndex =
             (this.matchIndex + direction + this.matches.length) % this.matches.length;
         this.revealMatch();
-        this.list?.refresh();
+        this.pane?.refresh();
     }
 
     /** Brings the current match into view, opening any fold hiding it. */
     private revealMatch(): void {
         const match = this.matches[this.matchIndex];
-        if (!match || !this.folds) {
-            return;
-        }
-
-        let hiding = this.folds.foldHiding(match.line);
-        while (hiding !== -1) {
-            this.folds.toggle(hiding);
-            hiding = this.folds.foldHiding(match.line);
-        }
-
-        const row = this.folds.rowAt(match.line);
-        if (row >= 0) {
-            this.list?.revealRow(row);
+        if (match) {
+            this.pane?.revealLine(match.line);
         }
     }
 
@@ -174,7 +159,7 @@ export class FormatView {
         this.matchesByLine = new Map();
         this.matchIndex = -1;
         this.matchesTruncated = false;
-        this.list?.refresh();
+        this.pane?.refresh();
     }
 
     // ---------------------------------------------------------------- layout
@@ -231,7 +216,7 @@ export class FormatView {
         toggle?.setAttribute('aria-pressed', String(next));
 
         byId('output')?.classList.toggle('hide-line-numbers', !next);
-        this.list?.refresh();
+        this.pane?.refresh();
     }
 
     // ---------------------------------------------------------------- format
@@ -322,14 +307,12 @@ export class FormatView {
             return;
         }
 
-        this.doc = outcome.doc;
-        this.folds = new FoldState(outcome.doc.lines);
         this.diagnostics = outcome.diagnostics;
 
         output.classList.remove('is-error');
         output.classList.toggle('hide-line-numbers', !JSONFormatter.getShowLineNumbers());
         this.setEmpty(false);
-        this.ensureList().refresh();
+        this.ensurePane().setDocument(outcome.doc);
 
         this.problems.show(outcome.diagnostics);
         this.publishStatus(this.describeDocument(sourceLength, outcome.diagnostics));
@@ -359,61 +342,29 @@ export class FormatView {
 
     // ------------------------------------------------------------- rendering
 
-    private ensureList(): VirtualList {
+    private ensurePane(): DocumentPane {
         const output = byId('output');
-        if (this.list || !output) {
-            return this.list as VirtualList;
+        if (!this.pane && output) {
+            this.pane = new DocumentPane({
+                viewport: output,
+                showLineNumbers: () => JSONFormatter.getShowLineNumbers(),
+                marksOn: line => this.matchesOnLine(line)
+            });
         }
-
-        this.list = new VirtualList({
-            viewport: output,
-            count: () => this.folds?.visibleCount ?? 0,
-            renderRows: (from, to) => this.renderRows(from, to)
-        });
-        return this.list;
+        return this.pane as DocumentPane;
     }
 
-    /** Markup for the rows currently on screen. */
-    private renderRows(from: number, to: number): string {
-        const doc = this.doc;
-        const folds = this.folds;
-        if (!doc || !folds) {
-            return '';
-        }
-
-        const showLineNumbers = JSONFormatter.getShowLineNumbers();
-        const total = doc.text.length;
-        const out: string[] = [];
-
-        for (let row = from; row < to; row++) {
-            const line = folds.lineAt(row);
-            if (line >= doc.lines.lineCount) {
-                break;
-            }
-
-            const text = doc.text.slice(doc.lines.start(line), doc.lines.end(line, total));
-
-            out.push(
-                JSONFormatter.renderLine(text, {
-                    lineNumber: line + 1,
-                    foldable: doc.lines.isFoldable(line),
-                    collapsed: folds.isCollapsed(line),
-                    showLineNumbers,
-                    matches: this.matchesOnLine(line)
-                })
-            );
-        }
-
-        return out.join('');
+    /** The formatted document, or null before anything has been formatted. */
+    private get doc(): PrettyDocument | null {
+        return this.pane?.document ?? null;
     }
 
     private reset(): void {
-        this.doc = null;
-        this.folds = null;
+        this.pane?.setDocument(null);
         this.diagnostics = [];
         this.matches = [];
         this.matchIndex = -1;
-        this.list?.refresh();
+        this.pane?.refresh();
         this.setEmpty(true);
         this.problems.clear();
     }
@@ -550,10 +501,7 @@ export class FormatView {
      * for a large document there is no value to serialise.
      */
     private serializeForSave(): string | null {
-        if (!this.doc) {
-            return null;
-        }
-        return this.doc.text.toString();
+        return this.pane?.text() ?? null;
     }
 
     // -------------------------------------------------------------- problems
@@ -584,44 +532,12 @@ export class FormatView {
 
     // --------------------------------------------------------------- folding
 
-    private setupFolding(): void {
-        const output = byId('output');
-        if (!output) {
-            return;
-        }
-        // Delegated, so it survives every re-render of the viewport.
-        this.teardown.push(
-            delegate(output, 'click', '.fold-arrow', (arrow, event) => {
-                event.stopPropagation();
-                const line = Number(arrow.dataset.foldLine);
-                if (Number.isInteger(line)) {
-                    this.toggleFold(line);
-                }
-            })
-        );
-    }
-
-    /**
-     * Opens or closes the container starting on `line`.
-     *
-     * Folding is a change to the index, not to the output: the rows that
-     * disappear were never rendered in the first place unless they happened to
-     * be on screen. This used to hide every affected element one at a time and
-     * hunt down each of their gutter entries.
-     */
-    private toggleFold(line: number): void {
-        this.folds?.toggle(line);
-        this.list?.refresh();
-    }
-
     public collapseAll(): void {
-        this.folds?.collapseAll();
-        this.list?.refresh();
+        this.pane?.collapseAll();
     }
 
     public expandAll(): void {
-        this.folds?.expandAll();
-        this.list?.refresh();
+        this.pane?.expandAll();
     }
 
     // ------------------------------------------------------------------ copy
@@ -663,7 +579,7 @@ export class FormatView {
         this.panels?.dispose();
         this.find.dispose();
         this.problems.dispose();
-        this.list?.dispose();
+        this.pane?.dispose();
         this.worker.dispose();
     }
 }

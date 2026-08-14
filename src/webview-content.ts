@@ -90,12 +90,25 @@ export class WebviewContentGenerator {
             <div id="toolbar">
                 <div class="toolbar__group">
                     <div id="mode-switcher" role="tablist" aria-label="View">
-                        ${this.modeTab('format-mode', 'json', 'Format', mode === 'format')}
-                        ${this.modeTab('diff-mode', 'git-compare', 'Diff', mode === 'diff')}
+                        ${this.modeTab(
+                            'format-mode',
+                            'json',
+                            'Format',
+                            mode === 'format',
+                            'Format and inspect one document'
+                        )}
+                        ${this.modeTab(
+                            'diff-mode',
+                            'git-compare',
+                            'Diff',
+                            mode === 'diff',
+                            'Compare two documents'
+                        )}
                     </div>
-                    <button id="action-btn" class="btn btn--primary" title="${
-                        mode === 'format' ? 'Format JSON' : 'Compare JSON'
-                    }">
+                    <button id="action-btn" class="btn btn--primary"${this.tip(
+                        mode === 'format' ? 'Format JSON' : 'Compare JSON',
+                        'mod+enter'
+                    )}>
                         <span class="codicon codicon-play" aria-hidden="true"></span>
                         <span id="action-text">${mode === 'format' ? 'Format' : 'Compare'}</span>
                     </button>
@@ -112,7 +125,8 @@ export class WebviewContentGenerator {
                         id: 'search-toggle',
                         icon: 'search',
                         label: 'Find',
-                        title: 'Find in formatted JSON (Ctrl/Cmd+F)',
+                        title: 'Find in formatted JSON',
+                        key: 'mod+f',
                         attrs: 'data-mode-only="format"'
                     })}
                     ${this.iconButton({ id: 'copy', icon: 'copy', label: 'Copy', title: 'Copy to clipboard' })}
@@ -123,7 +137,13 @@ export class WebviewContentGenerator {
                         title: 'Save to a file',
                         attrs: 'data-mode-only="format"'
                     })}
-                    ${this.iconButton({ id: 'clear', icon: 'clear-all', label: 'Clear', title: 'Clear (Ctrl/Cmd+K)' })}
+                    ${this.iconButton({
+                        id: 'clear',
+                        icon: 'clear-all',
+                        label: 'Clear',
+                        title: 'Clear',
+                        key: 'mod+k'
+                    })}
                 </div>
             </div>
 
@@ -133,10 +153,10 @@ export class WebviewContentGenerator {
                         this.maximizeButton('input-panel')
                     ])}
                     <div class="pane__body">
-                        <textarea id="input" spellcheck="false" placeholder="Paste or type JSON here"></textarea>
+                        <textarea id="input" spellcheck="false" aria-label="JSON to format" placeholder="Paste or type JSON here"></textarea>
                     </div>
                 </section>
-                <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
+                <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
                 <section id="output-panel" class="pane" data-empty="true">
                     ${this.paneHeader('Formatted', [
                         this.iconButton({
@@ -151,7 +171,7 @@ export class WebviewContentGenerator {
                     ], 'output-meta')}
                     <div class="pane__body">
                         <section id="problems" class="problems" role="status" hidden>
-                            <button type="button" id="problems-toggle" class="problems__summary" aria-expanded="false" aria-controls="problems-list">
+                            <button type="button" id="problems-toggle" class="problems__summary" aria-expanded="false" aria-controls="problems-list" data-tip="Show what was repaired while parsing">
                                 <span class="codicon codicon-chevron-right problems__chevron" aria-hidden="true"></span>
                                 <span class="codicon problems__icon" aria-hidden="true"></span>
                                 <span id="problems-title" class="problems__title"></span>
@@ -161,7 +181,7 @@ export class WebviewContentGenerator {
                         <div id="find-widget" class="find-widget" role="search" hidden>
                             <div class="find-widget__row">
                                 <div class="find-widget__field">
-                                    <input type="text" id="find-input" placeholder="Find" spellcheck="false" aria-label="Find in formatted JSON" />
+                                    <input type="text" id="find-input" placeholder="Find" spellcheck="false" aria-label="Find in formatted JSON" data-tip="Search the formatted output" />
                                     ${this.iconButton({
                                         id: 'find-match-case',
                                         icon: 'case-sensitive',
@@ -180,14 +200,14 @@ export class WebviewContentGenerator {
                                     })}
                                 </div>
                                 <span id="find-count" class="find-widget__count" role="status"></span>
-                                ${this.iconButton({ id: 'find-prev', icon: 'arrow-up', label: 'Previous match', title: 'Previous match (Shift+Enter)' })}
-                                ${this.iconButton({ id: 'find-next', icon: 'arrow-down', label: 'Next match', title: 'Next match (Enter)' })}
-                                ${this.iconButton({ id: 'find-close', icon: 'close', label: 'Close find', title: 'Close (Escape)' })}
+                                ${this.iconButton({ id: 'find-prev', icon: 'arrow-up', label: 'Previous match', title: 'Previous match', key: 'shift+enter' })}
+                                ${this.iconButton({ id: 'find-next', icon: 'arrow-down', label: 'Next match', title: 'Next match', key: 'enter' })}
+                                ${this.iconButton({ id: 'find-close', icon: 'close', label: 'Close find', title: 'Close find', key: 'escape' })}
                             </div>
                             <div class="find-widget__scopes" role="group" aria-label="Search scope">
-                                <button type="button" class="find-scope is-active" data-find-scope="all" aria-pressed="true">All</button>
-                                <button type="button" class="find-scope" data-find-scope="keys" aria-pressed="false">Keys</button>
-                                <button type="button" class="find-scope" data-find-scope="values" aria-pressed="false">Values</button>
+                                ${this.findScope('all', 'All', 'Search keys and values')}
+                                ${this.findScope('keys', 'Keys', 'Search property names only')}
+                                ${this.findScope('values', 'Values', 'Search values only')}
                             </div>
                         </div>
                         <div id="output" class="pane__content"></div>
@@ -205,17 +225,11 @@ export class WebviewContentGenerator {
             </div>
 
             <div id="diff-container" class="mode-container">
-                <section id="left-json-panel" class="pane">
-                    ${this.paneHeader('Original', [
-                        this.iconButton({ id: 'copy-left-json', icon: 'copy', label: 'Copy original', title: 'Copy original to clipboard' }),
-                        this.iconButton({ id: 'clear-left-json', icon: 'clear-all', label: 'Clear original', title: 'Clear original' }),
-                        this.maximizeButton('left-json-panel')
-                    ])}
-                    <div class="pane__body">
-                        <textarea id="left-json" spellcheck="false" placeholder="Paste the original JSON here"></textarea>
-                    </div>
-                </section>
-                <div id="diff-splitter-left" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
+                ${this.diffInputPane('left', 'Original', [
+                    this.iconButton({ id: 'copy-left-json', icon: 'copy', label: 'Copy original', title: 'Copy original to clipboard' }),
+                    this.iconButton({ id: 'clear-left-json', icon: 'clear-all', label: 'Clear original', title: 'Clear original' })
+                ])}
+                <div id="diff-splitter-left" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
                 <section id="diff-result-panel" class="pane">
                     ${this.paneHeader('Changes', [
                         this.iconButton({ id: 'apply-all-diffs', icon: 'check-all', label: 'Apply all changes', title: 'Apply every change to the original', attrs: 'hidden' }),
@@ -232,16 +246,11 @@ export class WebviewContentGenerator {
                         <div id="diff-output" class="pane__content"></div>
                     </div>
                 </section>
-                <div id="diff-splitter-right" class="splitter" role="separator" aria-orientation="vertical" title="Drag to resize, double-click to reset"></div>
-                <section id="right-json-panel" class="pane">
-                    ${this.paneHeader('Modified', [
-                        this.iconButton({ id: 'clear-right-json', icon: 'clear-all', label: 'Clear modified', title: 'Clear modified' }),
-                        this.maximizeButton('right-json-panel')
-                    ])}
-                    <div class="pane__body">
-                        <textarea id="right-json" spellcheck="false" placeholder="Paste the modified JSON here"></textarea>
-                    </div>
-                </section>
+                <div id="diff-splitter-right" class="splitter" role="separator" aria-orientation="vertical" data-tip="Drag to resize, double-click to reset"></div>
+                ${this.diffInputPane('right', 'Modified', [
+                    this.iconButton({ id: 'copy-right-json', icon: 'copy', label: 'Copy modified', title: 'Copy modified to clipboard' }),
+                    this.iconButton({ id: 'clear-right-json', icon: 'clear-all', label: 'Clear modified', title: 'Clear modified' })
+                ])}
             </div>
 
             <footer id="status-bar">
@@ -251,9 +260,64 @@ export class WebviewContentGenerator {
         `;
     }
 
+    /**
+     * One side of the comparison.
+     *
+     * The pane holds both a textarea and a rendered view of the same document
+     * and shows one at a time, chosen by `data-view` on the section. Comparing
+     * switches both sides to the rendered view, which is where the syntax
+     * colouring, the gutter and folding come from -- the panes used to be bare
+     * textareas with none of it.
+     */
+    private diffInputPane(side: 'left' | 'right', title: string, actions: string[]): string {
+        const label = title.toLowerCase();
+        const header = this.paneHeader(
+            title,
+            [
+                this.iconButton({
+                    id: `format-${side}-json`,
+                    icon: 'json',
+                    label: `Format ${label}`,
+                    title: `Format the ${label} document`
+                }),
+                this.iconButton({
+                    id: `open-${side}-json`,
+                    icon: 'go-to-file',
+                    label: `Open a file as the ${label}`,
+                    title: `Open a file as the ${label}`
+                }),
+                this.iconButton({
+                    id: `edit-${side}-json`,
+                    icon: 'edit',
+                    label: `Edit ${label}`,
+                    title: `Edit the ${label} document`
+                }),
+                ...actions,
+                this.maximizeButton(`${side}-json-panel`)
+            ],
+            `${side}-json-meta`
+        );
+
+        return `<section id="${side}-json-panel" class="pane" data-view="edit">
+                    ${header}
+                    <div class="pane__body">
+                        <textarea id="${side}-json" spellcheck="false" aria-label="${title} JSON" placeholder="Paste the ${label} JSON here"></textarea>
+                        <div id="${side}-json-view" class="pane__content doc-view"></div>
+                    </div>
+                </section>`;
+    }
+
     /** A tab in the Format/Diff switcher. */
-    private modeTab(id: string, icon: string, label: string, active: boolean): string {
-        return `<button id="${id}" class="mode-tab${active ? ' active' : ''}" role="tab" aria-selected="${active}">
+    private modeTab(
+        id: string,
+        icon: string,
+        label: string,
+        active: boolean,
+        tip: string
+    ): string {
+        return `<button id="${id}" class="mode-tab${
+            active ? ' active' : ''
+        }" role="tab" aria-selected="${active}"${this.tip(tip, 'mod+m')}>
                             <span class="codicon codicon-${icon}" aria-hidden="true"></span>
                             ${label}
                         </button>`;
@@ -278,9 +342,21 @@ export class WebviewContentGenerator {
         const classes = ['chip', tone ? `chip--${tone}` : '', filter === 'all' ? 'is-active' : '']
             .filter(Boolean)
             .join(' ');
-        return `<button type="button" class="${classes}" data-diff-filter="${filter}" aria-pressed="${filter === 'all'}">
+        const tip =
+            filter === 'all' ? 'Show every change' : `Show only ${label.toLowerCase()} changes`;
+        return `<button type="button" class="${classes}" data-diff-filter="${filter}" aria-pressed="${
+            filter === 'all'
+        }"${this.tip(tip)}>
                                 <span class="chip__label">${label}</span><span class="chip__count"></span>
                             </button>`;
+    }
+
+    /** A button that narrows the find to keys, values or both. */
+    private findScope(scope: string, label: string, tip: string): string {
+        const active = scope === 'all';
+        return `<button type="button" class="find-scope${
+            active ? ' is-active' : ''
+        }" data-find-scope="${scope}" aria-pressed="${active}"${this.tip(tip)}>${label}</button>`;
     }
 
     private maximizeButton(panelId: string): string {
@@ -295,19 +371,30 @@ export class WebviewContentGenerator {
     /**
      * Icon-only button. The visible label is the icon, so the accessible name
      * comes from aria-label and the icon itself is hidden from assistive tech.
+     *
+     * Hover text is `data-tip`, not `title`: the panel draws its own tooltips
+     * so they appear promptly, stay inside the webview's bounds and can show a
+     * keyboard shortcut. Emitting both would render two tooltips at once.
      */
     private iconButton(options: {
         id?: string;
         icon: string;
         label: string;
         title: string;
+        /** Shortcut spelled as `mod+enter`, `shift+enter`, `escape`. */
+        key?: string;
         classes?: string;
         attrs?: string;
     }): string {
         const id = options.id ? ` id="${options.id}"` : '';
         const classes = ['icon-btn', options.classes].filter(Boolean).join(' ');
         const attrs = options.attrs ? ` ${options.attrs}` : '';
-        return `<button${id} class="${classes}" type="button" title="${options.title}" aria-label="${options.label}"${attrs}><span class="codicon codicon-${options.icon}" aria-hidden="true"></span></button>`;
+        return `<button${id} class="${classes}" type="button"${this.tip(options.title, options.key)} aria-label="${options.label}"${attrs}><span class="codicon codicon-${options.icon}" aria-hidden="true"></span></button>`;
+    }
+
+    /** The tooltip attributes for any control. */
+    private tip(text: string, key?: string): string {
+        return ` data-tip="${text}"${key ? ` data-tip-key="${key}"` : ''}`;
     }
 
     private getNonce(): string {

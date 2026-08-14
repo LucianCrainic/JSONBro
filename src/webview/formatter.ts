@@ -19,6 +19,8 @@ export interface RenderLineOptions {
     showLineNumbers?: boolean;
     /** Character ranges within the line to mark as search hits. */
     matches?: ReadonlyArray<{ start: number; end: number; current?: boolean }>;
+    /** Draw the row as the currently selected one. */
+    highlighted?: boolean;
 }
 
 export class JSONFormatter {
@@ -56,13 +58,17 @@ export class JSONFormatter {
         const fold = options.foldable
             ? `<span class="fold-arrow${options.collapsed ? ' folded' : ''}" data-fold-line="${
                   options.lineNumber - 1
-              }" role="button" aria-label="${options.collapsed ? 'Expand' : 'Collapse'}"></span>`
+              }" role="button" aria-label="${
+                  options.collapsed ? 'Expand' : 'Collapse'
+              }" data-tip="${options.collapsed ? 'Expand' : 'Collapse'} this block"></span>`
             : '<span class="fold-spacer" aria-hidden="true"></span>';
 
         const content = tokenize(text, options.matches ?? []);
         const ellipsis = options.collapsed ? '<span class="fold-ellipsis">&#8943;</span>' : '';
 
-        return `<div class="json-line" data-line="${options.lineNumber}">${gutter}${fold}<span class="json-line__text">${content}${ellipsis}</span></div>`;
+        const selected = options.highlighted ? ' is-selected' : '';
+
+        return `<div class="json-line${selected}" data-line="${options.lineNumber}">${gutter}${fold}<span class="json-line__text">${content}${ellipsis}</span></div>`;
     }
 }
 

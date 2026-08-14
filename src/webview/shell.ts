@@ -8,19 +8,31 @@ import { byId, on, qsa } from './ui/dom';
 import { Messenger } from './ui/messaging';
 import { Shortcuts } from './ui/shortcuts';
 import { StatusBar } from './ui/status-bar';
+import { setTip, TooltipHost } from './ui/tooltip';
 import { DiffView } from './views/diff-view';
 import { FormatView } from './views/format-view';
-import type { Mode, Settings } from '../shared/messages';
+import type { Mode, Settings, SyntaxColors } from '../shared/messages';
+
+/** Every part of a JSON document the theme can colour. */
+const SYNTAX_ROLES: Array<keyof SyntaxColors> = [
+    'key',
+    'string',
+    'number',
+    'boolean',
+    'null',
+    'punctuation'
+];
 
 const ACTION_LABELS: Record<Mode, { text: string; title: string }> = {
-    format: { text: 'Format', title: 'Format JSON (Ctrl/Cmd+Enter)' },
-    diff: { text: 'Compare', title: 'Compare JSON (Ctrl/Cmd+Enter)' }
+    format: { text: 'Format', title: 'Format JSON' },
+    diff: { text: 'Compare', title: 'Compare JSON' }
 };
 
 export class Shell {
     private readonly messenger = new Messenger();
     private readonly shortcuts = new Shortcuts();
     private readonly statusBar = new StatusBar();
+    private readonly tooltips = new TooltipHost();
     private readonly formatView: FormatView;
     private readonly diffView: DiffView;
     private readonly state = new PanelStateStore();
@@ -46,6 +58,7 @@ export class Shell {
 
     public start(): void {
         this.labelModifierKeys();
+        this.tooltips.start();
 
         // The host renders <body data-mode="..."> so the first paint is already
         // correct; adopt it rather than assuming a default.
@@ -123,6 +136,27 @@ export class Shell {
         this.diffView.applySettings(settings);
     }
 
+    /**
+     * Paints JSON in the colours the host read out of the active theme.
+     *
+     * Written as custom properties on the root element rather than as a style
+     * tag: the content security policy forbids inline styles, and setting a
+     * property through the CSSOM is not an inline style. A role the theme says
+     * nothing about is cleared, so the contributed colour for it applies
+     * instead of a stale value from the previous theme.
+     */
+    private applyThemeColors(colors: SyntaxColors): void {
+        const root = document.documentElement;
+        for (const role of SYNTAX_ROLES) {
+            const value = colors[role];
+            if (value) {
+                root.style.setProperty(`--jb-theme-${role}`, value);
+            } else {
+                root.style.removeProperty(`--jb-theme-${role}`);
+            }
+        }
+    }
+
     /** Shows the modifier key this platform actually uses. */
     private labelModifierKeys(): void {
         const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
@@ -173,7 +207,9 @@ export class Shell {
         if (actionText) {
             actionText.textContent = ACTION_LABELS[mode].text;
         }
-        actionButton?.setAttribute('title', ACTION_LABELS[mode].title);
+        if (actionButton) {
+            setTip(actionButton, ACTION_LABELS[mode].title, 'mod+enter');
+        }
 
         if (mode === 'diff') {
             this.formatView.find.close();
@@ -271,6 +307,29 @@ export class Shell {
             run: () => this.diffView.resetPanelSizes()
         });
 
+        // Walking the change list from the keyboard. These carry no modifier,
+        // so they defer to whatever the user is typing into.
+        const browsingChanges = () => inDiff() && this.diffView.changeListHasFocus;
+
+        this.shortcuts.register({
+            key: 'arrowdown',
+            when: browsingChanges,
+            description: 'Next change',
+            run: () => this.diffView.stepSelection(1)
+        });
+        this.shortcuts.register({
+            key: 'arrowup',
+            when: browsingChanges,
+            description: 'Previous change',
+            run: () => this.diffView.stepSelection(-1)
+        });
+        this.shortcuts.register({
+            key: 'enter',
+            when: browsingChanges,
+            description: 'Apply the selected change',
+            run: () => this.diffView.applySelection()
+        });
+
         this.shortcuts.start();
     }
 
@@ -286,9 +345,14 @@ export class Shell {
             this.diffView.load(message.leftJson, message.rightJson);
         });
         this.messenger.on('settings', message => this.applySettings(message.settings));
+        this.messenger.on('themeColors', message => this.applyThemeColors(message.colors));
         this.messenger.on('openUrl', message => {
             this.setMode('format');
             this.formatView.openUrl(message.url, message.label);
+        });
+        this.messenger.on('loadDiffSide', message => {
+            this.setMode('diff');
+            this.diffView.loadSide(message.side, message.json, message.label);
         });
     }
 }

@@ -16,6 +16,14 @@ import type { PanelState } from '../shared/messages';
  */
 export const MAX_PERSISTED_INPUT = 512 * 1024;
 
+/**
+ * Ceiling on everything one panel persists.
+ *
+ * A diff panel holds three documents, so a per-field cap alone let it store
+ * three times what that cap advertised.
+ */
+export const MAX_PERSISTED_TOTAL = 1024 * 1024;
+
 interface VsCodeApi {
     postMessage(message: unknown): void;
     getState(): unknown;
@@ -90,15 +98,32 @@ export class PanelStateStore {
     }
 }
 
-/** Drops anything too large to be worth carrying through a reload. */
+/**
+ * Drops anything too large to be worth carrying through a reload.
+ *
+ * There is a cap per field and a cap on the three together: capping only each
+ * field let a diff panel persist three times the number the constant named.
+ * The largest field gives way first, since dropping one big document keeps
+ * more of the panel's contents than dropping several small ones.
+ */
 function trim(state: PanelState): PanelState {
     const trimmed: PanelState = { mode: state.mode };
 
-    for (const key of ['input', 'leftJson', 'rightJson'] as const) {
-        const value = state[key];
-        if (typeof value === 'string' && value.length <= MAX_PERSISTED_INPUT) {
-            trimmed[key] = value;
+    const fields = (['input', 'leftJson', 'rightJson'] as const)
+        .map(key => ({ key, value: state[key] }))
+        .filter(
+            (field): field is { key: 'input' | 'leftJson' | 'rightJson'; value: string } =>
+                typeof field.value === 'string' && field.value.length <= MAX_PERSISTED_INPUT
+        )
+        .sort((a, b) => a.value.length - b.value.length);
+
+    let total = 0;
+    for (const field of fields) {
+        if (total + field.value.length > MAX_PERSISTED_TOTAL) {
+            continue;
         }
+        total += field.value.length;
+        trimmed[field.key] = field.value;
     }
 
     if (state.strict !== undefined) {

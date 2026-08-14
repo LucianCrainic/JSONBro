@@ -43,13 +43,23 @@ export class JSONBroActivityBarProvider implements vscode.TreeDataProvider<JSONB
         this.refresh();
     }
 
-    async removeFormatHistoryEntry(index: number): Promise<void> {
-        await this.store.removeFormat(index);
+    async removeFormatHistoryEntries(indices: number[]): Promise<void> {
+        await this.store.removeFormats(indices);
         this.refresh();
     }
 
-    async removeDiffHistoryEntry(index: number): Promise<void> {
-        await this.store.removeDiff(index);
+    async removeDiffHistoryEntries(indices: number[]): Promise<void> {
+        await this.store.removeDiffs(indices);
+        this.refresh();
+    }
+
+    async clearFormatHistory(): Promise<void> {
+        await this.store.clearFormats();
+        this.refresh();
+    }
+
+    async clearDiffHistory(): Promise<void> {
+        await this.store.clearDiffs();
         this.refresh();
     }
 
@@ -90,6 +100,13 @@ export class JSONBroActivityBarProvider implements vscode.TreeDataProvider<JSONB
     private roots(): JSONBroItem[] {
         const formats = this.store.getFormatHistory();
         const diffs = this.store.getDiffHistory();
+        const usage = this.store.usage();
+
+        // History lives in global state, so what it costs should be visible
+        // rather than something the user discovers by other means.
+        const budget =
+            `${formatSize(usage.bytes)} of ${formatSize(usage.limit)} used.\n` +
+            'Oldest entries are dropped once the budget is full.';
 
         return [
             new JSONBroItem('action', 'Format JSON', 'Click to open JSON formatter', {
@@ -100,27 +117,36 @@ export class JSONBroActivityBarProvider implements vscode.TreeDataProvider<JSONB
                 command: 'jsonbro.diffJson',
                 title: 'Diff JSON'
             }, 'diff'),
-            new JSONBroItem(
-                'formatHistoryRoot',
-                'Format History',
-                `${formats.length} entries`,
-                undefined,
-                'history',
-                formats.length > 0
-                    ? vscode.TreeItemCollapsibleState.Collapsed
-                    : vscode.TreeItemCollapsibleState.None
-            ),
-            new JSONBroItem(
-                'diffHistoryRoot',
-                'Diff History',
-                `${diffs.length} entries`,
-                undefined,
-                'history',
-                diffs.length > 0
-                    ? vscode.TreeItemCollapsibleState.Collapsed
-                    : vscode.TreeItemCollapsibleState.None
-            )
+            this.historyRoot('formatHistoryRoot', 'Format History', formats, budget),
+            this.historyRoot('diffHistoryRoot', 'Diff History', diffs, budget)
         ];
+    }
+
+    private historyRoot(
+        kind: ItemKind,
+        label: string,
+        entries: Array<FormatEntry | DiffEntry>,
+        budget: string
+    ): JSONBroItem {
+        const bytes = entries.reduce((sum, entry) => sum + entry.bytes, 0);
+        const item = new JSONBroItem(
+            kind,
+            label,
+            budget,
+            undefined,
+            'history',
+            entries.length > 0
+                ? vscode.TreeItemCollapsibleState.Collapsed
+                : vscode.TreeItemCollapsibleState.None
+        );
+
+        item.description =
+            entries.length === 0
+                ? 'empty'
+                : `${entries.length} · ${formatSize(bytes)}`;
+        // Drives the section's own "clear" action in the context menu.
+        item.contextValue = kind;
+        return item;
     }
 
     private formatEntries(): JSONBroItem[] {

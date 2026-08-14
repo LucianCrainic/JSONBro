@@ -8,7 +8,7 @@
  * to whatever is on screen.
  */
 import type { ParseSink } from './parse-sink';
-import { LineTable } from './line-index';
+import { LineKind, LineTable } from './line-index';
 import { TextStore } from './text-store';
 
 export interface PrettyDocument {
@@ -56,16 +56,19 @@ export class PrettySink implements ParseSink<PrettyDocument> {
     }
 
     public beginObject(): void {
-        this.openValue();
-        this.frames.push({ count: 0, openLine: this.currentLine, isArray: false });
-        this.out.append('{');
-        this.depth++;
+        this.open('{', false);
     }
 
     public beginArray(): void {
+        this.open('[', true);
+    }
+
+    private open(bracket: string, isArray: boolean): void {
         this.openValue();
-        this.frames.push({ count: 0, openLine: this.currentLine, isArray: true });
-        this.out.append('[');
+        const openLine = this.currentLine;
+        this.frames.push({ count: 0, openLine, isArray });
+        this.lines.setKind(openLine, isArray ? LineKind.Array : LineKind.Object);
+        this.out.append(bracket);
         this.depth++;
     }
 
@@ -79,7 +82,12 @@ export class PrettySink implements ParseSink<PrettyDocument> {
 
     public key(name: string): void {
         this.openValue();
-        this.out.append(`${JSON.stringify(name)}: `);
+        // Recorded as the range of the name's JSON spelling in the output, so
+        // a path segment can be matched by comparing encoded text rather than
+        // by decoding every candidate.
+        const encoded = JSON.stringify(name);
+        this.lines.setKeyRange(this.currentLine, this.out.length, encoded.length);
+        this.out.append(`${encoded}: `);
         this.afterKey = true;
     }
 
@@ -137,13 +145,16 @@ export class PrettySink implements ParseSink<PrettyDocument> {
         }
 
         // An empty container stays on one line: `{}` reads better than a brace
-        // pair straddling two, and it is not worth a fold.
+        // pair straddling two, and it is not worth a fold. Its closer shares
+        // the opening line, so the line keeps its container kind.
         if (frame.count > 0) {
             this.newline();
+            this.lines.setKind(this.currentLine, LineKind.Closer);
         }
 
         this.out.append(bracket);
         this.lines.setFoldEnd(frame.openLine, this.currentLine);
+        this.lines.setChildCount(frame.openLine, frame.count);
         this.afterKey = false;
     }
 }

@@ -70,6 +70,28 @@
         "command": "jsonbro.clearHistory",
         "title": "Clear History",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "jsonbro.clearFormatHistory",
+        "title": "Clear Format History",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "jsonbro.clearDiffHistory",
+        "title": "Clear Diff History",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "jsonbro.setDiffOriginal",
+        "title": "JSONBro: Use as Diff Original"
+      },
+      {
+        "command": "jsonbro.setDiffModified",
+        "title": "JSONBro: Use as Diff Modified"
+      },
+      {
+        "command": "jsonbro.compareSelectedFiles",
+        "title": "JSONBro: Compare Selected Files"
       }
     ],
     "viewsContainers": {
@@ -128,6 +150,16 @@
           "command": "jsonbro.removeDiffHistory",
           "when": "view == jsonbro.explorer && viewItem == diffHistoryEntry",
           "group": "inline@2"
+        },
+        {
+          "command": "jsonbro.clearFormatHistory",
+          "when": "view == jsonbro.explorer && viewItem == formatHistoryRoot",
+          "group": "inline@1"
+        },
+        {
+          "command": "jsonbro.clearDiffHistory",
+          "when": "view == jsonbro.explorer && viewItem == diffHistoryRoot",
+          "group": "inline@1"
         }
       ],
       "commandPalette": [
@@ -154,6 +186,57 @@
         {
           "command": "jsonbro.renameDiffHistory",
           "when": "false"
+        },
+        {
+          "command": "jsonbro.clearFormatHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.clearDiffHistory",
+          "when": "false"
+        },
+        {
+          "command": "jsonbro.compareSelectedFiles",
+          "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "jsonbro.openFile",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@1"
+        },
+        {
+          "command": "jsonbro.setDiffOriginal",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@2"
+        },
+        {
+          "command": "jsonbro.setDiffModified",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@3"
+        },
+        {
+          "command": "jsonbro.compareSelectedFiles",
+          "when": "listMultiSelection && resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@4"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "jsonbro.openFile",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@1"
+        },
+        {
+          "command": "jsonbro.setDiffOriginal",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@2"
+        },
+        {
+          "command": "jsonbro.setDiffModified",
+          "when": "resourceExtname =~ /\\.(json|jsonl|ndjson|txt)$/i",
+          "group": "jsonbro@3"
         }
       ]
     },
@@ -164,6 +247,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show line numbers beside formatted JSON."
+        },
+        "jsonbro.matchEditorTheme": {
+          "type": "boolean",
+          "default": true,
+          "description": "Colour JSON the way the active colour theme colours it in the editor. When off, the colours contributed under 'jsonbro.syntax*' are used instead."
         },
         "jsonbro.indentSize": {
           "type": "number",
@@ -218,9 +306,117 @@
           "type": "number",
           "default": 1000000,
           "description": "Ceiling on the array alignment pass, as old length times new length. Above it arrays are compared by position, which is faster but reports an insertion as a change to every later element."
+        },
+        "jsonbro.history.maxEntries": {
+          "type": "number",
+          "default": 50,
+          "minimum": 0,
+          "description": "How many format and how many diff entries history keeps."
+        },
+        "jsonbro.history.maxEntrySize": {
+          "type": "number",
+          "default": 131072,
+          "description": "Largest document stored whole, in bytes. Anything larger keeps a preview and says so."
+        },
+        "jsonbro.history.maxTotalSize": {
+          "type": "number",
+          "default": 5242880,
+          "description": "Ceiling on everything history holds, in bytes, across format and diff entries together. Oldest entries are dropped first."
         }
       }
     },
+    "colors": [
+      {
+        "id": "jsonbro.syntaxKey",
+        "description": "Property names in formatted JSON. Used when the active theme cannot be read, or when jsonbro.matchEditorTheme is off.",
+        "defaults": {
+          "dark": "debugTokenExpression.name",
+          "light": "debugTokenExpression.name",
+          "highContrast": "debugTokenExpression.name",
+          "highContrastLight": "debugTokenExpression.name"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxString",
+        "description": "String values in formatted JSON.",
+        "defaults": {
+          "dark": "debugTokenExpression.string",
+          "light": "debugTokenExpression.string",
+          "highContrast": "debugTokenExpression.string",
+          "highContrastLight": "debugTokenExpression.string"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxNumber",
+        "description": "Numbers in formatted JSON.",
+        "defaults": {
+          "dark": "debugTokenExpression.number",
+          "light": "debugTokenExpression.number",
+          "highContrast": "debugTokenExpression.number",
+          "highContrastLight": "debugTokenExpression.number"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxBoolean",
+        "description": "true and false in formatted JSON.",
+        "defaults": {
+          "dark": "debugTokenExpression.boolean",
+          "light": "debugTokenExpression.boolean",
+          "highContrast": "debugTokenExpression.boolean",
+          "highContrastLight": "debugTokenExpression.boolean"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxNull",
+        "description": "null in formatted JSON.",
+        "defaults": {
+          "dark": "debugTokenExpression.boolean",
+          "light": "debugTokenExpression.boolean",
+          "highContrast": "debugTokenExpression.boolean",
+          "highContrastLight": "debugTokenExpression.boolean"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxPunctuation",
+        "description": "Braces, brackets, commas and colons in formatted JSON.",
+        "defaults": {
+          "dark": "editor.foreground",
+          "light": "editor.foreground",
+          "highContrast": "editor.foreground",
+          "highContrastLight": "editor.foreground"
+        }
+      },
+      {
+        "id": "jsonbro.addedBackground",
+        "description": "Fill behind an added value, for themes that leave diffEditor.insertedTextBackground unset.",
+        "defaults": {
+          "dark": "#2ea04326",
+          "light": "#2ea04326",
+          "highContrast": "#2ea04340",
+          "highContrastLight": "#2ea04340"
+        }
+      },
+      {
+        "id": "jsonbro.removedBackground",
+        "description": "Fill behind a removed value, for themes that leave diffEditor.removedTextBackground unset.",
+        "defaults": {
+          "dark": "#f8514926",
+          "light": "#f8514926",
+          "highContrast": "#f8514940",
+          "highContrastLight": "#f8514940"
+        }
+      },
+      {
+        "id": "jsonbro.modifiedBackground",
+        "description": "Fill behind a modified change row.",
+        "defaults": {
+          "dark": "#e2c08d1a",
+          "light": "#8955031a",
+          "highContrast": "#e2c08d33",
+          "highContrastLight": "#89550333"
+        }
+      }
+    ],
     "keybindings": [
       {
         "command": "jsonbro.formatJson",
@@ -231,6 +427,11 @@
         "command": "jsonbro.diffJson",
         "key": "ctrl+alt+d",
         "mac": "cmd+alt+d"
+      },
+      {
+        "command": "jsonbro.openFile",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o"
       }
     ]
   },
