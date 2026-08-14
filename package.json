@@ -165,6 +165,11 @@
           "default": true,
           "description": "Show line numbers beside formatted JSON."
         },
+        "jsonbro.matchEditorTheme": {
+          "type": "boolean",
+          "default": true,
+          "description": "Colour JSON the way the active colour theme colours it in the editor. When off, the colours contributed under 'jsonbro.syntax*' are used instead."
+        },
         "jsonbro.indentSize": {
           "type": "number",
           "default": 2,
@@ -221,6 +226,98 @@
         }
       }
     },
+    "colors": [
+      {
+        "id": "jsonbro.syntaxKey",
+        "description": "Property names in formatted JSON. Used when the active theme cannot be read, or when jsonbro.matchEditorTheme is off.",
+        "defaults": {
+          "dark": "debugTokenExpression.name",
+          "light": "debugTokenExpression.name",
+          "highContrast": "debugTokenExpression.name",
+          "highContrastLight": "debugTokenExpression.name"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxString",
+        "description": "String values in formatted JSON.",
+        "defaults": {
+          "dark": "debugTokenExpression.string",
+          "light": "debugTokenExpression.string",
+          "highContrast": "debugTokenExpression.string",
+          "highContrastLight": "debugTokenExpression.string"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxNumber",
+        "description": "Numbers in formatted JSON.",
+        "defaults": {
+          "dark": "debugTokenExpression.number",
+          "light": "debugTokenExpression.number",
+          "highContrast": "debugTokenExpression.number",
+          "highContrastLight": "debugTokenExpression.number"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxBoolean",
+        "description": "true and false in formatted JSON.",
+        "defaults": {
+          "dark": "debugTokenExpression.boolean",
+          "light": "debugTokenExpression.boolean",
+          "highContrast": "debugTokenExpression.boolean",
+          "highContrastLight": "debugTokenExpression.boolean"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxNull",
+        "description": "null in formatted JSON.",
+        "defaults": {
+          "dark": "debugTokenExpression.boolean",
+          "light": "debugTokenExpression.boolean",
+          "highContrast": "debugTokenExpression.boolean",
+          "highContrastLight": "debugTokenExpression.boolean"
+        }
+      },
+      {
+        "id": "jsonbro.syntaxPunctuation",
+        "description": "Braces, brackets, commas and colons in formatted JSON.",
+        "defaults": {
+          "dark": "editor.foreground",
+          "light": "editor.foreground",
+          "highContrast": "editor.foreground",
+          "highContrastLight": "editor.foreground"
+        }
+      },
+      {
+        "id": "jsonbro.addedBackground",
+        "description": "Fill behind an added value, for themes that leave diffEditor.insertedTextBackground unset.",
+        "defaults": {
+          "dark": "#2ea04326",
+          "light": "#2ea04326",
+          "highContrast": "#2ea04340",
+          "highContrastLight": "#2ea04340"
+        }
+      },
+      {
+        "id": "jsonbro.removedBackground",
+        "description": "Fill behind a removed value, for themes that leave diffEditor.removedTextBackground unset.",
+        "defaults": {
+          "dark": "#f8514926",
+          "light": "#f8514926",
+          "highContrast": "#f8514940",
+          "highContrastLight": "#f8514940"
+        }
+      },
+      {
+        "id": "jsonbro.modifiedBackground",
+        "description": "Fill behind a modified change row.",
+        "defaults": {
+          "dark": "#e2c08d1a",
+          "light": "#8955031a",
+          "highContrast": "#e2c08d33",
+          "highContrastLight": "#89550333"
+        }
+      }
+    ],
     "keybindings": [
       {
         "command": "jsonbro.formatJson",

@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
     defaultPaneRatio: 0.5,
     autoFormatOnPaste: false,
     searchScope: 'all',
+    matchEditorTheme: true,
     maxInlineSize: 2 * 1024 * 1024,
     diffMaxDocumentSize: 25 * 1024 * 1024,
     diffArrayAlignBudget: 1_000_000
@@ -34,6 +35,7 @@ export function readSettings(): Settings {
         ),
         autoFormatOnPaste: config.get('autoFormatOnPaste', DEFAULT_SETTINGS.autoFormatOnPaste),
         searchScope: config.get('search.defaultScope', DEFAULT_SETTINGS.searchScope),
+        matchEditorTheme: config.get('matchEditorTheme', DEFAULT_SETTINGS.matchEditorTheme),
         maxInlineSize: config.get('maxInlineSize', DEFAULT_SETTINGS.maxInlineSize),
         diffMaxDocumentSize: config.get(
             'diff.maxDocumentSize',
