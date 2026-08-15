@@ -1,0 +1,1 @@
+{"query":{"index":"orders","filter":{"status":["confirmed","shipped"],"placedAfter":"2026-08-01"},"sort":[{"field":"placedAt","dir":"desc"}],"page":{"size":50,"cursor":null}},"took":18,"total":1274}

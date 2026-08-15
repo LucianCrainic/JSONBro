@@ -1,0 +1,38 @@
+{
+  "org": {
+    "region": {
+      "eu-west": {
+        "cluster": {
+          "prod": {
+            "namespace": {
+              "payments": {
+                "deployment": {
+                  "checkout-api": {
+                    "spec": {
+                      "template": {
+                        "containers": [
+                          {
+                            "name": "checkout",
+                            "image": "registry.internal/checkout:2.4.1",
+                            "resources": {
+                              "requests": { "cpu": "250m", "memory": "512Mi" },
+                              "limits": { "cpu": "1000m", "memory": "1Gi" }
+                            },
+                            "env": [
+                              { "name": "LOG_LEVEL", "value": "info" },
+                              { "name": "REGION", "valueFrom": { "fieldRef": { "fieldPath": "metadata.labels['topology']" } } }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

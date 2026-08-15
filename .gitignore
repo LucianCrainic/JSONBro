@@ -7,3 +7,6 @@ out
 media/codicons/
 .preview/
 .claude/launch.json
+
+# Written by examples/generate-large.js; megabytes that regenerate in a second.
+examples/large.generated.json

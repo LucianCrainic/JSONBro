@@ -1,0 +1,7 @@
+{"at":"2026-08-15T06:00:01Z","level":"info","event":"service.start","service":"checkout","pid":8814}
+{"at":"2026-08-15T06:00:04Z","level":"debug","event":"cache.warm","keys":1284,"tookMs":37}
+{"at":"2026-08-15T06:01:12Z","level":"warn","event":"upstream.slow","upstream":"payments","tookMs":2140}
+{"at":"2026-08-15T06:01:13Z","level":"error","event":"upstream.timeout","upstream":"payments","attempt":2,"error":{"code":"ETIMEDOUT","retryable":true}}
+{"at":"2026-08-15T06:01:15Z","level":"info","event":"circuit.open","upstream":"payments","cooldownSec":30}
+{"at":"2026-08-15T06:01:46Z","level":"info","event":"circuit.halfOpen","upstream":"payments"}
+{"at":"2026-08-15T06:01:47Z","level":"info","event":"upstream.recovered","upstream":"payments","tookMs":94}

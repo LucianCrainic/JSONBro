@@ -2,10 +2,16 @@
   "version": "0.2.0",
   "configurations": [
     {
+      // The second argument is the folder the host opens. Without it the host
+      // starts empty, and testing anything meant finding a document first.
+      // See examples/README.md for what is in there.
       "name": "Run Extension",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/examples"
+      ],
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "npm: compile:dev"
     },
@@ -13,9 +19,21 @@
       "name": "Run Extension (watch)",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/examples"
+      ],
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "npm: watch"
+    },
+    {
+      // For anything the examples cannot show: a folder of your own, or none.
+      "name": "Run Extension (empty host)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "preLaunchTask": "npm: compile:dev"
     }
   ]
 }

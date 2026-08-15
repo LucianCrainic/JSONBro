@@ -1,0 +1,38 @@
+{
+  "order": {
+    "id": "ord_8Fh2KpQ",
+    "status": "confirmed",
+    "placedAt": "2026-08-14T09:41:22Z",
+    "currency": "EUR",
+    "customer": {
+      "id": "cus_4192",
+      "name": "Elena Rossi",
+      "email": "elena@example.com",
+      "loyaltyTier": "gold",
+      "address": {
+        "line1": "Via Roma 14",
+        "city": "Bologna",
+        "postcode": "40121",
+        "country": "IT"
+      }
+    },
+    "items": [
+      { "sku": "KB-8871", "name": "Mechanical Keyboard", "quantity": 1, "unitPrice": 129.0, "discount": null, "inStock": true },
+      { "sku": "MS-2140", "name": "Wireless Mouse", "quantity": 2, "unitPrice": 34.5, "discount": 5.0, "inStock": true },
+      { "sku": "HS-9007", "name": "Studio Headphones", "quantity": 1, "unitPrice": 219.99, "discount": null, "inStock": false }
+    ],
+    "totals": { "subtotal": 417.99, "discount": 10.0, "shipping": 0.0, "tax": 89.56, "grandTotal": 497.55 },
+    "shipment": {
+      "carrier": "DHL",
+      "service": "express",
+      "trackingNumber": "JD014600006281899123",
+      "estimatedDelivery": "2026-08-16",
+      "events": [
+        { "at": "2026-08-14T11:02:00Z", "code": "PICKED_UP", "location": "Bologna" },
+        { "at": "2026-08-14T19:47:00Z", "code": "IN_TRANSIT", "location": "Milan" }
+      ]
+    },
+    "payment": { "method": "card", "brand": "visa", "last4": "4242", "captured": true },
+    "flags": { "giftWrap": false, "expedited": true, "requiresSignature": true }
+  }
+}

@@ -3,6 +3,10 @@
 .vscode-test/**
 .claude/**
 src/**
+
+# Documents for testing by hand; the Run Extension launch config opens this
+# folder in the development host. Nothing in it belongs in the package.
+examples/**
 .gitignore
 .gitattributes
 tsconfig*.json

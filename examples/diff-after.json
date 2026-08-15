@@ -1,0 +1,17 @@
+{
+  "release": {
+    "version": "2.4.1",
+    "name": "atlas",
+    "publishedAt": "2026-08-14T08:00:00Z",
+    "channel": "stable",
+    "maintainers": ["rin", "sofia", "dev", "mira"],
+    "runtime": { "memoryMb": 1024, "node": "20.x", "timeoutSec": 30 },
+    "services": [
+      { "name": "scheduler", "replicas": 2, "port": 9100, "healthy": true },
+      { "name": "api", "replicas": 5, "port": 8080, "healthy": true },
+      { "name": "worker", "replicas": 2, "port": 9000, "healthy": true },
+      { "name": "notifier", "replicas": 1, "port": 9200, "healthy": true }
+    ],
+    "featureFlags": { "auditLog": true, "newBilling": true, "betaSearch": true }
+  }
+}
