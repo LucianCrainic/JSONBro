@@ -646,6 +646,44 @@ describe('editing beside the picture', () => {
         expect(document.getElementById('input-panel')?.dataset.input).toBe('source');
     });
 
+    /*
+     * Reading is the right default only once there is something to read. On a
+     * first visit there is not, and the pane showed an empty read-only view --
+     * so pasting meant noticing a pencil in the header and pressing it first.
+     */
+    describe('with nothing drawn yet', () => {
+        it('opens the editable box instead', () => {
+            view.setDocument(null);
+            expect(document.getElementById('input-panel')?.dataset.input).toBe('edit');
+        });
+
+        it('opens it on arrival, too', () => {
+            const fresh = new VisualView(new Messenger());
+            try {
+                fresh.activate();
+                expect(document.getElementById('input-panel')?.dataset.input).toBe('edit');
+            } finally {
+                fresh.dispose();
+            }
+        });
+
+        /* Building while the reader is typing must not pull the box away. */
+        it('leaves the box alone once a document arrives', () => {
+            view.setDocument(null);
+            show(view);
+
+            expect(document.getElementById('input-panel')?.dataset.input).toBe('edit');
+        });
+
+        /* "Valid JSON, 0 nodes" is a verdict on a document that is not there. */
+        it('says nothing about a document it has not got', () => {
+            view.setDocument(null);
+            view.setShape('tree');
+
+            expect(view.getStatus()).toEqual({});
+        });
+    });
+
     it('swaps to the editable box and back', () => {
         document.getElementById('edit-input')?.click();
         expect(document.getElementById('input-panel')?.dataset.input).toBe('edit');

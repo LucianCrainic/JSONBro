@@ -234,6 +234,8 @@ export class VisualView {
             this.setEmpty(true);
             this.setBreadcrumb([], false);
             this.publishStatus({});
+            // Emptied, so the pane is back to having nothing to read.
+            this.offerTheInputBox();
             return;
         }
 
@@ -372,6 +374,23 @@ export class VisualView {
         this.setInputMode(this.inputMode === 'edit' ? 'source' : 'edit');
     }
 
+    /**
+     * Opens the editable box when there is no document to read.
+     *
+     * Reading is the right default once there is something to read, but on the
+     * first visit there is not: the pane showed an empty read-only view, and
+     * pasting meant first noticing a pencil in the header and pressing it.
+     * Nothing is being displaced, so show the box that can be typed into.
+     *
+     * Only ever in this direction. Building a document while the reader is
+     * editing must not pull the box out from under them.
+     */
+    private offerTheInputBox(): void {
+        if (this.onScreen && !this.document && this.inputMode !== 'edit') {
+            this.setInputMode('edit');
+        }
+    }
+
     private get inputMode(): 'source' | 'edit' {
         return byId('input-panel')?.dataset.input === 'edit' ? 'edit' : 'source';
     }
@@ -451,6 +470,7 @@ export class VisualView {
      */
     public activate(): void {
         this.onScreen = true;
+        this.offerTheInputBox();
         this.setShape(this.shape);
     }
 
@@ -489,7 +509,10 @@ export class VisualView {
                 this.graph?.revealLine(line);
             }
         } else {
-            this.publishStatus(this.describe());
+            // Nothing drawn is nothing to describe. Switching shape on an empty
+            // pane used to announce "Valid JSON, 0 nodes", which is a verdict on
+            // a document that does not exist.
+            this.publishStatus(this.document ? this.describe() : {});
         }
     }
 
