@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/LucianCrainic/JSONBro/6a0f58656221202173c696edff312eecd7bc5a30/images/banner.png" alt="JSONBro — JSON diffs, formatting, validation and visuals for VS Code" width="100%">
+  <img src="https://raw.githubusercontent.com/LucianCrainic/JSONBro/44df4b2f9f9edee7f01935ce95d0063d9325ae92/images/banner.png" alt="JSONBro — JSON diffs, formatting, validation and visuals for VS Code" width="100%">
 </p>
 
 <h1 align="center">JSONBro for Visual Studio Code</h1>
