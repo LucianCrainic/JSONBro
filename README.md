@@ -18,6 +18,8 @@
 
 <p align="center">
   <a href="https://marketplace.visualstudio.com/items?itemName=LucianDCrainic.jsonbro"><strong>Install from the Marketplace →</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/LucianCrainic/JSONBro/releases/latest"><strong>Download the latest VSIX →</strong></a>
 </p>
 
 ---
@@ -51,13 +53,20 @@ Paste on the left, read on the right. Folding, line numbers, and a find bar that
 
 ### Visual
 
-<!-- The still shows the tree; a recording is what shows tree → graph,
-     the drag and the zoom, and copying a node's path. -->
+The same document drawn instead of written—as an indented **tree** or as a **graph** of boxes and links. Expand and collapse from either, walk it with the arrow keys, and copy any node's path, value or whole subtree. The formatted source sits beside the picture, and you can edit it there without leaving.
+
+<!-- One above the other rather than side by side: at half the page width the
+     keys and values in either shot stop being readable. A recording is what
+     shows the switch between them, the drag and the zoom, and copying a path. -->
 <p align="center">
-  <img src="https://raw.githubusercontent.com/LucianCrainic/JSONBro/b31c61e46853c5625d71e09989a4b870440ee21f/images/visual.png" alt="The same document drawn as a collapsible tree beside its source" width="100%">
+  <img src="https://raw.githubusercontent.com/LucianCrainic/JSONBro/9007baed87275aa72b91aa18147c4f74faa97881/images/visual.png" alt="A document drawn as a collapsible tree, beside its formatted source" width="100%">
+  <br><sub><em>Tree, beside the source it was built from</em></sub>
 </p>
 
-The same document drawn instead of written—as an indented **tree** or as a **graph** of boxes and links. Expand and collapse from either, walk it with the arrow keys, and copy any node's path, value or whole subtree. The formatted source sits beside the picture, and you can edit it there without leaving.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/LucianCrainic/JSONBro/9007baed87275aa72b91aa18147c4f74faa97881/images/graph.png" alt="The same document drawn as a graph of boxes and links, with the pane maximised" width="100%">
+  <br><sub><em>The same document as a graph, with the pane maximised</em></sub>
+</p>
 
 ### Diff
 
@@ -92,6 +101,16 @@ Install from the Marketplace, or:
 ```
 ext install LucianDCrainic.jsonbro
 ```
+
+### From a VSIX
+
+Every release also carries a `.vsix`, for installing without the Marketplace—on a machine that cannot reach it, or to pin a version. Download it from the [latest release](https://github.com/LucianCrainic/JSONBro/releases/latest) (each one ships the package and a `.sha256` beside it), then either run:
+
+```
+code --install-extension jsonbro-<version>.vsix
+```
+
+or open the Extensions view, and pick **Install from VSIX…** from the `...` menu at its top right.
 
 Then open the Command Palette and run **JSONBro: Format JSON**—or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>J</kbd> (<kbd>⌘</kbd>+<kbd>⌥</kbd>+<kbd>J</kbd> on macOS).
 
