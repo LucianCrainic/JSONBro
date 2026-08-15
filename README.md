@@ -19,7 +19,10 @@
 <p align="center">
   <a href="https://marketplace.visualstudio.com/items?itemName=LucianDCrainic.jsonbro"><strong>Install from the Marketplace →</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/LucianCrainic/JSONBro/releases/latest"><strong>Download the latest VSIX →</strong></a>
+  <!-- Served from whichever release is marked latest. The version-less name is
+       attached by .github/workflows/release.yml, so this resolves from the
+       first release published after that landed. -->
+  <a href="https://github.com/LucianCrainic/JSONBro/releases/latest/download/jsonbro-latest.vsix"><strong>Download the latest VSIX →</strong></a>
 </p>
 
 ---
@@ -104,13 +107,14 @@ ext install LucianDCrainic.jsonbro
 
 ### From a VSIX
 
-Every release also carries a `.vsix`, for installing without the Marketplace—on a machine that cannot reach it, or to pin a version. Download it from the [latest release](https://github.com/LucianCrainic/JSONBro/releases/latest) (each one ships the package and a `.sha256` beside it), then either run:
+Every release also carries a `.vsix`, for installing without the Marketplace—on a machine that cannot reach it, or to pin a version. Take [the latest one](https://github.com/LucianCrainic/JSONBro/releases/latest/download/jsonbro-latest.vsix), or a particular version from the [releases page](https://github.com/LucianCrainic/JSONBro/releases). Each release ships a `.sha256` beside the package, so:
 
 ```
-code --install-extension jsonbro-<version>.vsix
+sha256sum -c jsonbro-latest.vsix.sha256
+code --install-extension jsonbro-latest.vsix
 ```
 
-or open the Extensions view, and pick **Install from VSIX…** from the `...` menu at its top right.
+Or open the Extensions view and pick **Install from VSIX…** from the `...` menu at its top right.
 
 Then open the Command Palette and run **JSONBro: Format JSON**—or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>J</kbd> (<kbd>⌘</kbd>+<kbd>⌥</kbd>+<kbd>J</kbd> on macOS).
 
