@@ -22,7 +22,13 @@ export type DiffSide = 'left' | 'right';
 
 /** Messages the extension host sends to the webview. */
 export type HostToWebview =
-    | { command: 'loadJson'; json: string }
+    /**
+     * `remember` distinguishes a document arriving for the first time from one
+     * being replayed out of history: replaying must not record a second copy,
+     * but anything new must be recorded or it is lost the moment it is
+     * replaced.
+     */
+    | { command: 'loadJson'; json: string; remember?: boolean }
     | { command: 'loadDiff'; leftJson: string; rightJson: string }
     | { command: 'settings'; settings: Settings }
     /** Format a file the panel's worker should read for itself. */
@@ -30,7 +36,9 @@ export type HostToWebview =
     /** Put a document into one side of the comparison. */
     | { command: 'loadDiffSide'; side: DiffSide; json: string; label: string }
     /** JSON syntax colours read from the user's active colour theme. */
-    | { command: 'themeColors'; colors: SyntaxColors };
+    | { command: 'themeColors'; colors: SyntaxColors }
+    /** Opens the panel on a particular view. */
+    | { command: 'setMode'; mode: Mode };
 
 /**
  * The colour of each part of a JSON document, as the active theme paints it.
@@ -47,8 +55,16 @@ export interface SyntaxColors {
     punctuation?: string;
 }
 
-/** The two things the panel can be doing. */
-export type Mode = 'format' | 'diff';
+/**
+ * The kinds of panel the host can open.
+ *
+ * Narrower than `Mode`: the visual view is a way of looking at a document
+ * rather than a panel of its own, so it is reached from inside a format panel.
+ */
+export type PanelKind = 'format' | 'diff';
+
+/** The three things a panel can be showing. */
+export type Mode = PanelKind | 'visual';
 
 /** Resolution state of a single diff entry. */
 export type DiffState = 'pending' | 'applied' | 'rejected';

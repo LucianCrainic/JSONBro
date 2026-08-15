@@ -3,18 +3,18 @@
  */
 import * as vscode from 'vscode';
 import { WebviewProvider } from '../webview-provider';
-import { JSONBroActivityBarProvider } from '../activity-bar-provider';
+import { Sidebar } from '../views/sidebar';
 
 /**
  * Handles all extension commands
  */
 export class CommandHandler {
     private webviewProvider: WebviewProvider;
-    private activityBarProvider: JSONBroActivityBarProvider;
+    private sidebar: Sidebar;
 
-    constructor(context: vscode.ExtensionContext, activityBarProvider: JSONBroActivityBarProvider) {
-        this.webviewProvider = new WebviewProvider(context, activityBarProvider);
-        this.activityBarProvider = activityBarProvider;
+    constructor(context: vscode.ExtensionContext, sidebar: Sidebar) {
+        this.webviewProvider = new WebviewProvider(context, sidebar);
+        this.sidebar = sidebar;
     }
 
     /**
@@ -29,6 +29,11 @@ export class CommandHandler {
         const diffJsonCommand = vscode.commands.registerCommand(
             'jsonbro.diffJson',
             () => this.diffJson()
+        );
+
+        const visualiseJsonCommand = vscode.commands.registerCommand(
+            'jsonbro.visualiseJson',
+            () => this.webviewProvider.showVisualPanel()
         );
 
         const openFromActivityBarCommand = vscode.commands.registerCommand(
@@ -61,6 +66,27 @@ export class CommandHandler {
         const clearFormatHistoryCommand = vscode.commands.registerCommand(
             'jsonbro.clearFormatHistory',
             () => this.clearFormatHistory()
+        );
+
+        const clearRecentFilesCommand = vscode.commands.registerCommand(
+            'jsonbro.clearRecentFiles',
+            () => this.sidebar.clearRecentFiles()
+        );
+
+        const formatClipboardCommand = vscode.commands.registerCommand(
+            'jsonbro.formatClipboard',
+            () => this.formatClipboard()
+        );
+
+        // Pinning is per-entry, so both of these read the index off the item.
+        const pinCommand = vscode.commands.registerCommand(
+            'jsonbro.pinHistoryEntry',
+            (item: any) => this.setPinned(item, true)
+        );
+
+        const unpinCommand = vscode.commands.registerCommand(
+            'jsonbro.unpinHistoryEntry',
+            (item: any) => this.setPinned(item, false)
         );
 
         const clearDiffHistoryCommand = vscode.commands.registerCommand(
@@ -108,7 +134,8 @@ export class CommandHandler {
 
         context.subscriptions.push(
             formatJsonCommand, 
-            diffJsonCommand, 
+            diffJsonCommand,
+            visualiseJsonCommand,
             openFromActivityBarCommand,
             loadFormatHistoryCommand,
             loadDiffHistoryCommand,
@@ -116,6 +143,10 @@ export class CommandHandler {
             removeDiffHistoryCommand,
             clearFormatHistoryCommand,
             clearDiffHistoryCommand,
+            clearRecentFilesCommand,
+            formatClipboardCommand,
+            pinCommand,
+            unpinCommand,
             renameFormatHistoryCommand,
             renameDiffHistoryCommand,
             clearHistoryCommand,
@@ -138,7 +169,7 @@ export class CommandHandler {
 
     private async clearHistory(): Promise<void> {
         if (await this.confirm('Clear all JSONBro history?', 'Clear')) {
-            await this.activityBarProvider.clearHistory();
+            await this.sidebar.clearHistory();
         }
     }
 
@@ -171,14 +202,14 @@ export class CommandHandler {
     private async removeFormatHistory(item: any, selection?: any[]): Promise<void> {
         const indices = this.selectedIndices(item, selection);
         if (indices.length > 0 && (await this.confirmRemoval(indices.length))) {
-            await this.activityBarProvider.removeFormatHistoryEntries(indices);
+            await this.sidebar.removeFormatHistoryEntries(indices);
         }
     }
 
     private async removeDiffHistory(item: any, selection?: any[]): Promise<void> {
         const indices = this.selectedIndices(item, selection);
         if (indices.length > 0 && (await this.confirmRemoval(indices.length))) {
-            await this.activityBarProvider.removeDiffHistoryEntries(indices);
+            await this.sidebar.removeDiffHistoryEntries(indices);
         }
     }
 
@@ -193,15 +224,45 @@ export class CommandHandler {
         await this.webviewProvider.compareFiles(selection[0], selection[1]);
     }
 
+    /** Formats whatever is on the clipboard, without a paste step. */
+    private async formatClipboard(): Promise<void> {
+        const text = (await vscode.env.clipboard.readText()).trim();
+        if (!text) {
+            vscode.window.showInformationMessage('The clipboard is empty.');
+            return;
+        }
+        this.webviewProvider.loadNewJson(text);
+    }
+
+    /**
+     * Pins or unpins a history entry.
+     *
+     * Which list it belongs to is on the item's resource URI, which is also
+     * where its position is -- a context-menu command is handed the item, not
+     * where it sits.
+     */
+    private async setPinned(item: any, pinned: boolean): Promise<void> {
+        const index = item?.resourceUri ? this.extractIndexFromUri(item.resourceUri) : -1;
+        if (index === -1) {
+            return;
+        }
+
+        if (String(item.resourceUri).includes('diff-history')) {
+            await this.sidebar.setDiffPinned(index, pinned);
+        } else {
+            await this.sidebar.setFormatPinned(index, pinned);
+        }
+    }
+
     private async clearFormatHistory(): Promise<void> {
         if (await this.confirm('Clear all format history?', 'Clear')) {
-            await this.activityBarProvider.clearFormatHistory();
+            await this.sidebar.clearFormatHistory();
         }
     }
 
     private async clearDiffHistory(): Promise<void> {
         if (await this.confirm('Clear all diff history?', 'Clear')) {
-            await this.activityBarProvider.clearDiffHistory();
+            await this.sidebar.clearDiffHistory();
         }
     }
 
@@ -254,7 +315,7 @@ export class CommandHandler {
     private async renameFormatHistory(item: any): Promise<void> {
         const name = await this.askForName(item);
         if (name !== undefined) {
-            await this.activityBarProvider.renameFormatHistoryEntry(
+            await this.sidebar.renameFormatHistoryEntry(
                 this.extractIndexFromUri(item.resourceUri),
                 name
             );
@@ -264,7 +325,7 @@ export class CommandHandler {
     private async renameDiffHistory(item: any): Promise<void> {
         const name = await this.askForName(item);
         if (name !== undefined) {
-            await this.activityBarProvider.renameDiffHistoryEntry(
+            await this.sidebar.renameDiffHistoryEntry(
                 this.extractIndexFromUri(item.resourceUri),
                 name
             );

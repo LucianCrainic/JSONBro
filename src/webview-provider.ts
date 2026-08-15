@@ -5,11 +5,11 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as os from 'os';
 import { WebviewContentGenerator } from './webview-content';
-import { JSONBroActivityBarProvider } from './activity-bar-provider';
+import { Sidebar } from './views/sidebar';
 import { readSettings } from './settings';
 import { resolveSyntaxColors } from './theme/token-colors';
 import { vscodeThemeSource } from './theme/vscode-theme-source';
-import type { DiffSide, HostToWebview, Mode } from './shared/messages';
+import type { DiffSide, HostToWebview, PanelKind } from './shared/messages';
 
 /** The file dialog both the format and the diff paths open. */
 async function pickJsonFile(openLabel: string): Promise<vscode.Uri | undefined> {
@@ -28,7 +28,7 @@ function nameOf(file: vscode.Uri): string {
 export class WebviewProvider {
     private context: vscode.ExtensionContext;
     private contentGenerator: WebviewContentGenerator;
-    private activityBarProvider: JSONBroActivityBarProvider;
+    private sidebar: Sidebar;
     private existingPanels: Map<string, vscode.WebviewPanel> = new Map();
 
     /** Panels whose webview has reported that it is listening. */
@@ -40,10 +40,10 @@ export class WebviewProvider {
     /** A folder a panel must be able to read, set when opening a file from it. */
     private extraResourceRoot: vscode.Uri | undefined;
 
-    constructor(context: vscode.ExtensionContext, activityBarProvider: JSONBroActivityBarProvider) {
+    constructor(context: vscode.ExtensionContext, sidebar: Sidebar) {
         this.context = context;
         this.contentGenerator = new WebviewContentGenerator(context);
-        this.activityBarProvider = activityBarProvider;
+        this.sidebar = sidebar;
     }
 
     /**
@@ -55,7 +55,7 @@ export class WebviewProvider {
     public registerSerializer(): vscode.Disposable {
         const provider = this;
 
-        const register = (mode: Mode, viewType: string) =>
+        const register = (mode: PanelKind, viewType: string) =>
             vscode.window.registerWebviewPanelSerializer(viewType, {
                 async deserializeWebviewPanel(panel: vscode.WebviewPanel): Promise<void> {
                     provider.adopt(mode, panel);
@@ -69,7 +69,7 @@ export class WebviewProvider {
     }
 
     /** Takes over a panel VS Code restored, wiring it up as if new. */
-    private adopt(mode: Mode, panel: vscode.WebviewPanel): void {
+    private adopt(mode: PanelKind, panel: vscode.WebviewPanel): void {
         panel.webview.options = this.webviewOptions();
         this.existingPanels.set(mode, panel);
         this.attach(mode, panel);
@@ -80,7 +80,7 @@ export class WebviewProvider {
     public broadcastSettings(): void {
         const settings = readSettings();
         for (const mode of this.existingPanels.keys()) {
-            this.sendToPanel(mode as Mode, { command: 'settings', settings });
+            this.sendToPanel(mode as PanelKind, { command: 'settings', settings });
         }
         void this.broadcastThemeColors();
     }
@@ -98,7 +98,7 @@ export class WebviewProvider {
             : {};
 
         for (const mode of this.existingPanels.keys()) {
-            this.sendToPanel(mode as Mode, { command: 'themeColors', colors });
+            this.sendToPanel(mode as PanelKind, { command: 'themeColors', colors });
         }
     }
 
@@ -133,6 +133,17 @@ export class WebviewProvider {
     }
 
     /**
+     * Opens the format panel already showing the visual view.
+     *
+     * The picture is a way of looking at a formatted document rather than a
+     * panel of its own, so this is the format panel with a starting mode.
+     */
+    public showVisualPanel(): void {
+        this.showPanel('format');
+        this.sendToPanel('format', { command: 'setMode', mode: 'visual' });
+    }
+
+    /**
      * Shows or focuses the format panel (default for activity bar)
      */
     public showOrFocusFormatPanel(): void {
@@ -156,6 +167,8 @@ export class WebviewProvider {
         if (!file) {
             return;
         }
+
+        void this.sidebar.addRecentFile(file);
 
         // A file can only be handed to the webview as a URI if its folder is a
         // permitted resource root, so widen the roots before asking for one.
@@ -198,6 +211,8 @@ export class WebviewProvider {
             return;
         }
 
+        void this.sidebar.addRecentFile(file);
+
         this.sendToPanel('diff', {
             command: 'loadDiffSide',
             side,
@@ -235,11 +250,20 @@ export class WebviewProvider {
         }
     }
 
-    /**
-     * Loads JSON from format history into the format panel
-     */
+    /** Replays a saved document. Already in history, so it is not re-recorded. */
     public loadFormatHistory(json: string): void {
         this.sendToPanel('format', { command: 'loadJson', json });
+    }
+
+    /**
+     * Formats a document the panel has not seen before.
+     *
+     * Recorded in history, unlike a replay: text arriving from the clipboard
+     * exists nowhere else, so not recording it loses it the moment something
+     * replaces it.
+     */
+    public loadNewJson(json: string): void {
+        this.sendToPanel('format', { command: 'loadJson', json, remember: true });
     }
 
     /**
@@ -257,7 +281,7 @@ export class WebviewProvider {
      * reports ready. Previously this was a fixed 100ms delay, which dropped the
      * message on a slow load and delayed it needlessly on a fast one.
      */
-    private sendToPanel(mode: 'format' | 'diff', message: HostToWebview): void {
+    private sendToPanel(mode: PanelKind, message: HostToWebview): void {
         const existingPanel = this.existingPanels.get(mode);
 
         if (existingPanel && this.readyPanels.has(mode)) {
@@ -278,7 +302,7 @@ export class WebviewProvider {
     }
 
     /** Delivers anything queued for a panel that has just become ready. */
-    private flushPendingMessages(mode: 'format' | 'diff'): void {
+    private flushPendingMessages(mode: PanelKind): void {
         const panel = this.existingPanels.get(mode);
         const queue = this.pendingMessages.get(mode);
         if (!panel || !queue) {
@@ -293,7 +317,7 @@ export class WebviewProvider {
     /**
      * Shows the webview panel with the specified mode
      */
-    private showPanel(mode: 'format' | 'diff'): void {
+    private showPanel(mode: PanelKind): void {
         const panelId = mode === 'format' ? 'jsonbro.formatJson' : 'jsonbro.diffJson';
         const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
@@ -319,7 +343,7 @@ export class WebviewProvider {
     }
 
     /** Wires the lifecycle and message handling shared by new and restored panels. */
-    private attach(mode: 'format' | 'diff', panel: vscode.WebviewPanel): void {
+    private attach(mode: PanelKind, panel: vscode.WebviewPanel): void {
         // Remove from tracking when disposed
         panel.onDidDispose(() => {
             this.existingPanels.delete(mode);
@@ -349,10 +373,10 @@ export class WebviewProvider {
                         vscode.window.showInformationMessage(message.text);
                         break;
                     case 'addFormatHistory':
-                        this.activityBarProvider.addFormatHistory(message.json);
+                        this.sidebar.addFormatHistory(message.json);
                         break;
                     case 'addDiffHistory':
-                        this.activityBarProvider.addDiffHistory(message.leftJson, message.rightJson);
+                        this.sidebar.addDiffHistory(message.leftJson, message.rightJson);
                         break;
                     case 'saveFormattedJson':
                         this.saveFormattedJsonToFile(message.content);

@@ -1,0 +1,389 @@
+/*
+ * The visual view: the document drawn rather than written.
+ *
+ * Two shapes of the same thing -- an indented tree, or boxes and links. Which
+ * one is showing is a single attribute on the panel, so nothing in script has
+ * to touch element visibility.
+ */
+
+#tree-output {
+    padding: var(--jb-sp-2) 0;
+    white-space: nowrap;
+    outline: none;
+}
+
+#visual-panel[data-shape='graph'] #tree-output,
+#visual-panel[data-shape='tree'] #graph-output,
+#visual-panel[data-shape='tree'] [data-shape-only='graph'] {
+    display: none;
+}
+
+#visual-panel[data-empty] #tree-output,
+#visual-panel[data-empty] #graph-output,
+#visual-panel[data-empty] #visual-breadcrumb,
+#visual-panel[data-empty] .pane__actions {
+    display: none;
+}
+
+#visual-panel:not([data-empty]) .empty-state {
+    display: none;
+}
+
+/*
+ * The input pane shows the formatted document while the picture is up, and the
+ * box it was pasted into while it is being edited. Which one is a single
+ * attribute on the pane, so nothing in script touches element visibility.
+ *
+ * Outside this mode the editable box is the only thing that makes sense, so
+ * the attribute is ignored there.
+ */
+#input-view {
+    padding: var(--jb-sp-2) 0;
+    white-space: pre;
+}
+
+body:not([data-mode='visual']) #input-view,
+body[data-mode='visual'] #input-panel[data-input='source'] #input,
+body[data-mode='visual'] #input-panel[data-input='edit'] #input-view {
+    display: none;
+}
+
+/* The shape switch reads as one control, so its two halves sit together. */
+.shape-btn.is-active {
+    background-color: var(--jb-neutral);
+    color: var(--jb-fg);
+}
+
+/* ------------------------------------------------------------------- Row */
+
+.tree-row {
+    display: flex;
+    align-items: center;
+    min-height: calc(var(--jb-fs-code) * var(--jb-lh-code));
+    gap: var(--jb-sp-2);
+    padding: 0 var(--jb-sp-4) 0 var(--jb-sp-2);
+    line-height: var(--jb-lh-code);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-code);
+    cursor: default;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.tree-row:hover {
+    background-color: var(--jb-row-hover);
+}
+
+/*
+ * A row holding a search hit. Marked on the row rather than around the
+ * characters: a tree row shows a summary of a node, so the hit is a fact about
+ * the node rather than a position in the text on screen.
+ */
+.tree-row.is-match {
+    background-color: var(--jb-find-other);
+    box-shadow: inset 0 0 0 1px var(--jb-find-other-border);
+}
+
+.tree-row.is-current-match {
+    background-color: var(--jb-find-match);
+    box-shadow: inset 0 0 0 1px var(--jb-find-match-border);
+}
+
+.tree-row.is-selected {
+    background-color: var(--jb-selection);
+    box-shadow: inset 2px 0 0 var(--jb-focus);
+}
+
+/*
+ * Guide rails, one element per level.
+ *
+ * Drawn as elements rather than as left padding so the vertical line that
+ * connects a container to its children lands in the same place at every depth,
+ * however deep the document goes. The row centres its contents, so the rails
+ * have to opt out of that and stretch or they collapse to nothing.
+ */
+.tree-row__indent {
+    display: flex;
+    flex-shrink: 0;
+    align-self: stretch;
+}
+
+.tree-row__indent i {
+    display: block;
+    width: 12px;
+    border-left: 1px solid var(--jb-border);
+}
+
+/*
+ * The twisty, drawn from a rotated triangle rather than an icon font -- the
+ * same way the text view draws its fold arrow, so the two match and a row
+ * costs no font lookup.
+ */
+.tree-row__twisty {
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    color: var(--jb-fg-muted);
+    opacity: 0.7;
+    cursor: pointer;
+    transition: opacity var(--jb-dur) var(--jb-ease);
+}
+
+.tree-row__twisty::before {
+    content: '\25be'; /* down-pointing triangle */
+    display: inline-block;
+    font-size: 0.85em;
+    transition: transform var(--jb-dur) var(--jb-ease);
+}
+
+.tree-row__twisty.is-collapsed::before {
+    transform: rotate(-90deg);
+}
+
+.tree-row__twisty:hover {
+    opacity: 1;
+    color: var(--jb-fg);
+}
+
+/* A leaf keeps the space, so keys line up down a column. */
+.tree-row__twisty--leaf {
+    cursor: default;
+}
+
+.tree-row__twisty--leaf::before {
+    content: '';
+}
+
+.tree-row__key {
+    flex-shrink: 0;
+    color: var(--jb-syntax-key);
+    font-weight: 600;
+}
+
+.tree-row__key--root {
+    color: var(--jb-fg-muted);
+    font-weight: 400;
+    font-style: italic;
+}
+
+/*
+ * The type badge.
+ *
+ * Deliberately quiet: it answers "what is this" at a glance without competing
+ * with the value, which is what the reader is actually looking for.
+ */
+.tree-row__badge {
+    flex-shrink: 0;
+    padding: 0 var(--jb-sp-2);
+    border-radius: var(--jb-radius-sm);
+    background-color: var(--jb-neutral);
+    color: var(--jb-fg-subtle);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-xs);
+    line-height: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tree-row__badge--string {
+    color: var(--jb-syntax-string);
+}
+.tree-row__badge--number {
+    color: var(--jb-syntax-number);
+}
+.tree-row__badge--boolean {
+    color: var(--jb-syntax-boolean);
+}
+.tree-row__badge--null {
+    color: var(--jb-syntax-null);
+}
+
+.tree-row__value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-row__value.string {
+    color: var(--jb-syntax-string);
+}
+.tree-row__value.number {
+    color: var(--jb-syntax-number);
+}
+.tree-row__value.boolean {
+    color: var(--jb-syntax-boolean);
+}
+.tree-row__value.null {
+    color: var(--jb-syntax-null);
+}
+
+/* A container shows how much is inside rather than a truncated dump of it. */
+.tree-row__count {
+    color: var(--jb-fg-subtle);
+    font-family: var(--jb-font);
+    font-size: var(--jb-fs-sm);
+}
+
+/* ------------------------------------------------------------ Breadcrumb */
+
+/*
+ * The bar under the picture is about whichever node is selected: it says where
+ * that node lives, and it carries the actions that act on it. The three copy
+ * buttons used to sit in the pane header among the ones that reshape the whole
+ * document, where nothing said they needed a selection at all -- and where they
+ * were three of twelve. Next to the path they read as belonging to it, and they
+ * appear only once there is something to copy.
+ */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    flex-shrink: 0;
+    height: var(--jb-h-header);
+    padding: 0 var(--jb-sp-2) 0 var(--jb-sp-4);
+    border-bottom: 1px solid var(--jb-border);
+    background-color: var(--jb-bg);
+    color: var(--jb-fg-muted);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-sm);
+    white-space: nowrap;
+}
+
+.breadcrumb__path {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-2);
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+.breadcrumb__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--jb-sp-1);
+    flex-shrink: 0;
+}
+
+/* Nothing selected means nothing for these to copy. */
+.breadcrumb[data-selected='false'] .breadcrumb__actions {
+    visibility: hidden;
+}
+
+.breadcrumb__segment--leaf {
+    color: var(--jb-fg);
+    font-weight: 600;
+}
+
+.breadcrumb__segment--root {
+    font-style: italic;
+}
+
+.breadcrumb__sep {
+    color: var(--jb-fg-subtle);
+}
+
+/* ----------------------------------------------------------------- Graph */
+
+.graph-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    cursor: grab;
+    outline: none;
+}
+
+.graph-viewport.is-panning {
+    cursor: grabbing;
+}
+
+.graph {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/*
+ * Links run behind the boxes and are quieter than them: they carry the shape
+ * of the document, while the boxes carry its content. Drawn from the muted
+ * foreground rather than the border colour -- a border is meant to be almost
+ * invisible against its own background, which is the wrong job here.
+ */
+.graph__edge {
+    fill: none;
+    stroke: var(--jb-fg-subtle);
+    stroke-width: 1.5;
+    opacity: 0.5;
+}
+
+/*
+ * A box has to read as a raised object against the pane behind it, so it takes
+ * the chrome background rather than the editor's own.
+ */
+.graph__node rect {
+    fill: var(--jb-bg-chrome);
+    stroke: var(--jb-fg-subtle);
+    stroke-width: 1;
+    opacity: 1;
+}
+
+.graph__node {
+    cursor: pointer;
+}
+
+.graph__node:hover rect {
+    stroke: var(--jb-fg);
+}
+
+.graph__node.is-selected rect {
+    stroke: var(--jb-focus);
+    stroke-width: 2;
+}
+
+.graph__label {
+    fill: var(--jb-syntax-key);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-md);
+    font-weight: 600;
+}
+
+.graph__value {
+    fill: var(--jb-fg-muted);
+    font-family: var(--jb-font-mono);
+    font-size: var(--jb-fs-sm);
+}
+
+.graph__node--string .graph__value {
+    fill: var(--jb-syntax-string);
+}
+.graph__node--number .graph__value {
+    fill: var(--jb-syntax-number);
+}
+.graph__node--boolean .graph__value {
+    fill: var(--jb-syntax-boolean);
+}
+.graph__node--null .graph__value {
+    fill: var(--jb-syntax-null);
+}
+
+/* Sits on the box's right edge, where its children come out of. */
+.graph__twisty {
+    cursor: pointer;
+}
+
+.graph__twisty circle {
+    fill: var(--jb-bg);
+    stroke: var(--jb-fg-subtle);
+    stroke-width: 1;
+}
+
+.graph__twisty:hover circle {
+    stroke: var(--jb-focus);
+}
+
+.graph__twisty text {
+    fill: var(--jb-fg-muted);
+    font-family: var(--jb-font);
+    font-size: 12px;
+    pointer-events: none;
+}

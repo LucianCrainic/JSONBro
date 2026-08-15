@@ -153,6 +153,44 @@ describe('DiffView', () => {
             expect(shows('left')).toBe('edit');
         });
 
+        /* Applying changes rewrites the original, which is the point of it --
+           so there has to be a way to keep the result. */
+        it('saves the original as it now stands', () => {
+            const posted: unknown[] = [];
+            const messenger = new Messenger();
+            jest.spyOn(messenger, 'post').mockImplementation(message => {
+                posted.push(message);
+            });
+            const saving = new DiffView(messenger);
+            setInputs(LEFT, RIGHT);
+            saving.compare();
+
+            el('save-left-json').click();
+            saving.dispose();
+
+            expect(posted).toContainEqual(
+                expect.objectContaining({
+                    command: 'saveFormattedJson',
+                    content: expect.stringContaining('"changed"')
+                })
+            );
+        });
+
+        it('does not offer to save an empty pane', () => {
+            const posted: unknown[] = [];
+            const messenger = new Messenger();
+            jest.spyOn(messenger, 'post').mockImplementation(message => {
+                posted.push(message);
+            });
+            const saving = new DiffView(messenger);
+            el<HTMLTextAreaElement>('left-json').value = '';
+
+            el('save-left-json').click();
+            saving.dispose();
+
+            expect(posted).toHaveLength(0);
+        });
+
         it('honours the indent setting rather than a hard-coded two spaces', () => {
             view.applySettings({ ...SETTINGS, indentSize: 4 });
             setInputs(JSON.stringify({ a: { b: 1 } }), JSON.stringify({ a: { b: 2 } }));

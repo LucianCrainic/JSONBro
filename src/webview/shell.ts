@@ -5,12 +5,15 @@
  */
 import { PanelStateStore } from './state';
 import { byId, on, qsa } from './ui/dom';
+import { MenuHost } from './ui/menu';
 import { Messenger } from './ui/messaging';
 import { Shortcuts } from './ui/shortcuts';
-import { StatusBar } from './ui/status-bar';
+import { FindWidget, type Searchable } from './ui/find-widget';
+import { StatusBar, type StatusModel } from './ui/status-bar';
 import { setTip, TooltipHost } from './ui/tooltip';
 import { DiffView } from './views/diff-view';
 import { FormatView } from './views/format-view';
+import { VisualView } from './views/visual-view';
 import type { Mode, Settings, SyntaxColors } from '../shared/messages';
 
 /** Every part of a JSON document the theme can colour. */
@@ -25,22 +28,46 @@ const SYNTAX_ROLES: Array<keyof SyntaxColors> = [
 
 const ACTION_LABELS: Record<Mode, { text: string; title: string }> = {
     format: { text: 'Format', title: 'Format JSON' },
-    diff: { text: 'Compare', title: 'Compare JSON' }
+    diff: { text: 'Compare', title: 'Compare JSON' },
+    visual: { text: 'Build', title: 'Rebuild the picture from the input' }
 };
+
+/** The mode each tab selects, in the order they appear. */
+const MODE_TABS: Array<[id: string, mode: Mode]> = [
+    ['format-mode', 'format'],
+    ['visual-mode', 'visual'],
+    ['diff-mode', 'diff']
+];
+
+/** True while focus is in something the user types into. */
+function isTyping(): boolean {
+    const active = document.activeElement;
+    return active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement;
+}
 
 export class Shell {
     private readonly messenger = new Messenger();
     private readonly shortcuts = new Shortcuts();
     private readonly statusBar = new StatusBar();
     private readonly tooltips = new TooltipHost();
+    private readonly menus = new MenuHost();
     private readonly formatView: FormatView;
     private readonly diffView: DiffView;
+    private readonly visualView: VisualView;
     private readonly state = new PanelStateStore();
+    /**
+     * One find control for the whole panel.
+     *
+     * It used to belong to the format view, which meant the picture had no way
+     * to be searched at all. It drives whichever view is on screen instead.
+     */
+    private readonly find: FindWidget;
     private mode: Mode = 'format';
 
     constructor() {
         this.formatView = new FormatView(this.messenger);
         this.diffView = new DiffView(this.messenger);
+        this.visualView = new VisualView(this.messenger);
 
         // Only the active view's status is on screen; the other keeps its model
         // so switching back restores it without recomputing.
@@ -54,11 +81,39 @@ export class Shell {
                 this.statusBar.render(status);
             }
         };
+        this.visualView.onStatusChange = status => {
+            if (this.mode === 'visual') {
+                this.statusBar.render(status);
+            }
+        };
+        // One document, two renderers: the tree is handed what the format view
+        // produced rather than parsing the same input again.
+        this.formatView.onDocumentChange = (doc, diagnostics) => {
+            this.visualView.setDocument(doc, diagnostics);
+            this.find.refresh();
+        };
+
+        // Editing in the visual view rebuilds through the format view, since
+        // that is what owns parsing; the picture renders what it produces.
+        // Not recorded in history: a rebuild happens on every pause in typing,
+        // and the documents on the way to the one they meant are not worth
+        // keeping.
+        this.visualView.onRebuildRequested = () => this.formatView.format(false);
+
+        this.find = new FindWidget({
+            ensureSearchable: () => this.searchTarget().ensureSearchable(),
+            search: (term, options) => this.searchTarget().search(term, options),
+            next: () => this.searchTarget().next(),
+            previous: () => this.searchTarget().previous(),
+            clear: () => this.searchTarget().clear(),
+            position: () => this.searchTarget().position()
+        });
     }
 
     public start(): void {
         this.labelModifierKeys();
         this.tooltips.start();
+        this.menus.start();
 
         // The host renders <body data-mode="..."> so the first paint is already
         // correct; adopt it rather than assuming a default.
@@ -89,8 +144,6 @@ export class Shell {
             return;
         }
 
-        this.setMode(saved.mode);
-
         if (saved.showLineNumbers !== undefined) {
             this.formatView.setShowLineNumbers(saved.showLineNumbers);
         }
@@ -100,6 +153,10 @@ export class Shell {
         if (saved.leftJson || saved.rightJson) {
             this.diffView.restore(saved.leftJson ?? '', saved.rightJson ?? '', saved.strict);
         }
+
+        // Last, so that coming back to the tree finds the document already
+        // rebuilt rather than formatting an input box that is still empty.
+        this.setMode(saved.mode);
     }
 
     private wirePersistence(): void {
@@ -132,8 +189,10 @@ export class Shell {
 
     /** Applies the user's configuration to both views. */
     private applySettings(settings: Settings): void {
+        this.find.setDefaultScope(settings.searchScope);
         this.formatView.applySettings(settings);
         this.diffView.applySettings(settings);
+        this.visualView.applySettings(settings);
     }
 
     /**
@@ -175,13 +234,14 @@ export class Shell {
             }
         };
 
-        bind('format-mode', () => this.setMode('format'));
-        bind('diff-mode', () => this.setMode('diff'));
+        for (const [id, mode] of MODE_TABS) {
+            bind(id, () => this.setMode(mode));
+        }
         bind('action-btn', () => this.runAction());
         bind('clear', () => this.clear());
         bind('copy', () => this.copy());
         bind('save', () => this.formatView.save());
-        bind('search-toggle', () => this.formatView.find.toggle());
+        bind('search-toggle', () => this.find.toggle());
     }
 
     /**
@@ -189,17 +249,21 @@ export class Shell {
      * Nothing here touches element visibility directly.
      */
     private setMode(mode: Mode): void {
+        // Told before the switch, so a rebuild it has queued is dropped rather
+        // than firing from behind whichever view takes the screen.
+        if (mode !== 'visual') {
+            this.visualView.deactivate();
+        }
+        this.menus.close();
+
         this.mode = mode;
         document.body.dataset.mode = mode;
         this.saveState();
 
-        for (const [id, isActive] of [
-            ['format-mode', mode === 'format'],
-            ['diff-mode', mode === 'diff']
-        ] as const) {
+        for (const [id, tabMode] of MODE_TABS) {
             const tab = byId(id);
-            tab?.classList.toggle('active', isActive);
-            tab?.setAttribute('aria-selected', String(isActive));
+            tab?.classList.toggle('active', tabMode === mode);
+            tab?.setAttribute('aria-selected', String(tabMode === mode));
         }
 
         const actionButton = byId('action-btn');
@@ -211,17 +275,45 @@ export class Shell {
             setTip(actionButton, ACTION_LABELS[mode].title, 'mod+enter');
         }
 
+        // The control searches the document, which the diff view does not have.
         if (mode === 'diff') {
-            this.formatView.find.close();
+            this.find.close();
+        } else {
+            this.find.reset();
         }
 
-        this.statusBar.render(
-            mode === 'format' ? this.formatView.getStatus() : this.diffView.getStatus()
-        );
+        // The visual view shows the same document the format view does, so
+        // switching to it formats first when nothing has been formatted yet --
+        // rather than showing an empty pane until the user presses a button
+        // they have not seen.
+        if (mode === 'visual') {
+            if (this.visualView.document === null) {
+                this.formatView.format();
+            }
+            this.visualView.activate();
+        }
+
+        this.statusBar.render(this.activeView().getStatus());
+    }
+
+    /** Whichever view the find control should be searching. */
+    private searchTarget(): Searchable {
+        return this.mode === 'visual' ? this.visualView.searchable : this.formatView.searchable;
+    }
+
+    /** Whichever view the toolbar's shared buttons should act on. */
+    private activeView(): { getStatus: () => StatusModel } {
+        if (this.mode === 'diff') {
+            return this.diffView;
+        }
+        return this.mode === 'visual' ? this.visualView : this.formatView;
     }
 
     private runAction(): void {
         if (this.mode === 'format') {
+            this.formatView.format();
+        } else if (this.mode === 'visual') {
+            // Same action as Format: one parse feeds both renderers.
             this.formatView.format();
         } else {
             this.diffView.compare();
@@ -229,16 +321,21 @@ export class Shell {
     }
 
     private clear(): void {
-        if (this.mode === 'format') {
-            this.formatView.clear();
-        } else {
+        if (this.mode === 'diff') {
             this.diffView.clear();
+            return;
         }
+        // Format and tree share one input and one document, so clearing in
+        // either empties both.
+        this.formatView.clear();
+        this.find.reset();
     }
 
     private copy(): void {
         if (this.mode === 'format') {
             this.formatView.copy();
+        } else if (this.mode === 'visual') {
+            this.visualView.copySubtree();
         } else {
             this.diffView.copyResults();
         }
@@ -271,9 +368,9 @@ export class Shell {
         this.shortcuts.register({
             key: 'f',
             mod: true,
-            when: inFormat,
-            description: 'Find in formatted JSON',
-            run: () => this.formatView.find.open()
+            when: () => !inDiff(),
+            description: 'Find in the document',
+            run: () => this.find.open()
         });
         this.shortcuts.register({
             key: '1',
@@ -330,6 +427,48 @@ export class Shell {
             run: () => this.diffView.applySelection()
         });
 
+        // Walking the tree. No modifier, so they defer to the input box.
+        const inTree = () => this.mode === 'visual' && !isTyping();
+
+        this.shortcuts.register({
+            key: 'arrowdown',
+            when: inTree,
+            description: 'Next node',
+            run: () => this.visualView.step(1)
+        });
+        this.shortcuts.register({
+            key: 'arrowup',
+            when: inTree,
+            description: 'Previous node',
+            run: () => this.visualView.step(-1)
+        });
+        this.shortcuts.register({
+            key: 'arrowright',
+            when: inTree,
+            description: 'Expand, or move into the node',
+            run: () => this.visualView.stepAcross(1)
+        });
+        this.shortcuts.register({
+            key: 'arrowleft',
+            when: inTree,
+            description: 'Collapse, or move out to the parent',
+            run: () => this.visualView.stepAcross(-1)
+        });
+        this.shortcuts.register({
+            key: 'enter',
+            when: inTree,
+            description: 'Open or close the selected node',
+            run: () => this.visualView.toggleSelected()
+        });
+        this.shortcuts.register({
+            key: 'c',
+            mod: true,
+            shift: true,
+            when: () => this.mode === 'visual',
+            description: 'Copy the path of the selected node',
+            run: () => this.visualView.copyPath()
+        });
+
         this.shortcuts.start();
     }
 
@@ -338,7 +477,7 @@ export class Shell {
     private wireHostMessages(): void {
         this.messenger.on('loadJson', message => {
             this.setMode('format');
-            this.formatView.load(message.json);
+            this.formatView.load(message.json, message.remember);
         });
         this.messenger.on('loadDiff', message => {
             this.setMode('diff');
@@ -346,6 +485,7 @@ export class Shell {
         });
         this.messenger.on('settings', message => this.applySettings(message.settings));
         this.messenger.on('themeColors', message => this.applyThemeColors(message.colors));
+        this.messenger.on('setMode', message => this.setMode(message.mode));
         this.messenger.on('openUrl', message => {
             this.setMode('format');
             this.formatView.openUrl(message.url, message.label);

@@ -138,6 +138,22 @@ const THEMES: Record<string, Record<string, string>> = {
 
 const ROOT = path.resolve(__dirname, '../../../../..');
 
+/**
+ * The icon font, with the file itself folded into the stylesheet.
+ *
+ * Without this the preview showed every icon button as an empty rectangle,
+ * which makes it useless for the one thing it is for: judging how the controls
+ * look and how crowded a header reads.
+ */
+function codiconCss(): string {
+    const dir = path.join(ROOT, 'media', 'codicons');
+    const font = fs.readFileSync(path.join(dir, 'codicon.ttf')).toString('base64');
+
+    return fs
+        .readFileSync(path.join(dir, 'codicon.css'), 'utf8')
+        .replace(/url\("\.\/codicon\.ttf[^"]*"\)/, `url("data:font/ttf;base64,${font}")`);
+}
+
 function themeCss(theme: string): string {
     const entries = Object.entries(THEMES[theme])
         .map(([name, value]) => `    --vscode-${name}: ${value};`)
@@ -156,7 +172,7 @@ export function buildPreview(mode: 'format' | 'diff', theme: string, seed: strin
 
     html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '');
 
-    const styles = ['tokens.css', 'base.css', 'components.css', 'format.css', 'diff.css']
+    const styles = ['tokens.css', 'base.css', 'components.css', 'format.css', 'diff.css', 'visual.css']
         .map(name => fs.readFileSync(path.join(ROOT, 'media', name), 'utf8'))
         .join('\n');
 
@@ -166,7 +182,9 @@ export function buildPreview(mode: 'format' | 'diff', theme: string, seed: strin
     );
     html = html.replace(
         '</head>',
-        `<style>${styles}</style><style>${themeCss(theme)}</style></head>`
+        `<style>${codiconCss()}</style><style>${styles}</style><style>${themeCss(
+            theme
+        )}</style></head>`
     );
 
     const bundle = fs.readFileSync(path.join(ROOT, 'out', 'webview', 'main.js'), 'utf8');

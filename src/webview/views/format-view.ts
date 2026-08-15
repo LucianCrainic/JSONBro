@@ -13,8 +13,9 @@ import { parseInto } from '../engine/recovering-parser';
 import { JSONFormatter } from '../formatter';
 import { DocumentPane } from '../ui/document-pane';
 import { byId, on } from '../ui/dom';
-import { FindWidget } from '../ui/find-widget';
+import type { Searchable } from '../ui/find-widget';
 import { Icons } from '../ui/icons';
+import { PaneFlag } from '../ui/pane-flag';
 import { PanelGroup } from '../ui/panels';
 import { ProblemsList } from '../ui/problems-list';
 import { Splitter } from '../ui/splitter';
@@ -48,10 +49,55 @@ export class FormatView {
     private splitter: Splitter | null = null;
     private panels: PanelGroup | null = null;
     private readonly problems: ProblemsList;
-    public readonly find: FindWidget;
+    /**
+     * Says so when the output is older than the input.
+     *
+     * Formatting is deliberately something you ask for rather than something
+     * that happens as you type -- on a large document it is far too expensive
+     * to run on every keystroke -- which leaves the pane quietly showing a
+     * document that is one edit out of date. This is what admits that.
+     */
+    private readonly staleness: PaneFlag;
+
+    /**
+     * What the shell's find widget drives while this view is on screen.
+     *
+     * The widget itself belongs to the shell, since the same control searches
+     * whichever view is showing.
+     */
+    public readonly searchable: Searchable = {
+        // Opening find used to be a silent no-op until something had been
+        // formatted. Format first instead, so the control always responds.
+        ensureSearchable: () => {
+            if (!this.doc) {
+                this.format();
+            }
+            return this.doc !== null;
+        },
+        search: (term, options) => this.runSearch(term, options),
+        next: () => this.stepMatch(1),
+        previous: () => this.stepMatch(-1),
+        clear: () => this.clearMatches(),
+        position: () => ({
+            current: this.matches.length > 0 ? this.matchIndex + 1 : 0,
+            total: this.matches.length,
+            truncated: this.matchesTruncated
+        })
+    };
 
     /** Notifies the shell that the status model changed. */
     public onStatusChange: (status: StatusModel) => void = () => undefined;
+
+    /**
+     * Notifies the shell that a new document has been formatted.
+     *
+     * The tree view renders the same document, so it is handed the result
+     * rather than parsing the input a second time.
+     */
+    public onDocumentChange: (
+        doc: PrettyDocument | null,
+        diagnostics: readonly Diagnostic[]
+    ) => void = () => undefined;
 
     constructor(messenger: Messenger) {
         this.messenger = messenger;
@@ -60,25 +106,10 @@ export class FormatView {
         this.problems = new ProblemsList({
             onReveal: diagnostic => this.revealSourceLine(diagnostic.line)
         });
-
-        this.find = new FindWidget({
-            // Opening find used to be a silent no-op until something had been
-            // formatted. Format first instead, so the control always responds.
-            ensureSearchable: () => {
-                if (!this.doc) {
-                    this.format();
-                }
-                return this.doc !== null;
-            },
-            search: (term, options) => this.runSearch(term, options),
-            next: () => this.stepMatch(1),
-            previous: () => this.stepMatch(-1),
-            clear: () => this.clearMatches(),
-            position: () => ({
-                current: this.matches.length > 0 ? this.matchIndex + 1 : 0,
-                total: this.matches.length,
-                truncated: this.matchesTruncated
-            })
+        this.staleness = new PaneFlag({
+            panelId: 'output-panel',
+            buttonId: 'output-flag',
+            onAct: () => this.format()
         });
 
         this.setupLayout();
@@ -170,11 +201,20 @@ export class FormatView {
         const before = byId('input-panel');
         const after = byId('output-panel');
 
+        // The formatted output and the visual view share this slot, one per
+        // mode, so the sash is told about both and resizes whichever is up.
+        const visual = byId('visual-panel');
         if (container && handle && before && after) {
-            this.splitter = new Splitter({ handle, before, after });
+            this.splitter = new Splitter({
+                handle,
+                before,
+                after: visual ? [after, visual] : after
+            });
             this.panels = new PanelGroup({
                 container,
-                panelIds: ['input-panel', 'output-panel'],
+                // The tree shares this container and this sash, so it takes
+                // part in maximising alongside the formatted output.
+                panelIds: ['input-panel', 'output-panel', 'tree-panel'],
                 collapsible: handle,
                 // A maximized pane owns the full width, so any splitter sizing
                 // is stale; drop it so restoring returns to the CSS default.
@@ -205,6 +245,30 @@ export class FormatView {
             this.teardown.push(on(lineNumbers, 'click', () => this.toggleLineNumbers()));
         }
 
+        // Typing does not reformat, so the pane has to admit that what it is
+        // showing is no longer what the input says.
+        const input = byId<HTMLTextAreaElement>('input');
+        if (input) {
+            this.teardown.push(on(input, 'input', () => this.markStale()));
+        }
+    }
+
+    /**
+     * Notes that the formatted output no longer describes the input.
+     *
+     * Silent while there is nothing formatted: an empty pane already tells the
+     * whole story, and a pane that has never been asked to do anything is not
+     * out of date.
+     */
+    private markStale(): void {
+        if (this.doc) {
+            this.staleness.raise(
+                'Out of date',
+                'stale',
+                'The input has changed since this was formatted. Format it again.',
+                'mod+enter'
+            );
+        }
     }
 
     private toggleLineNumbers(): void {
@@ -221,12 +285,24 @@ export class FormatView {
 
     // ---------------------------------------------------------------- format
 
-    public format(): void {
+    /**
+     * Formats what is in the input box.
+     *
+     * `record` says whether the document is worth keeping in history. A format
+     * the reader asked for is; one the visual view triggers as they type is
+     * not -- that would fill the history with half-typed documents on the way
+     * to the one they meant.
+     */
+    public format(record = true): void {
         const inputEl = byId<HTMLTextAreaElement>('input');
         const output = byId('output');
         if (!inputEl || !output) {
             return;
         }
+
+        // Whatever comes of this, the pane is about to describe the input as
+        // it stands, so it is no longer behind it.
+        this.staleness.lower();
 
         const input = inputEl.value.trim();
         if (!input) {
@@ -248,9 +324,7 @@ export class FormatView {
             // Small documents finish in a few milliseconds; going through the
             // worker would cost more in round trip than it saves.
             this.present(formatHere(input, this.indentSize), input.length, token);
-            if (!this.loadingFromHistory) {
-                this.messenger.post({ command: 'addFormatHistory', json: input });
-            }
+            this.recordHistory(input, record);
             return;
         }
 
@@ -262,11 +336,16 @@ export class FormatView {
             })
             .then(outcome => {
                 this.present(outcome, input.length, token);
-                if (!this.loadingFromHistory) {
-                    this.messenger.post({ command: 'addFormatHistory', json: input });
-                }
+                this.recordHistory(input, record);
             })
             .catch(error => this.reportFailure(error, token));
+    }
+
+    /** Keeps a formatted document in history, unless it is not worth keeping. */
+    private recordHistory(input: string, record: boolean): void {
+        if (record && !this.loadingFromHistory) {
+            this.messenger.post({ command: 'addFormatHistory', json: input });
+        }
     }
 
     /**
@@ -316,7 +395,7 @@ export class FormatView {
 
         this.problems.show(outcome.diagnostics);
         this.publishStatus(this.describeDocument(sourceLength, outcome.diagnostics));
-        this.find.refresh();
+        this.onDocumentChange(outcome.doc, outcome.diagnostics);
     }
 
     private reportProgress(stage: string, bytes: number, token: number): void {
@@ -361,6 +440,7 @@ export class FormatView {
 
     private reset(): void {
         this.pane?.setDocument(null);
+        this.onDocumentChange(null, []);
         this.diagnostics = [];
         this.matches = [];
         this.matchIndex = -1;
@@ -436,7 +516,6 @@ export class FormatView {
         this.setShowLineNumbers(settings.showLineNumbers);
         this.indentSize = settings.indentSize;
         this.setSplitRatio(settings.defaultPaneRatio);
-        this.find.setDefaultScope(settings.searchScope);
         this.maxInlineSize = settings.maxInlineSize;
 
         if (this.doc) {
@@ -452,13 +531,20 @@ export class FormatView {
         this.load(json);
     }
 
-    /** Loads JSON from history without echoing it back as a new history entry. */
-    public load(json: string): void {
+    /**
+     * Loads JSON into the panel and formats it.
+     *
+     * `remember` says whether this is a document the panel has not seen before.
+     * Replaying a history entry must not record a second copy of it, but
+     * anything arriving for the first time -- from the clipboard, say -- has to
+     * be recorded or it is gone as soon as it is replaced.
+     */
+    public load(json: string, remember = false): void {
         const inputEl = byId<HTMLTextAreaElement>('input');
         if (!inputEl) {
             return;
         }
-        this.loadingFromHistory = true;
+        this.loadingFromHistory = !remember;
         try {
             inputEl.value = json;
             this.format();
@@ -472,7 +558,6 @@ export class FormatView {
         if (inputEl) {
             inputEl.value = '';
         }
-        this.find.reset();
         this.reset();
         this.publishStatus({});
     }
@@ -577,8 +662,8 @@ export class FormatView {
         this.teardown.length = 0;
         this.splitter?.dispose();
         this.panels?.dispose();
-        this.find.dispose();
         this.problems.dispose();
+        this.staleness.dispose();
         this.pane?.dispose();
         this.worker.dispose();
     }
