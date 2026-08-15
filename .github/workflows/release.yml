@@ -65,24 +65,42 @@ jobs:
         VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
       run: vsce publish --pat "$VSCE_PAT" --skip-duplicate
       
-    - name: Create checksum
+    # A second copy under a name that does not carry the version, so that
+    # https://github.com/<owner>/<repo>/releases/latest/download/jsonbro-latest.vsix
+    # resolves. GitHub will serve a file from whichever release is marked
+    # latest, but only by an exact name, and jsonbro-<version>.vsix has a
+    # different one every time. The README links to that URL.
+    - name: Copy the package to a version-less name
+      run: cp jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix jsonbro-latest.vsix
+
+    # Two checksum files rather than one: sha256sum writes the name it read
+    # into the file, so a single one would not verify against the copy.
+    - name: Create checksums
       run: |
         sha256sum jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix > jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
+        sha256sum jsonbro-latest.vsix > jsonbro-latest.vsix.sha256
         cat jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
-      
+        cat jsonbro-latest.vsix.sha256
+
+    # --clobber so re-running a release that partly succeeded replaces the
+    # assets instead of failing on the ones already uploaded.
     - name: Upload VSIX and checksum to release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release upload ${{ github.ref_name }} \
+        gh release upload ${{ github.ref_name }} --clobber \
           jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix \
-          jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
-        
+          jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256 \
+          jsonbro-latest.vsix \
+          jsonbro-latest.vsix.sha256
+
     - name: Store build artifacts
       uses: actions/upload-artifact@v4
       with:
+        # The versioned pair only; the copy is the same bytes under another
+        # name, and keeping both would double the artifact for 90 days.
         name: extension-package-${{ steps.get_version.outputs.VERSION }}
         path: |
-          *.vsix
-          *.sha256
+          jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
+          jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
         retention-days: 90
