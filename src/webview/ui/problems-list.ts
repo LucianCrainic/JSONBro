@@ -7,6 +7,7 @@
  */
 import type { Diagnostic } from '../engine/diagnostics';
 import { byId, delegate, escapeHtml, on } from './dom';
+import { plural } from './status-bar';
 
 export interface ProblemsListOptions {
     /** Called when a row is chosen, to bring that line into view. */
@@ -102,7 +103,7 @@ export class ProblemsList {
         title.textContent =
             serious > 0
                 ? `${plural(serious, 'problem')} repaired${
-                      total > serious ? `, ${total - serious} other change${total - serious === 1 ? '' : 's'}` : ''
+                      total > serious ? `, ${plural(total - serious, 'other change')}` : ''
                   }`
                 : `${plural(total, 'change')} made to match JSON`;
 
@@ -149,6 +150,3 @@ export class ProblemsList {
     }
 }
 
-function plural(count: number, noun: string): string {
-    return `${count} ${noun}${count === 1 ? '' : 's'}`;
-}

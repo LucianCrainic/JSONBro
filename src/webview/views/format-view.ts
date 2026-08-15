@@ -467,11 +467,13 @@ export class FormatView {
         // every format.
         const lines = this.doc?.lines.lineCount ?? 0;
         const bytes = sourceLength;
-        const repairs = diagnostics.filter(diagnostic => diagnostic.severity !== 'info').length;
+        // Only the ones that were not merely cosmetic; the badge is about
+        // whether the document had to be rescued, not how much was tidied.
+        const serious = diagnostics.filter(diagnostic => diagnostic.severity !== 'info').length;
 
         return {
             left: [
-                repairs > 0
+                serious > 0
                     ? { text: 'Repaired', icon: Icons.warning, tone: 'warn' }
                     : { text: 'Valid JSON', icon: Icons.valid, tone: 'ok' },
                 { text: plural(lines, 'line') },
@@ -481,9 +483,13 @@ export class FormatView {
                 diagnostics.length > 0
                     ? [
                           {
-                              text: plural(diagnostics.length, 'fix'),
+                              // "repair" rather than "fix": the same count is
+                              // already called that in Visual and in Diff, and
+                              // it is the one word of the three that survives
+                              // being pluralised by adding an s.
+                              text: plural(diagnostics.length, 'repair'),
                               icon: Icons.warning,
-                              tone: repairs > 0 ? 'warn' : undefined,
+                              tone: serious > 0 ? 'warn' : undefined,
                               title: diagnostics
                                   .slice(0, 5)
                                   .map(d => `Line ${d.line}: ${d.message}`)

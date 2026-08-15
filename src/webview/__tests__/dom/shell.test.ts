@@ -245,7 +245,9 @@ describe('Shell', () => {
             el('action-btn').click();
 
             expect(statusText('left')).toContain('Repaired');
-            expect(statusText('right')).toMatch(/\d+ fix/);
+            // The same word the other two modes use for this count, and one
+            // that survives having an s added to it.
+            expect(statusText('right')).toMatch(/\d+ repairs?\b/);
             expect(el('problems').hidden).toBe(false);
             expect(el('problems-title').textContent).toContain('repaired');
         });

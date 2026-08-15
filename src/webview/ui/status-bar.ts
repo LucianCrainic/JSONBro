@@ -67,7 +67,14 @@ export function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Thousands-separated count with a singular/plural noun. */
+/**
+ * Thousands-separated count with a singular/plural noun.
+ *
+ * The default plural adds an s, which is right for every noun the panel counts
+ * -- line, node, repair, difference, problem, change -- and silently wrong for
+ * one that does not take it. It printed "69 fixs" for a while. Pass the plural
+ * for anything ending in -x, -s, -sh, -ch, or a consonant plus -y.
+ */
 export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
     return `${count.toLocaleString()} ${count === 1 ? singular : pluralForm}`;
 }
