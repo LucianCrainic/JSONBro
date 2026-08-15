@@ -59,7 +59,8 @@ async function handle(message: PanelToWorker): Promise<void> {
                 lines.kinds.buffer,
                 lines.childCounts.buffer,
                 lines.keyStarts.buffer,
-                lines.keyLengths.buffer
+                lines.keyLengths.buffer,
+                lines.ordinals.buffer
             ]
         );
     } catch (error) {

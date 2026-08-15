@@ -167,6 +167,15 @@ body[data-mode='visual'] #input-panel[data-input='edit'] #input-view {
 }
 
 /*
+ * An array element's position, standing in for the property name it does not
+ * have. Quieter than a real key: it is a position, not something anyone wrote.
+ */
+.tree-row__key--index {
+    color: var(--jb-fg-subtle);
+    font-weight: 400;
+}
+
+/*
  * The type badge.
  *
  * Deliberately quiet: it answers "what is this" at a glance without competing
@@ -340,11 +349,35 @@ body[data-mode='visual'] #input-panel[data-input='edit'] #input-view {
     stroke-width: 2;
 }
 
+/*
+ * A box holding a search hit, and the one the reader is standing on.
+ *
+ * Filled rather than outlined: the outline is already what selection uses, and
+ * a found box has to be findable at a glance across a picture that may be
+ * scaled down to a fraction of its size.
+ */
+.graph__node.is-match rect {
+    fill: var(--jb-find-other);
+    stroke: var(--jb-fg-muted);
+}
+
+.graph__node.is-current-match rect {
+    fill: var(--jb-find-match);
+    stroke: var(--jb-focus);
+    stroke-width: 2;
+}
+
 .graph__label {
     fill: var(--jb-syntax-key);
     font-family: var(--jb-font-mono);
     font-size: var(--jb-fs-md);
     font-weight: 600;
+}
+
+/* A position rather than a name, so it reads quieter than a property does. */
+.graph__label--index {
+    fill: var(--jb-fg-subtle);
+    font-weight: 400;
 }
 
 .graph__value {

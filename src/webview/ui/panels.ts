@@ -51,6 +51,30 @@ export class PanelGroup {
         this.apply();
     }
 
+    /**
+     * Gives up a maximized pane that the current mode does not show.
+     *
+     * Maximizing hides every other pane in the group outright, and nothing
+     * about a mode switch undoes that -- so maximizing the picture and then
+     * going back to Format left that mode with every one of its panes hidden
+     * and the panel showing nothing at all.
+     *
+     * Which mode a pane belongs to is the `data-mode-only` attribute the markup
+     * already carries; a pane both modes show keeps its state, since the reader
+     * can still see the thing they maximized.
+     */
+    public restoreIfOutOfMode(): void {
+        if (!this.maximized) {
+            return;
+        }
+
+        const panel = document.getElementById(this.maximized);
+        const belongsTo = panel?.dataset.modeOnly;
+        if (!panel || (belongsTo !== undefined && belongsTo !== document.body.dataset.mode)) {
+            this.restore();
+        }
+    }
+
     public dispose(): void {
         this.detach();
     }

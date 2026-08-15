@@ -79,6 +79,22 @@ describe('VisualView', () => {
         expect(rowFor('author').textContent).toContain('2 properties');
     });
 
+    /*
+     * An array element has no property name, so its row used to open with
+     * nothing at all -- which turned an array of objects into a stack of
+     * identical "2 properties" rows with no way to tell them apart.
+     */
+    it('names an array element by its position', () => {
+        show(view, JSON.stringify({ formats: [{ name: 'JSON' }, { name: 'JSONC' }] }));
+
+        const elements = rows().filter(row =>
+            row.querySelector('.tree-row__key--index')
+        );
+        expect(elements.map(row => row.querySelector('.tree-row__key--index')?.textContent)).toEqual(
+            ['0', '1']
+        );
+    });
+
     it('gives every node a type badge', () => {
         show(view);
 
@@ -355,6 +371,16 @@ describe('VisualView shapes', () => {
         expect(document.querySelectorAll('.graph__edge')).toHaveLength(rows().length - 1);
     });
 
+    it('labels a box in an array with its position', () => {
+        show(view, JSON.stringify({ formats: [{ name: 'JSON' }, { name: 'JSONC' }] }));
+        view.setShape('graph');
+
+        const indexes = Array.from(
+            document.querySelectorAll<SVGTextElement>('.graph__label--index')
+        ).map(label => label.textContent);
+        expect(indexes).toEqual(['0', '1']);
+    });
+
     it('gives a container a twisty and a leaf none', () => {
         view.setShape('graph');
 
@@ -542,6 +568,52 @@ describe('searching the picture', () => {
         view.searchable.clear();
 
         expect(document.querySelectorAll('.tree-row.is-match')).toHaveLength(0);
+    });
+
+    /*
+     * Searching the graph used to move the view and change nothing else: the
+     * count went up, the picture slid somewhere, and no box said it was the
+     * one that had been found.
+     */
+    describe('in the graph', () => {
+        beforeEach(() => {
+            view.setShape('graph');
+        });
+
+        it('marks the boxes that hold a hit', () => {
+            search('a');
+
+            expect(document.querySelectorAll('.graph__node.is-match').length).toBeGreaterThan(0);
+            expect(document.querySelectorAll('.graph__node.is-current-match')).toHaveLength(1);
+        });
+
+        it('moves the current mark as the hits are walked', () => {
+            search('a');
+            const first = document.querySelector('.graph__node.is-current-match')?.textContent;
+
+            view.searchable.next();
+
+            expect(document.querySelector('.graph__node.is-current-match')?.textContent).not.toBe(
+                first
+            );
+        });
+
+        it('draws the box a fold was hiding, and marks it', () => {
+            document.getElementById('visual-collapse-all')?.click();
+            expect(document.querySelectorAll('.graph__node')).toHaveLength(1);
+
+            search('admin');
+
+            const current = document.querySelector('.graph__node.is-current-match');
+            expect(current?.textContent).toContain('"admin"');
+        });
+
+        it('clears the marks', () => {
+            search('Ada');
+            view.searchable.clear();
+
+            expect(document.querySelectorAll('.graph__node.is-match')).toHaveLength(0);
+        });
     });
 
     it('finds nothing in an empty view rather than throwing', () => {

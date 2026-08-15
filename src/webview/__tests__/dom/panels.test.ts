@@ -133,4 +133,46 @@ describe('PanelGroup', () => {
         clickMaximize('pane-a');
         expect(group.maximizedPanel).toBeNull();
     });
+
+    /*
+     * Panes belonging to different modes share this group, since the formatted
+     * output and the picture occupy the same slot in the row. A pane maximized
+     * in one mode has to give that up when the other takes the screen, or its
+     * minimized neighbours stay hidden and that mode shows nothing at all.
+     */
+    describe('when the mode changes', () => {
+        beforeEach(() => {
+            document.body.dataset.mode = 'visual';
+            (document.getElementById('pane-b') as HTMLElement).dataset.modeOnly = 'visual';
+        });
+
+        it('gives up a maximized pane the new mode does not show', () => {
+            clickMaximize('pane-b');
+            document.body.dataset.mode = 'format';
+
+            group.restoreIfOutOfMode();
+
+            expect(group.maximizedPanel).toBeNull();
+            expect(document.getElementById('pane-a')?.classList.contains('panel-minimized')).toBe(
+                false
+            );
+        });
+
+        it('keeps one both modes show', () => {
+            clickMaximize('pane-a');
+            document.body.dataset.mode = 'format';
+
+            group.restoreIfOutOfMode();
+
+            expect(group.maximizedPanel).toBe('pane-a');
+        });
+
+        it('holds on while the pane is still on screen', () => {
+            clickMaximize('pane-b');
+
+            group.restoreIfOutOfMode();
+
+            expect(group.maximizedPanel).toBe('pane-b');
+        });
+    });
 });

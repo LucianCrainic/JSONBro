@@ -258,6 +258,10 @@ export class Shell {
 
         this.mode = mode;
         document.body.dataset.mode = mode;
+        // After the attribute, since which panes count as on screen is decided
+        // by it: a pane maximized in the mode being left would otherwise keep
+        // every other pane hidden in the mode being entered.
+        this.formatView.settleLayout();
         this.saveState();
 
         for (const [id, tabMode] of MODE_TABS) {

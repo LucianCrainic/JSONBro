@@ -62,6 +62,35 @@ describe('nodeAt', () => {
         expect(nodeAt(doc, 0).indexed).toBe(false);
     });
 
+    /*
+     * An element has no property name, so its position is the only thing the
+     * tree and the graph can label it with. It comes from the index rather than
+     * from counting siblings, which for a long array costs a walk per row.
+     */
+    describe('the position of an array element', () => {
+        it('counts from zero', () => {
+            expect(node(['tags', '0']).index).toBe(0);
+            expect(node(['tags', '1']).index).toBe(1);
+        });
+
+        it('is -1 for anything that has a name of its own', () => {
+            expect(node(['name']).index).toBe(-1);
+            expect(node(['author', 'first']).index).toBe(-1);
+            expect(nodeAt(doc, 0).index).toBe(-1);
+        });
+
+        it('keeps counting past the point a walk would start to hurt', () => {
+            const long = format(JSON.stringify({ rows: Array.from({ length: 500 }, (_, i) => i) }));
+            expect(nodeAt(long, lineForPath(long, ['rows', '499'])).index).toBe(499);
+        });
+
+        it('numbers each array from its own start', () => {
+            const nested = format(JSON.stringify([['a', 'b'], ['c']]));
+            expect(nodeAt(nested, lineForPath(nested, ['1'])).index).toBe(1);
+            expect(nodeAt(nested, lineForPath(nested, ['1', '0'])).index).toBe(0);
+        });
+    });
+
     describe('the preview', () => {
         it('shows a scalar as it is written, without the trailing comma', () => {
             expect(node(['name']).preview).toBe('"Ada"');

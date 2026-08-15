@@ -126,8 +126,13 @@ export class VisualView {
             this.revealMatch();
         }
         this.pane?.refresh();
-        this.graph?.render();
+        this.markGraphMatches();
         return this.matches.length;
+    }
+
+    /** Tells the graph which boxes were found, so it can say so. */
+    private markGraphMatches(): void {
+        this.graph?.setMatches(this.matchLines, this.matches[this.matchIndex]?.line ?? -1);
     }
 
     private stepMatch(direction: 1 | -1): void {
@@ -151,7 +156,17 @@ export class VisualView {
         if (!match) {
             return;
         }
+        // Selecting opens whatever folds were hiding the node, which changes
+        // what the graph holds -- so it is redrawn before being asked to bring
+        // a box into view that did not exist a moment ago. Only then: walking
+        // the hits is a keystroke, and redrawing on each one for nothing would
+        // be felt on a document of any size.
+        const wasHidden = (this.pane?.foldState?.rowAt(match.line) ?? -1) === -1;
         this.select(match.line);
+        if (wasHidden) {
+            this.graph?.render();
+        }
+        this.markGraphMatches();
         this.graph?.revealLine(match.line);
         this.pane?.refresh();
     }
@@ -162,7 +177,7 @@ export class VisualView {
         this.matchIndex = -1;
         this.matchesTruncated = false;
         this.pane?.refresh();
-        this.graph?.render();
+        this.markGraphMatches();
     }
 
     /** Whether a line carries a search hit, and whether it is the current one. */
@@ -528,10 +543,14 @@ export class VisualView {
               }"></span>`
             : '<span class="tree-row__twisty tree-row__twisty--leaf" aria-hidden="true"></span>';
 
+        // An array element has no property name, so it is named by its position.
+        // Leaving it blank made a row of objects inside an array read as a
+        // column of unlabelled "3 properties", with nothing to tell them apart
+        // or to say which one the reader is looking at.
         const label = node.key
             ? `<span class="tree-row__key">${escapeHtml(node.key)}</span>`
             : node.indexed
-              ? ''
+              ? `<span class="tree-row__key tree-row__key--index">${node.index}</span>`
               : '<span class="tree-row__key tree-row__key--root">root</span>';
 
         const badge = `<span class="tree-row__badge tree-row__badge--${node.type}">${node.type}</span>`;

@@ -44,6 +44,7 @@ export interface SerializedLines {
     childCounts: Uint32Array;
     keyStarts: Uint32Array;
     keyLengths: Uint16Array;
+    ordinals: Uint32Array;
     count: number;
 }
 
@@ -58,6 +59,17 @@ export class LineTable {
     /** Offset of the quoted property name on this line; 0 length if none. */
     private keyStarts: Uint32Array;
     private keyLengths: Uint16Array;
+    /**
+     * This line's position among its parent's children, counting from zero.
+     *
+     * Only an array element has nothing else to call itself by, which is what
+     * this is for -- but it is recorded for every line because the sink knows
+     * it for every line anyway, and because working it out afterwards means
+     * walking back to the parent and counting forward again, once per row.
+     * That walk is unbounded: the ten-thousandth element of an array costs ten
+     * thousand steps, on every frame that draws it.
+     */
+    private ordinals: Uint32Array;
 
     private count = 0;
 
@@ -69,6 +81,7 @@ export class LineTable {
         this.childCounts = new Uint32Array(capacity);
         this.keyStarts = new Uint32Array(capacity);
         this.keyLengths = new Uint16Array(capacity);
+        this.ordinals = new Uint32Array(capacity);
     }
 
     public get lineCount(): number {
@@ -86,6 +99,7 @@ export class LineTable {
         this.childCounts[this.count] = 0;
         this.keyStarts[this.count] = 0;
         this.keyLengths[this.count] = 0;
+        this.ordinals[this.count] = 0;
         return this.count++;
     }
 
@@ -119,6 +133,10 @@ export class LineTable {
         const keyLengths = new Uint16Array(next);
         keyLengths.set(this.keyLengths);
         this.keyLengths = keyLengths;
+
+        const ordinals = new Uint32Array(next);
+        ordinals.set(this.ordinals);
+        this.ordinals = ordinals;
     }
 
     public start(line: number): number {
@@ -155,6 +173,15 @@ export class LineTable {
         return { start: this.keyStarts[line] ?? 0, length: this.keyLengths[line] ?? 0 };
     }
 
+    /** Where this line sits among its parent's children, counting from zero. */
+    public ordinal(line: number): number {
+        return this.ordinals[line] ?? 0;
+    }
+
+    public setOrdinal(line: number, ordinal: number): void {
+        this.ordinals[line] = ordinal;
+    }
+
     public setKeyRange(line: number, start: number, length: number): void {
         this.keyStarts[line] = start;
         // A property name longer than 64 KB is recorded as having none rather
@@ -189,6 +216,7 @@ export class LineTable {
             childCounts: this.childCounts.slice(0, this.count),
             keyStarts: this.keyStarts.slice(0, this.count),
             keyLengths: this.keyLengths.slice(0, this.count),
+            ordinals: this.ordinals.slice(0, this.count),
             count: this.count
         };
     }
@@ -202,6 +230,7 @@ export class LineTable {
         table.childCounts = data.childCounts;
         table.keyStarts = data.keyStarts;
         table.keyLengths = data.keyLengths;
+        table.ordinals = data.ordinals;
         table.count = data.count;
         return table;
     }

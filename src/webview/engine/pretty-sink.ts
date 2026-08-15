@@ -127,6 +127,10 @@ export class PrettySink implements ParseSink<PrettyDocument> {
         }
         frame.count++;
         this.newline();
+        // The item's position in its container, known here for nothing and
+        // expensive to recover later. An array element has no property name,
+        // so this is the only thing the tree and the graph can label it with.
+        this.lines.setOrdinal(this.currentLine, frame.count - 1);
     }
 
     private newline(): void {

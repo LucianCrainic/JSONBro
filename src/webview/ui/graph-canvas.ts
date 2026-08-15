@@ -18,7 +18,7 @@ import {
     type GraphLayout,
     type GraphNode
 } from '../engine/graph-layout';
-import { nodeAt } from '../engine/node-view';
+import { nodeAt, type NodeView } from '../engine/node-view';
 import type { FoldState } from '../engine/line-index';
 import type { PrettyDocument } from '../engine/pretty-sink';
 import { escapeHtml, on } from './dom';
@@ -75,6 +75,10 @@ export class GraphCanvas {
     private doc: PrettyDocument | null = null;
     private folds: FoldState | null = null;
     private selected = -1;
+    /** Lines carrying a search hit, so drawing a box is a lookup, not a scan. */
+    private matches: ReadonlySet<number> = new Set();
+    /** The one hit the reader is standing on, or -1. */
+    private currentMatch = -1;
 
     private zoom = 1;
     private panX = 40;
@@ -118,6 +122,8 @@ export class GraphCanvas {
         this.doc = doc;
         this.folds = folds;
         this.selected = -1;
+        this.matches = new Set();
+        this.currentMatch = -1;
         this.moved = false;
         this.render();
     }
@@ -130,6 +136,39 @@ export class GraphCanvas {
                 Number((node as SVGGElement).dataset.graphLine) === line
             );
         }
+    }
+
+    /**
+     * Marks the boxes a search found, and the one being stood on.
+     *
+     * Searching the picture used to move the view and change nothing else: the
+     * count in the find widget went up, the graph slid somewhere, and nothing
+     * on it said which box had been found. The tree marks its rows; this is the
+     * same fact drawn in the other shape.
+     *
+     * Repainted in place rather than through a redraw -- the layout has not
+     * changed, and re-fitting the view on every keystroke of a search would
+     * throw away wherever the reader had panned to.
+     */
+    public setMatches(lines: ReadonlySet<number>, current: number): void {
+        this.matches = lines;
+        this.currentMatch = current;
+
+        for (const node of Array.from(
+            this.scene.querySelectorAll<SVGGElement>('[data-graph-line]')
+        )) {
+            const line = Number(node.dataset.graphLine);
+            node.classList.toggle('is-match', lines.has(line));
+            node.classList.toggle('is-current-match', line === current);
+        }
+    }
+
+    /** Whether a line carries a search hit, and whether it is the current one. */
+    private matchStateOf(line: number): string {
+        if (!this.matches.has(line)) {
+            return '';
+        }
+        return line === this.currentMatch ? ' is-match is-current-match' : ' is-match';
     }
 
     /** Redraws from the current fold state. */
@@ -215,7 +254,8 @@ export class GraphCanvas {
         const doc = this.doc as PrettyDocument;
         const view = nodeAt(doc, node.line);
 
-        const label = clip(view.key || (node.line === 0 ? 'root' : ''), KEY_BUDGET);
+        const name = labelOf(view);
+        const label = clip(name, KEY_BUDGET);
         const value = clip(view.preview, VALUE_BUDGET);
 
         // A collapsed container says how much is folded away, so the reader can
@@ -231,14 +271,14 @@ export class GraphCanvas {
 
         return `<g class="graph__node graph__node--${view.type}${
             node.line === this.selected ? ' is-selected' : ''
-        }" data-graph-line="${node.line}" transform="translate(${node.x} ${node.y})"
+        }${this.matchStateOf(node.line)}" data-graph-line="${node.line}" transform="translate(${node.x} ${node.y})"
                     role="treeitem" aria-level="${node.depth + 1}"
-                    data-tip="${escapeHtml(
-                        describeNode(view.key || (node.line === 0 ? 'root' : ''), view.preview)
-                    )}">
+                    data-tip="${escapeHtml(describeNode(name, view.preview))}">
                     <rect width="${NODE_WIDTH}" height="${NODE_HEIGHT}" rx="4" />
                     <g clip-path="url(#${CLIP_ID})">
-                        <text class="graph__label" x="${TEXT_PADDING}" y="20">${escapeHtml(label)}</text>
+                        <text class="graph__label${
+                            view.indexed ? ' graph__label--index' : ''
+                        }" x="${TEXT_PADDING}" y="20">${escapeHtml(label)}</text>
                         <text class="graph__value" x="${NODE_WIDTH - TEXT_PADDING}" y="20" text-anchor="end">${escapeHtml(
                             value
                         )}</text>
@@ -375,6 +415,20 @@ export class GraphCanvas {
 
 function clip(text: string, budget: number): string {
     return text.length > budget ? `${text.slice(0, budget - 1)}…` : text;
+}
+
+/**
+ * What a box calls itself.
+ *
+ * A property has its name; an array element has nothing but its position, and
+ * leaving that blank turned an array of objects into a column of identical
+ * unlabelled boxes with no way to tell which was which.
+ */
+function labelOf(view: NodeView): string {
+    if (view.key) {
+        return view.key;
+    }
+    return view.indexed ? String(view.index) : 'root';
 }
 
 /** The full text of a node, for the tooltip that shows what was clipped. */

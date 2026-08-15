@@ -95,6 +95,30 @@ describe('Shell', () => {
             expect(document.querySelectorAll('.tree-row').length).toBeGreaterThan(before);
         });
 
+        /*
+         * The picture and the formatted output share one row and one maximize
+         * control. Maximizing the picture hid every other pane in that row, and
+         * nothing gave that up on the way back -- so Format opened with the
+         * input pane and the output pane both still hidden, showing nothing at
+         * all. The group also listed a pane id that does not exist, so the
+         * picture was never marked maximized in the first place.
+         */
+        it('gives the panes back after the picture was maximized', () => {
+            start('format');
+            type('input', '{"a":1}');
+            el('visual-mode').click();
+
+            document.querySelector<HTMLElement>('#visual-panel [data-maximize]')?.click();
+            expect(el('input-panel').classList.contains('panel-minimized')).toBe(true);
+            expect(el('visual-panel').classList.contains('panel-maximized')).toBe(true);
+
+            el('format-mode').click();
+
+            expect(el('input-panel').classList.contains('panel-minimized')).toBe(false);
+            expect(el('output-panel').classList.contains('panel-minimized')).toBe(false);
+            expect(el('output').querySelector('.json-line')).not.toBeNull();
+        });
+
         it('empties the picture when the input is cleared', () => {
             start('format');
             type('input', '{"a":1}');

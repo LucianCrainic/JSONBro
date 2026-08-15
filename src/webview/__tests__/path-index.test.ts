@@ -230,5 +230,6 @@ describe('the node columns', () => {
         expect(restored.lines.childCount(0)).toBe(2);
         expect(restored.lines.kind(lineForPath(restored, ['a']))).toBe(LineKind.Array);
         expect(restored.lines.keyRange(lineForPath(restored, ['b'])).length).toBe(3);
+        expect(restored.lines.ordinal(lineForPath(restored, ['a', '1']))).toBe(1);
     });
 });

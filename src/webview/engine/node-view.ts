@@ -20,6 +20,8 @@ export interface NodeView {
     key: string;
     /** True when the node is an element of an array rather than a property. */
     indexed: boolean;
+    /** An array element's position, counting from zero; -1 for anything else. */
+    index: number;
     /** A scalar's text, or a summary like `3 items` for a container. */
     preview: string;
     /** Number of direct children; zero for a scalar. */
@@ -35,6 +37,8 @@ export function nodeAt(doc: PrettyDocument, line: number): NodeView {
     const { start, length } = lines.keyRange(line);
 
     const container = kind === LineKind.Object || kind === LineKind.Array;
+    // The root has no key either, but it is line 0 and nothing else is.
+    const indexed = length === 0 && line > 0;
     const type: NodeType = container
         ? kind === LineKind.Array
             ? 'array'
@@ -46,8 +50,8 @@ export function nodeAt(doc: PrettyDocument, line: number): NodeView {
         depth: lines.depth(line),
         type,
         key: length === 0 ? '' : decode(doc.text.slice(start, start + length)),
-        // The root has no key either, but it is line 0 and nothing else is.
-        indexed: length === 0 && line > 0,
+        indexed,
+        index: indexed ? lines.ordinal(line) : -1,
         preview: container ? summarise(type, childCount) : valueTextOf(doc, line),
         childCount,
         expandable: container && lines.isFoldable(line)

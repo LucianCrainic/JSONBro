@@ -214,7 +214,7 @@ export class FormatView {
                 container,
                 // The tree shares this container and this sash, so it takes
                 // part in maximising alongside the formatted output.
-                panelIds: ['input-panel', 'output-panel', 'tree-panel'],
+                panelIds: ['input-panel', 'output-panel', 'visual-panel'],
                 collapsible: handle,
                 // A maximized pane owns the full width, so any splitter sizing
                 // is stale; drop it so restoring returns to the CSS default.
@@ -230,6 +230,17 @@ export class FormatView {
     /** Splits the panes, `ratio` being the share given to the input pane. */
     public setSplitRatio(ratio: number): void {
         this.splitter?.setRatio(ratio);
+    }
+
+    /**
+     * Brings the pane layout back after a mode switch.
+     *
+     * The formatted output and the picture share this row and its maximize
+     * control, so a pane maximized in one mode has to let go when the other
+     * takes the screen; see `PanelGroup.restoreIfOutOfMode`.
+     */
+    public settleLayout(): void {
+        this.panels?.restoreIfOutOfMode();
     }
 
     public focusInput(): void {
