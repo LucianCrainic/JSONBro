@@ -71,6 +71,9 @@ export class WebviewProvider {
     /** Takes over a panel VS Code restored, wiring it up as if new. */
     private adopt(mode: PanelKind, panel: vscode.WebviewPanel): void {
         panel.webview.options = this.webviewOptions();
+        // Restated rather than inherited: a panel restored from a window that
+        // predates the rename would otherwise keep its old title forever.
+        panel.title = 'JSON Bro';
         this.existingPanels.set(mode, panel);
         this.attach(mode, panel);
         panel.webview.html = this.contentGenerator.getWebviewContent(panel.webview, mode);
@@ -319,11 +322,13 @@ export class WebviewProvider {
      */
     private showPanel(mode: PanelKind): void {
         const panelId = mode === 'format' ? 'jsonbro.formatJson' : 'jsonbro.diffJson';
-        const title = mode === 'format' ? 'JSONBro - Format JSON' : 'JSONBro - Diff JSON';
 
         const panel = vscode.window.createWebviewPanel(
             panelId,
-            title,
+            // Both panels are the same product, and the mode is already named on
+            // the tab strip inside the panel. Spelling it out here as well only
+            // made the editor tab longer and harder to pick out.
+            'JSON Bro',
             vscode.ViewColumn.One,
             this.webviewOptions()
         );

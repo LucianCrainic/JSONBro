@@ -37,8 +37,9 @@ export class WebviewContentGenerator {
             vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview', 'worker.js')
         );
 
-        // Both panels are the same product, and VS Code shows this as the tab
-        // name -- a mode suffix there just makes the tab harder to scan.
+        // The editor tab takes its name from the panel rather than from this,
+        // but the two should still agree: this is what a screen reader announces
+        // for the document.
         const title = 'JSON Bro';
 
         // No 'unsafe-inline': the markup below carries no style attributes, and
