@@ -6,8 +6,9 @@
  * panel's own thread would lock the window for the duration. Here it costs the
  * panel nothing but the wait.
  *
- * Reading a file happens here too, so its text never travels through a
- * textarea or a postMessage to get in.
+ * A file is decoded and assembled here too, from the bytes the panel reads and
+ * hands over. The panel has to do the reading -- see PanelToWorker -- but it
+ * passes one chunk at a time, so the whole text exists only on this side.
  */
 import { PrettySink } from '../engine/pretty-sink';
 import { parseInto } from '../engine/recovering-parser';
@@ -25,25 +26,66 @@ declare const self: {
     postMessage(message: unknown, transfer?: Transferable[]): void;
 };
 
+/** A read in progress, between readStart and readEnd. */
+interface Incoming {
+    indent: number;
+    store: TextStore;
+    decoder: TextDecoder;
+}
+
+const reads = new Map<number, Incoming>();
+
 self.addEventListener('message', event => {
-    void handle(event.data as PanelToWorker);
+    handle(event.data as PanelToWorker);
 });
 
-async function handle(message: PanelToWorker): Promise<void> {
+function handle(message: PanelToWorker): void {
+    switch (message.command) {
+        case 'readStart':
+            reads.set(message.id, {
+                indent: message.indent,
+                store: new TextStore(),
+                // Decoded as it arrives so the text is never held twice, and
+                // `stream: true` holds back a partial character at a chunk
+                // boundary rather than emitting a replacement for it.
+                decoder: new TextDecoder('utf-8')
+            });
+            return;
+
+        case 'readChunk': {
+            const read = reads.get(message.id);
+            read?.store.append(read.decoder.decode(new Uint8Array(message.bytes), { stream: true }));
+            return;
+        }
+
+        case 'readEnd': {
+            const read = reads.get(message.id);
+            if (!read) {
+                return;
+            }
+            reads.delete(message.id);
+            read.store.append(read.decoder.decode());
+            read.store.seal();
+            format(message.id, read.store, read.indent);
+            return;
+        }
+
+        case 'formatText':
+            format(message.id, TextStore.from(message.text), message.indent);
+            return;
+    }
+}
+
+function format(id: number, source: TextStore, indent: number): void {
     try {
-        const source =
-            message.command === 'formatUrl'
-                ? await read(message.url, message.id)
-                : TextStore.from(message.text);
+        post({ id, command: 'progress', stage: 'formatting', bytes: source.length });
 
-        post({ id: message.id, command: 'progress', stage: 'formatting', bytes: source.length });
-
-        const { value, diagnostics } = parseInto(source, new PrettySink({ indent: message.indent }));
+        const { value, diagnostics } = parseInto(source, new PrettySink({ indent }));
         const lines = value.lines.serialize();
 
         post(
             {
-                id: message.id,
+                id,
                 command: 'done',
                 chunks: value.text.toChunks(),
                 lines,
@@ -65,58 +107,11 @@ async function handle(message: PanelToWorker): Promise<void> {
         );
     } catch (error) {
         post({
-            id: message.id,
+            id,
             command: 'failed',
             message: error instanceof Error ? error.message : 'Could not read the document'
         });
     }
-}
-
-/**
- * Streams a document in, reporting progress as it arrives.
- *
- * Decoded a piece at a time so the text is never held twice, and so a large
- * file starts producing output before it has finished downloading.
- */
-async function read(url: string, id: number): Promise<TextStore> {
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Could not read the file (${response.status})`);
-    }
-
-    const store = new TextStore();
-
-    if (!response.body) {
-        store.append(await response.text());
-        store.seal();
-        return store;
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let bytes = 0;
-    let sinceReport = 0;
-
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) {
-            break;
-        }
-        // `stream: true` holds back a partial character at the end of a chunk
-        // rather than emitting a replacement character for it.
-        store.append(decoder.decode(value, { stream: true }));
-        bytes += value.byteLength;
-        sinceReport += value.byteLength;
-
-        if (sinceReport > 4 << 20) {
-            sinceReport = 0;
-            post({ id, command: 'progress', stage: 'reading', bytes });
-        }
-    }
-
-    store.append(decoder.decode());
-    store.seal();
-    return store;
 }
 
 function post(message: WorkerToPanel, transfer: Transferable[] = []): void {

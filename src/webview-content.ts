@@ -44,16 +44,20 @@ export class WebviewContentGenerator {
 
         // No 'unsafe-inline': the markup below carries no style attributes, and
         // mode visibility is driven by data-mode on <body> instead.
-        // worker-src and connect-src let the document worker load and read a
-        // file the host has made available. Neither allows blob:, which is why
-        // the worker is a real bundle rather than an inlined script.
+        //
+        // connect-src lets the panel fetch the worker bundle and read a file the
+        // host has made available. worker-src has to allow blob: as well: this
+        // document's origin is vscode-webview://<id> while its resources are
+        // served from the cdn host, and a Worker script must be same-origin with
+        // the document whatever the policy says, so the bundle is fetched and
+        // started from a blob: URL. See startWorker in webview/worker/client.ts.
         const csp = [
             `default-src 'none'`,
             `style-src ${webview.cspSource}`,
             `font-src ${webview.cspSource}`,
             `img-src ${webview.cspSource} data:`,
             `script-src 'nonce-${nonce}' ${webview.cspSource}`,
-            `worker-src ${webview.cspSource}`,
+            `worker-src ${webview.cspSource} blob:`,
             `connect-src ${webview.cspSource}`
         ].join('; ');
 
