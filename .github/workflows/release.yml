@@ -104,3 +104,60 @@ jobs:
           jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
           jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
         retention-days: 90
+
+    # Everything above runs against the tag, where the checkout is detached, so
+    # the version written into package.json for the build is thrown away with
+    # the runner. It is recorded on the default branch here instead, in its own
+    # checkout so the build tree is left alone.
+    #
+    # The commit lands after the tag rather than on it: a published tag is not
+    # worth moving, and the next release starts from the branch anyway.
+    - name: Check out the default branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.repository.default_branch }}
+        # Full history, so the rebase below has something to rebase onto.
+        fetch-depth: 0
+        path: default-branch
+
+    - name: Record the released version on the default branch
+      working-directory: default-branch
+      env:
+        BRANCH: ${{ github.event.repository.default_branch }}
+        TARGET: ${{ steps.get_version.outputs.VERSION }}
+      run: |
+        set -euo pipefail
+        CURRENT=$(node -p "require('./package.json').version")
+        echo "$BRANCH is at $CURRENT; this release is $TARGET"
+
+        if [ "$CURRENT" = "$TARGET" ]; then
+          echo "Already recorded; nothing to do."
+          exit 0
+        fi
+
+        # A release cut from a maintenance branch must not walk the default
+        # branch backwards. Compares the numeric triple only: an equal core
+        # still writes, so 1.0.0-rc.1 -> 1.0.0 is recorded.
+        if ! node -e '
+          const [a, b] = process.argv.slice(1).map(v =>
+            v.split("-")[0].split(".").map(Number)
+          );
+          for (let i = 0; i < 3; i++) {
+            if ((a[i] || 0) !== (b[i] || 0)) process.exit((b[i] || 0) > (a[i] || 0) ? 0 : 1);
+          }
+          process.exit(0);
+        ' "$CURRENT" "$TARGET"; then
+          echo "::warning::$TARGET is older than $CURRENT on $BRANCH; leaving it alone."
+          exit 0
+        fi
+
+        npm version "$TARGET" --no-git-tag-version
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add package.json package-lock.json
+        git commit -m "chore(release): v$TARGET"
+
+        # Someone may have pushed while the extension was being built.
+        git pull --rebase origin "$BRANCH"
+        git push origin "HEAD:$BRANCH"
