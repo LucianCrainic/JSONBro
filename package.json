@@ -2,7 +2,7 @@
   "name": "jsonbro",
   "displayName": "JSONBro",
   "description": "Format, visualise and compare JSON. Repairs broken input, draws it as a tree or a graph, and diffs by structure rather than by line.",
-  "version": "0.2.9",
+  "version": "2.1.0",
   "license": "MIT",
   "publisher": "LucianDCrainic",
   "repository": {
