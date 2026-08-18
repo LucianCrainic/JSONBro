@@ -11,29 +11,8 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Run tests
-      run: npm test
-      
-    - name: Compile extension
-      run: npm run compile
-      
-    - name: Install vsce (VS Code Extension CLI)
-      run: npm install -g @vscode/vsce
-      
     - name: Extract version from tag
       id: get_version
       run: |
@@ -41,7 +20,95 @@ jobs:
         VERSION=${VERSION#v}
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "Extracted version: $VERSION"
-      
+
+    # The marketplace takes the extension's version from package.json at the
+    # moment vsce packages it, so the file must already carry the version of
+    # this release before anything is built or published. Bump it on the
+    # default branch first, push the commit, and only then run the rest of
+    # the release process against that state.
+    - name: Check out the default branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.repository.default_branch }}
+        # Full history, so the rebase below has something to rebase onto.
+        fetch-depth: 0
+
+    - name: Bump the version on the default branch
+      id: bump_version
+      env:
+        BRANCH: ${{ github.event.repository.default_branch }}
+        TARGET: ${{ steps.get_version.outputs.VERSION }}
+      run: |
+        set -euo pipefail
+        CURRENT=$(node -p "require('./package.json').version")
+        echo "$BRANCH is at $CURRENT; this release is $TARGET"
+
+        if [ "$CURRENT" = "$TARGET" ]; then
+          echo "bumped=false" >> $GITHUB_OUTPUT
+          echo "Version is already $TARGET; nothing to bump."
+          exit 0
+        fi
+
+        # A release cut from a maintenance branch must not walk the default
+        # branch backwards. Compares the numeric triple only: an equal core
+        # still writes, so 1.0.0-rc.1 -> 1.0.0 is recorded.
+        if ! node -e '
+          const [a, b] = process.argv.slice(1).map(v =>
+            v.split("-")[0].split(".").map(Number)
+          );
+          for (let i = 0; i < 3; i++) {
+            if ((a[i] || 0) !== (b[i] || 0)) process.exit((b[i] || 0) > (a[i] || 0) ? 0 : 1);
+          }
+          process.exit(0);
+        ' "$CURRENT" "$TARGET"; then
+          echo "bumped=false" >> $GITHUB_OUTPUT
+          echo "::warning::$TARGET is older than $CURRENT on $BRANCH; leaving it alone."
+          exit 0
+        fi
+
+        npm version "$TARGET" --no-git-tag-version
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add package.json package-lock.json
+        git commit -m "chore(release): v$TARGET"
+
+        # Someone may have pushed while the bump was being prepared.
+        git pull --rebase origin "$BRANCH"
+        git push origin "HEAD:$BRANCH"
+        echo "bumped=true" >> $GITHUB_OUTPUT
+
+    # A maintenance release bumps nothing on the default branch (it already
+    # moved past it), so its build has to come from the tag itself. Every other
+    # release builds from the default branch head, which now carries this
+    # release's version in package.json.
+    - name: Check out the release source
+      if: steps.bump_version.outputs.bumped != 'true'
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref_name }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests
+      run: npm test
+
+    - name: Compile extension
+      run: npm run compile
+
+    - name: Install vsce (VS Code Extension CLI)
+      run: npm install -g @vscode/vsce
+
+    # When the build source is the tag, its package.json still holds the
+    # previous version, so patch it in the build tree. On the bumped default
+    # branch this is already a no-op.
     - name: Update package.json version to match tag
       run: |
         CURRENT_VERSION=$(node -p "require('./package.json').version")
@@ -49,22 +116,33 @@ jobs:
         echo "Current version: $CURRENT_VERSION"
         echo "Target version: $TARGET_VERSION"
         if [ "$CURRENT_VERSION" != "$TARGET_VERSION" ]; then
-          npm version $TARGET_VERSION --no-git-tag-version
+          npm version "$TARGET_VERSION" --no-git-tag-version
           echo "Version updated from $CURRENT_VERSION to $TARGET_VERSION"
         else
           echo "Version is already $TARGET_VERSION, skipping update"
         fi
-        
+
+    # Fail the job instead of shipping a package whose version does not match
+    # the release: the marketplace would end up on the previous version.
+    - name: Verify the package version matches the release
+      run: |
+        PACKAGE_VERSION=$(node -p "require('./package.json').version")
+        if [ "$PACKAGE_VERSION" != "${{ steps.get_version.outputs.VERSION }}" ]; then
+          echo "::error::package.json is at $PACKAGE_VERSION, but the release is ${{ steps.get_version.outputs.VERSION }}"
+          exit 1
+        fi
+        echo "package.json version ${{ steps.get_version.outputs.VERSION }} matches the release"
+
     - name: Package extension
       env:
         VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
       run: vsce package --out jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
-      
+
     - name: Publish to VS Code Marketplace
       env:
         VSCE_PAT: ${{ secrets.AZURE_TOKEN }}
       run: vsce publish --pat "$VSCE_PAT" --skip-duplicate
-      
+
     # A second copy under a name that does not carry the version, so that
     # https://github.com/<owner>/<repo>/releases/latest/download/jsonbro-latest.vsix
     # resolves. GitHub will serve a file from whichever release is marked
@@ -104,60 +182,3 @@ jobs:
           jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix
           jsonbro-${{ steps.get_version.outputs.VERSION }}.vsix.sha256
         retention-days: 90
-
-    # Everything above runs against the tag, where the checkout is detached, so
-    # the version written into package.json for the build is thrown away with
-    # the runner. It is recorded on the default branch here instead, in its own
-    # checkout so the build tree is left alone.
-    #
-    # The commit lands after the tag rather than on it: a published tag is not
-    # worth moving, and the next release starts from the branch anyway.
-    - name: Check out the default branch
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.repository.default_branch }}
-        # Full history, so the rebase below has something to rebase onto.
-        fetch-depth: 0
-        path: default-branch
-
-    - name: Record the released version on the default branch
-      working-directory: default-branch
-      env:
-        BRANCH: ${{ github.event.repository.default_branch }}
-        TARGET: ${{ steps.get_version.outputs.VERSION }}
-      run: |
-        set -euo pipefail
-        CURRENT=$(node -p "require('./package.json').version")
-        echo "$BRANCH is at $CURRENT; this release is $TARGET"
-
-        if [ "$CURRENT" = "$TARGET" ]; then
-          echo "Already recorded; nothing to do."
-          exit 0
-        fi
-
-        # A release cut from a maintenance branch must not walk the default
-        # branch backwards. Compares the numeric triple only: an equal core
-        # still writes, so 1.0.0-rc.1 -> 1.0.0 is recorded.
-        if ! node -e '
-          const [a, b] = process.argv.slice(1).map(v =>
-            v.split("-")[0].split(".").map(Number)
-          );
-          for (let i = 0; i < 3; i++) {
-            if ((a[i] || 0) !== (b[i] || 0)) process.exit((b[i] || 0) > (a[i] || 0) ? 0 : 1);
-          }
-          process.exit(0);
-        ' "$CURRENT" "$TARGET"; then
-          echo "::warning::$TARGET is older than $CURRENT on $BRANCH; leaving it alone."
-          exit 0
-        fi
-
-        npm version "$TARGET" --no-git-tag-version
-
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add package.json package-lock.json
-        git commit -m "chore(release): v$TARGET"
-
-        # Someone may have pushed while the extension was being built.
-        git pull --rebase origin "$BRANCH"
-        git push origin "HEAD:$BRANCH"
