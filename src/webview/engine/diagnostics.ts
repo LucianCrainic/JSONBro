@@ -18,6 +18,7 @@ export type DiagnosticKind =
     | 'comment'
     | 'number-format'
     | 'duplicate-key'
+    | 'escaped-quotes'
     // Structural: something was missing or in the wrong place.
     | 'missing-comma'
     | 'missing-colon'

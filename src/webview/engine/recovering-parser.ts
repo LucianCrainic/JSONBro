@@ -40,7 +40,168 @@ export function parseJson(source: CharSource): ParseResult {
 
 /** Parses `source`, reporting structure to `sink` as it goes. */
 export function parseInto<T>(source: CharSource, sink: ParseSink<T>): ParseResult<T> {
-    return new RecoveringParser(source, sink).parse();
+    const prepared = prepareForParse(source);
+    const result = new RecoveringParser(prepared.text, sink).parse();
+
+    if (prepared.note !== null) {
+        result.diagnostics.unshift({
+            kind: 'escaped-quotes',
+            severity: 'info',
+            message: prepared.note,
+            offset: 0,
+            length: 0,
+            line: 1,
+            column: 1
+        });
+    }
+
+    return result;
+}
+
+// ------------------------------------------------------------------ escaping
+
+/**
+ * How large a document can be before it is not worth probing it for
+ * backslash-escaped quotes. The probe holds the whole text as one string,
+ * which the chunked store avoids for a reason; an escaped document is small,
+ * and anything larger is not.
+ */
+const ESCAPED_JSON_LIMIT = 16 * 1024 * 1024;
+
+const BACKSLASH = 0x5c;
+const QUOTE = 0x22;
+
+interface Prepared {
+    text: CharSource;
+    /** What the reader should be told, when the source was decoded. */
+    note: string | null;
+}
+
+/**
+ * Undoes the quoting that copies of string literals bring with them.
+ *
+ * A JSON document that was serialized into a string -- a database column, a
+ * log line, a Java or Kotlin literal -- comes back with its quotes escaped:
+ *
+ *     {\"id\":112,\"name\":\"F16-T101\"}
+ *
+ * The scanner has no way through that: a bare backslash is not JSON, so the
+ * parse collapses into one giant unterminated string. When the document is not
+ * valid JSON as written but the whole of it reads as a quoted string body --
+ * decode the escapes and the result parses -- that is what was meant, so the
+ * parser reads the decoded form and says so.
+ *
+ * A document that already parses is never touched: `{"r": "\\\""}` and the
+ * escaped form of it are both plausible, and they mean different things.
+ */
+function prepareForParse(source: CharSource): Prepared {
+    if (source.length === 0 || source.length > ESCAPED_JSON_LIMIT) {
+        return { text: source, note: null };
+    }
+
+    const raw = source.toString();
+
+    let escaped = false;
+    for (let i = 0; i + 1 < raw.length; i++) {
+        if (raw.charCodeAt(i) === BACKSLASH && raw.charCodeAt(i + 1) === QUOTE) {
+            escaped = true;
+            break;
+        }
+    }
+    if (!escaped || isStrictJson(raw)) {
+        return { text: source, note: null };
+    }
+
+    const decoded = decodeStringBody(raw);
+    if (isStrictJson(decoded)) {
+        return {
+            text: decoded,
+            note: 'The document was JSON with backslash-escaped quotes; read the unescaped form.'
+        };
+    }
+
+    return { text: source, note: null };
+}
+
+function isStrictJson(text: string): boolean {
+    try {
+        JSON.parse(text);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Reads `text` as the body of a quoted string and decodes its escapes.
+ *
+ * An escaped document is exactly that body: the wrapper quotes were not copied
+ * along with it. The escapes are the ones a JSON string literal knows, and a
+ * backslash in front of anything else is kept as the character itself, matching
+ * the scanner's tolerance rather than inventing stricter rules.
+ */
+function decodeStringBody(raw: string): string {
+    let out = '';
+    let i = 0;
+
+    while (i < raw.length) {
+        const code = raw.charCodeAt(i);
+
+        if (code !== BACKSLASH) {
+            out += raw[i];
+            i++;
+            continue;
+        }
+
+        i++;
+        if (i >= raw.length) {
+            out += '\\';
+            break;
+        }
+
+        switch (raw[i]) {
+            case '"':
+                out += '"';
+                break;
+            case '\\':
+                out += '\\';
+                break;
+            case '/':
+                out += '/';
+                break;
+            case 'b':
+                out += '\b';
+                break;
+            case 'f':
+                out += '\f';
+                break;
+            case 'n':
+                out += '\n';
+                break;
+            case 'r':
+                out += '\r';
+                break;
+            case 't':
+                out += '\t';
+                break;
+            case 'u': {
+                const hex = raw.slice(i + 1, i + 5);
+                if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+                    out += String.fromCharCode(parseInt(hex, 16));
+                    i += 4;
+                } else {
+                    out += 'u';
+                }
+                break;
+            }
+            default:
+                out += raw[i];
+                break;
+        }
+        i++;
+    }
+
+    return out;
 }
 
 class RecoveringParser<T> {

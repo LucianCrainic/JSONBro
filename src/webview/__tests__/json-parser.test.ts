@@ -468,6 +468,65 @@ describe('JSONParser', () => {
     });
 
     /*
+     * JSON copied out of a string literal -- a log line, a database column, a
+     * Java or Kotlin source file -- arrives with every quote escaped. The whole
+     * document reads as a quoted string body, so the parser decodes it before
+     * doing anything else. A document that already parses is left alone even
+     * when it contains backslashes: `{"r": "\\\""}` and its escaped form both
+     * parse, and they mean different things.
+     */
+    describe('parseFlexible - Backslash-escaped quotes', () => {
+        it('unescapes a document whose quotes are all escaped', () => {
+            const escaped = '{\\"id\\":112,\\"name\\":\\"F16-T101\\",\\"cloned\\":false}';
+            expect(JSONParser.parseFlexible(escaped)).toEqual({
+                id: 112,
+                name: 'F16-T101',
+                cloned: false
+            });
+        });
+
+        it('unescapes nested containers and array items', () => {
+            const escaped =
+                '[{\\"a\\":1},{\\"b\\":[\\"x\\",\\"y\\"]}]';
+            expect(JSONParser.parseFlexible(escaped)).toEqual([
+                { a: 1 },
+                { b: ['x', 'y'] }
+            ]);
+        });
+
+        it('decodes the escapes a string value itself used', () => {
+            const escaped = '{\\"note\\":\\"He said \\\\\\"hi\\\\\\"\\"}';
+            expect(JSONParser.parseFlexible(escaped)).toEqual({
+                note: 'He said "hi"'
+            });
+        });
+
+        it('decodes a backslash in a value to the JSON escape it was hiding', () => {
+            const escaped = '{\\"path\\":\\"C:\\\\\\\\temp\\"}';
+            expect(JSONParser.parseFlexible(escaped)).toEqual({
+                path: 'C:\\temp'
+            });
+        });
+
+        it('leaves valid JSON alone, even with backslashes in it', () => {
+            expect(JSONParser.parseFlexible('{"r": "\\\\\\""}')).toEqual({ r: '\\"' });
+            expect(JSONParser.parseFlexible('{"a": "x\\"y"}')).toEqual({ a: 'x"y' });
+        });
+
+        it('does not touch a document whose unescaped form is not JSON', () => {
+            const result = JSONParser.parseWithStatus('{"a": \\"x\\", broken');
+            expect(result.parsed).toBeDefined();
+            expect(result.diagnostics.map(d => d.kind)).not.toContain('escaped-quotes');
+        });
+
+        it('reports the unescaping as a cosmetic repair', () => {
+            const status = JSONParser.parseWithStatus('{\\"a\\":1}');
+            expect(status.diagnostics.map(d => d.kind)).toContain('escaped-quotes');
+            expect(status.wasStructurallyFixed).toBe(false);
+        });
+    });
+
+    /*
      * Repairs used to run as separate sequential passes, so a document with
      * two different problems could fail even though each one alone was
      * handled. Recovering inside a single parse fixes that.
